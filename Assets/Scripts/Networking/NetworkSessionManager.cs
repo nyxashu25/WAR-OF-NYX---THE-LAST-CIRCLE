@@ -10,6 +10,7 @@ using WarOfNyx.App;
 using WarOfNyx.Core.Flow;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Networking;
+using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay;
 using FlowMode = WarOfNyx.Core.Flow.GameMode;
 using GameMode = Fusion.GameMode;
@@ -45,6 +46,8 @@ namespace WarOfNyx.Networking
         private NetworkMatchController _matchController;
         private MatchLifecycle _lifecycle;
         private MatchRules _rules;
+        /// <summary>Random seed of the current match (spawns, loadouts, circle centres).</summary>
+        private int _matchSeed;
         private ServerLaunchOptions _serverOptions;
         private bool _pendingLoadReport;
         private int _lobbySceneIndex = -1;
@@ -297,6 +300,7 @@ namespace WarOfNyx.Networking
             lifecycle.LoadingStarted += OnLoadingStarted;
             lifecycle.PlayersKicked += OnPlayersKicked;
             lifecycle.SpawnRequested += OnSpawnRequested;
+            lifecycle.CountdownStarted += OnCountdownStarted;
             lifecycle.Activated += at => Debug.Log($"[WarOfNyx][Match] FIGHT! Match active at t={at:0.00}s with {lifecycle.PlayerCount} players.");
             lifecycle.ResetToLobby += OnResetToLobby;
         }
@@ -330,6 +334,7 @@ namespace WarOfNyx.Networking
             }
 
             int seed = Environment.TickCount ^ (playerIds.Count * 7919);
+            _matchSeed = seed;
             var plan = area.PlanSpawns(playerIds.Count, _rules, seed);
             if (!plan.Success)
             {
@@ -354,8 +359,31 @@ namespace WarOfNyx.Networking
                       (plan.Relaxed ? " (relaxed)." : "."));
         }
 
+        /// <summary>
+        /// Server: the players are spawned and "3, 2, 1" begins. Plan the Nyx Circle now so it is visible
+        /// during the countdown; its first phase starts shrinking at "FIGHT!" (spec 10).
+        /// </summary>
+        private void OnCountdownStarted(float fightAt)
+        {
+            var area = ArenaSpawnArea.Current;
+            var zone = _matchController != null ? _matchController.GetComponent<NetworkNyxCircle>() : null;
+            if (area == null || zone == null)
+            {
+                Debug.LogError("[WarOfNyx][Zone] No spawn area or circle component: the match runs WITHOUT a Nyx Circle. " +
+                               "Rebuild the network prefabs (War of Nyx > Multiplayer > Rebuild Network Prefabs).");
+                return;
+            }
+
+            var configured = AppServices.Config.zone ?? new ZoneSettings();
+            var settings = configured.WithStageSeconds(_serverOptions != null ? _serverOptions.ZoneStageSeconds : -1f);
+            zone.ServerBegin(settings, fightAt, unchecked(_matchSeed * 16777619 + 0x5A17) /* independent of the spawn draw */,
+                area.transform.position, area.ZoneRadius, area);
+        }
+
         private void OnResetToLobby()
         {
+            if (_matchController != null && _matchController.TryGetComponent<NetworkNyxCircle>(out var zone))
+                zone.ServerStop();
             Debug.Log("[WarOfNyx][Match] Returning to the lobby and reopening the session.");
             foreach (var avatar in _avatars.Values)
             {

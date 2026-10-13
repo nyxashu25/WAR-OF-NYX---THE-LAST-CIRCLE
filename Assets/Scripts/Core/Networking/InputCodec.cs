@@ -118,6 +118,7 @@ namespace WarOfNyx.Core.Networking
             command.Yaw = WrapDegrees(Finite(command.Yaw));
             command.Pitch = Math.Clamp(Finite(command.Pitch), MinPitch, MaxPitch);
             command.SpeedMultiplier = 0f; // authority-only field: never accepted from a client
+            command.LateralWobble = 0f;   // authority-only: the client can neither add nor remove instability
             return command;
         }
 

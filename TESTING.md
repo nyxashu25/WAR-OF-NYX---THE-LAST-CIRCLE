@@ -17,6 +17,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 87 `.cs` files under `Assets/` (Phase 5) | **0 syntax errors** | Parse only. Lag-compensation / hitbox members checked against the Fusion 2.1.3 API reference |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 6 (adds `ItemsTests`; reload tests rewritten for the ammo pool) | **220 passed, 0 failed** | 29 new: loadout band over 1,000 seeds, packages, caps, capsule contents, single claim, rarity, pickups (fill, swap, melee, partial, refuse, armor), racing claim, healing (choice, channel, interrupt, cap, missing medkit) |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 95 `.cs` files under `Assets/` (Phase 6) | **0 syntax errors** | Parse only |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 7 (adds `ZoneTests`) | **249 passed, 0 failed** | 29 new: spec table, validation, containment over 500 seeds, map scaling, determinism, fair centres, 60 s linear shrink, final/closed circle, monotonic radius, replicated stage = server circle, test override, boundary, gun inside/outside without ammo loss, trigger held across the edge, no grace window, forged input, melee outside, zone damage per phase, re-entry, in-and-out dodging, armor ignored, wobble bounds/determinism/speed/no drift, aim sway, announcements |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 107 `.cs` files under `Assets/` (Phase 7) | **0 syntax errors** | Parse only. `Runner.Tick`, `Tick.Raw` and `Runner.LocalRenderTime` checked against the Fusion 2.1.3 API reference |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -163,3 +165,21 @@ Prerequisites: re-run **Run Project Setup** (builds the LootCrate prefab).
 5. TAKE B's primary → it goes into A's empty slot 2 (or SWAP replaces the active weapon, and A's old weapon appears in the capsule). TAKE the ammo → the reserve increases. TAKE ALL → takes what fits.
 6. Concurrency: with a third player, both open the same capsule and click the same item at the same time → exactly one gets it, the other sees "Already taken."
 7. Walking away, Esc or CLOSE closes the panel. An empty capsule disappears. An untouched one disappears after 90 s (it blinks in the last 10 s).
+
+## Phase 7 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/ZoneTests.cs` | Plan: spec table, invalid tables, every circle inside the previous (500 seeds), scaling, determinism, fair centres. Timeline: 60 s linear phases, final + closed circle, radius never grows, replicated stage gives the server's circle, delay, `-zoneSeconds`. Rules: boundary, gun inside/outside (no ammo spent), trigger held across the edge, no grace window, forged input stripped, melee outside. Damage: per phase, re-entry, in-and-out, armor ignored. Instability: 5–8 % bounds, deterministic per tick/player, keeps speed, no drift, aim sway. Announcer: each notice once, leave/enter | **29/29 pass** (.NET) |
+| `Tests/Multiplayer/NetworkStateTests.cs` (+1) | Circle survives the network round trip | Not run (needs Unity + Fusion) |
+
+## Manual test: the Nyx Circle (Phase 7 acceptance)
+Prerequisites: re-run **Run Project Setup** (rebuilds the MatchController prefab with `NetworkNyxCircle`). Build the server, then use **War of Nyx → Multiplayer → Launch Local Windows Server (WON-DEV, fast circle 20 s)** so the whole circle runs in 3 minutes.
+1. Start a two-player match. During "3, 2, 1" the violet barrier is already visible around the whole arena. The minimap (top right) shows the arena, you (gold arrow), the circle (cyan) and the next circle (white). The status under it reads `NYX CIRCLE 1/9 · SHRINKS IN …`, then at FIGHT `SHRINKING 0:20`.
+2. "NYX CIRCLE SHRINKING" appears and the feed says `Nyx Circle phase 1/9: shrinking for 20 s`. The barrier closes smoothly on both clients and matches the minimap. The server log lists all planned circles.
+3. Walk outside. Immediately: crimson `RETURN TO SAFE ZONE · N m / FIREARMS DISABLED OUTSIDE THE CIRCLE`, crimson crosshair, FIRE button greyed out ("NO FIRE / MELEE ONLY" on touch), violet screen edges, mild camera tremor, and your character trembles with violet arcs (the other player sees this too). Health drops 1 HP per second (two pulses of 0.5).
+4. Hold fire outside → no shots, magazine unchanged, "WEAPONS DISABLED" message. Walk out across the edge while holding fire → shooting stops exactly when you cross.
+5. Melee the other player outside → damage applies. Use a medkit and reload outside → both work.
+6. Walk forward outside → you drift gently left and right (a few degrees), never stopped or pushed. Standing still: no drift.
+7. Walk back in → "SAFE ZONE ENTERED", guns work at once, all effects stop, no more damage.
+8. Settings → REDUCE SHAKE / REDUCE FLASHING: the tremor, edge pulse and lightning soften. Damage, wobble and the gun lock stay exactly the same.
+9. Let the circle reach the end: the feed shows "FINAL CIRCLE BEGINS IN 10 SECONDS", then "FINAL CIRCLE" (6 HP/s outside), then "THE NYX CIRCLE HAS CLOSED". A player left in it dies: the feed reads `<name> was consumed by the Nyx Circle` and the elimination screen says "Consumed by the Nyx Circle." (Victory and results arrive in Phase 9.)

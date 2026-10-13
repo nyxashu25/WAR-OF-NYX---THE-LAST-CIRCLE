@@ -5,6 +5,7 @@ using WarOfNyx.Combat;
 using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Items;
 using WarOfNyx.Core.Match;
+using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay;
 using WarOfNyx.Gameplay.Effects;
 using WarOfNyx.UI.Common;
@@ -58,6 +59,11 @@ namespace WarOfNyx.Networking
         [Networked] public float DamageDealt { get; set; }
         [Networked] public PlayerRef EliminatedBy { get; set; }
         [Networked] public short EliminatedByWeapon { get; set; }
+        /// <summary>What eliminated this player (<see cref="DamageKind"/>): a weapon, melee, or the Nyx Circle.</summary>
+        [Networked] public byte EliminationCause { get; set; }
+        /// <summary>Zone exposure not yet charged as damage (server, spec 12).</summary>
+        [Networked] private float ZonePending { get; set; }
+        [Networked] private NetworkBool ZoneOutside { get; set; }
 
         // Presentation counters (replicated so every client plays the same FX once).
         [Networked] private int ShotCount { get; set; }
@@ -117,6 +123,9 @@ namespace WarOfNyx.Networking
             EliminatedBy = PlayerRef.None;
             EliminatedByWeapon = WeaponCatalog.NoWeapon;
             HealEndsAt = 0f;
+            EliminationCause = (byte)DamageKind.Weapon;
+            ZonePending = 0f;
+            ZoneOutside = false;
 
             var budget = App.AppServices.IsInitialized ? App.AppServices.Config.loadoutBudget : new LoadoutBudget();
             var loadout = LoadoutGenerator.Generate(loadoutSeed, budget, WeaponRegistry.Get);
@@ -140,7 +149,10 @@ namespace WarOfNyx.Networking
 
         // ------------------------------------------------------------------ simulation (server + predicting owner)
 
-        public void Simulate(in CombatCommand cmd, float yaw, float pitch, bool aiming, bool lowStance, bool sprinting, bool unlocked)
+        /// <param name="firearmsAllowed">False while the body is outside the Nyx Circle (spec 11): guns can't fire,
+        /// nothing is spent; melee, medkits, reloading and switching still work.</param>
+        public void Simulate(in CombatCommand cmd, float yaw, float pitch, bool aiming, bool lowStance, bool sprinting, bool unlocked,
+            bool firearmsAllowed)
         {
             ApplyLifeState();
             if (!Alive)
@@ -199,12 +211,17 @@ namespace WarOfNyx.Networking
                 if (meleeWeapon != null && MeleeRules.TryResolve(ref melee, meleeWeapon, now) && HasStateAuthority)
                     ResolveMelee(meleeWeapon, yaw);
 
-                // Firearms. Phase 7 supplies the inside-the-circle flag (spec 11); until then always allowed.
+                // Firearms: only with the body inside the Nyx Circle (spec 11). A blocked attempt costs nothing.
                 if (weapon.IsRanged && now >= SwitchReadyAt && !melee.InProgress)
                 {
                     int pool = inventory.GetAmmo(weapon.ammoType);
                     var decision = WeaponRules.TryFire(ref state, weapon, now, cmd.FireHeld, cmd.FirePressed, aiming,
-                        firearmsAllowed: true, reserveAvailable: pool);
+                        firearmsAllowed, reserveAvailable: pool);
+                    if (decision.Reason == FireBlockReason.FirearmsDisabled && cmd.FirePressed && IsPredictedForward)
+                    {
+                        LocalMessage("WEAPONS DISABLED - MELEE ONLY OUTSIDE THE CIRCLE", 1.2f);
+                        ProceduralAudio.PlayAt(ProceduralAudio.HitTick, transform.position, 0.25f); // dry "denied" click
+                    }
                     if (decision.Fired)
                     {
                         _player.OnAggressiveAction(AggressiveAction.FiredWeapon);
@@ -361,10 +378,32 @@ namespace WarOfNyx.Networking
             RPC_HitConfirmed(headshot, result.Killed);
 
             if (result.Killed && NetworkMatchController.Instance != null)
-                NetworkMatchController.Instance.RegisterElimination(target.Object.InputAuthority, Object.InputAuthority, weaponId, headshot);
+                NetworkMatchController.Instance.RegisterElimination(target.Object.InputAuthority, Object.InputAuthority, weaponId, headshot, kind);
         }
 
-        /// <summary>Server only. The single entry point for all damage (weapons now; zone and camping in Phases 7-8).</summary>
+        /// <summary>
+        /// Server only, once per tick while the circle is active: zone damage for time spent outside
+        /// (spec 12). Pulses of damage-per-second × interval; ignores armor; stops on re-entry.
+        /// Camping damage (Phase 8) joins this same per-tick pass.
+        /// </summary>
+        public void ApplyZoneExposure(bool inside, float damagePerSecond, float dt, float interval)
+        {
+            if (!HasStateAuthority || !Alive)
+                return;
+
+            var exposure = new ZoneExposure { Pending = ZonePending, Outside = ZoneOutside };
+            var step = ZoneDamage.Step(ref exposure, inside, damagePerSecond, dt, interval);
+            ZonePending = exposure.Pending;
+            ZoneOutside = exposure.Outside;
+            if (step.Damage <= 0f)
+                return;
+
+            var result = ReceiveDamage(step.Damage, DamageKind.Zone, PlayerRef.None, WeaponCatalog.NoWeapon, transform.position);
+            if (result.Killed && NetworkMatchController.Instance != null)
+                NetworkMatchController.Instance.RegisterElimination(Object.InputAuthority, PlayerRef.None, WeaponCatalog.NoWeapon, false, DamageKind.Zone);
+        }
+
+        /// <summary>Server only. The single entry point for all damage (weapons, melee, the Nyx Circle; camping in Phase 8).</summary>
         public DamageResult ReceiveDamage(float amount, DamageKind kind, PlayerRef attacker, short weaponId, Vector3 sourcePosition)
         {
             if (!HasStateAuthority)
@@ -374,7 +413,8 @@ namespace WarOfNyx.Networking
             var result = HealthRules.ApplyDamage(ref health, amount, kind, _player.IsSpawnProtected);
             Health = health.Health;
 
-            if (result.Applied > 0f)
+            // Direction indicator for player damage only; zone damage is shown by the outside-circle effects.
+            if (result.Applied > 0f && (kind == DamageKind.Weapon || kind == DamageKind.Melee))
                 RPC_DamageTaken(sourcePosition, result.Applied);
 
             if (result.Killed)
@@ -382,6 +422,7 @@ namespace WarOfNyx.Networking
                 Alive = false;
                 EliminatedBy = attacker;
                 EliminatedByWeapon = weaponId;
+                EliminationCause = (byte)kind;
                 HealEndsAt = 0f;
                 ApplyLifeState();
                 DropLoot();
@@ -489,11 +530,11 @@ namespace WarOfNyx.Networking
                 LocalMessage(message);
         }
 
-        private static void LocalMessage(string message)
+        private static void LocalMessage(string message, float seconds = 2.5f)
         {
             var arena = OnlineArenaController.Instance;
             if (arena != null && arena.Hud != null)
-                arena.Hud.ShowMessage(message);
+                arena.Hud.ShowMessage(message, seconds);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -639,7 +680,9 @@ namespace WarOfNyx.Networking
             float spread = ranged ? WeaponRules.CurrentSpread(state, weapon, now, _player.LocalAimHeld) : 0.5f;
             hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, Alive);
 
-            if (!Alive)
+            if (!Alive && (DamageKind)EliminationCause == DamageKind.Zone)
+                hud.ShowEliminated(null, null, "Consumed by the Nyx Circle.");
+            else if (!Alive)
                 hud.ShowEliminated(NameOf(EliminatedBy), WeaponRegistry.DisplayName(EliminatedByWeapon));
             else
                 hud.HideEliminated();

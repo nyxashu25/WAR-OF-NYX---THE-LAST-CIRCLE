@@ -89,6 +89,13 @@ Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · H
   - **Instability:** a deterministic 5–8 % sideways movement wobble plus aim sway, seeded from server tick and player id so the client can't remove it. No teleports and no forced camera turns. Visual shake and distortion can be reduced in settings; the penalty itself can't.
   - **Zone damage:** 1 HP/s (phases 1–3), 2 HP/s (4–6), 4 HP/s (7–8), 6 HP/s (final) **[T]**. It ignores armor.
 - **Re-entry:** guns work again immediately, damage and instability stop, and "SAFE ZONE ENTERED" appears.
+- *Implemented (Phase 7):* `Core/Zone` (`ZoneSettings` table in GameConfig, `ZonePlanner`, `ZoneTimeline`, `ZoneRules`, `ZoneDamage`, `ZoneInstability`, `ZoneAnnouncer`). Details:
+  - The phase table is scaled to each map's starting safe zone (×0.11 on the 120 m test arena).
+  - Phase 1 starts shrinking at FIGHT; the circle is shown from the countdown.
+  - On the edge counts as inside. A closed circle (radius 0) contains nobody.
+  - Zone damage is charged in 0.5 s pulses of exposure **[T]**. Partial exposure is kept, so stepping in and out doesn't dodge it.
+  - Aim sway: ±1.5° yaw, ±1° pitch **[T]** (affects melee aim; guns can't fire outside anyway).
+  - After the final phase the circle stays closed (6 HP/s) until the match ends.
 
 ## 9. Nyx Hunt Protocol — anti-camping (spec 13)
 - The server samples each player's position once per second. Rotating, aiming, crouching, firing, swapping weapons and using inventory don't count as movement.

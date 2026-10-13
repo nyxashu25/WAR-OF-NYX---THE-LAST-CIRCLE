@@ -39,6 +39,7 @@ namespace WarOfNyx.UI.Hud
         private Text _feed;
         private readonly List<(string text, float until, bool highlight)> _feedEntries = new List<(string, float, bool)>();
 
+        private bool _firearmsBlocked;
         private float _hitMarkerUntil;
         private float _flashAlpha;
         private float _arrowAlpha;
@@ -97,6 +98,17 @@ namespace WarOfNyx.UI.Hud
             _crosshair[3].anchoredPosition = new Vector2(-gap, 0f);
         }
 
+        /// <summary>Outside the circle (spec 11): the crosshair turns crimson and dims to show guns can't fire.</summary>
+        public void SetFirearmsBlocked(bool blocked)
+        {
+            if (_firearmsBlocked == blocked)
+                return;
+            _firearmsBlocked = blocked;
+            var color = blocked ? NyxPalette.WithAlpha(NyxPalette.Crimson, 0.55f) : NyxPalette.WithAlpha(Color.white, 0.9f);
+            foreach (var bar in _crosshair)
+                bar.GetComponent<Image>().color = color;
+        }
+
         /// <summary>Server-confirmed hit (spec 9 "hit markers"): white, gold for headshots, crimson for eliminations.</summary>
         public void HitMarker(bool headshot, bool kill)
         {
@@ -141,10 +153,12 @@ namespace WarOfNyx.UI.Hud
             _messageUntil = Time.unscaledTime + seconds;
         }
 
-        public void ShowEliminated(string killerName, string weaponName)
+        /// <param name="causeText">Overrides the line, e.g. "Consumed by the Nyx Circle.".</param>
+        public void ShowEliminated(string killerName, string weaponName, string causeText = null)
         {
             _eliminated.SetActive(true);
-            _eliminatedBy.text = string.IsNullOrEmpty(killerName)
+            _eliminatedBy.text = !string.IsNullOrEmpty(causeText) ? causeText
+                : string.IsNullOrEmpty(killerName)
                 ? "You were eliminated."
                 : $"Eliminated by {killerName}{(string.IsNullOrEmpty(weaponName) ? string.Empty : $" with {weaponName}")}";
             _crosshairRoot.gameObject.SetActive(false);
@@ -261,10 +275,10 @@ namespace WarOfNyx.UI.Hud
             _damageArrowImage.rectTransform.sizeDelta = new Vector2(120f, 10f);
             _damageArrowImage.rectTransform.anchoredPosition = new Vector2(0f, 190f);
 
-            // Kill feed (top right, below the menu button).
+            // Kill feed (top right, left of the minimap).
             _feed = UiFactory.CreateText(safe, string.Empty, 22, NyxPalette.TextPrimary, TextAnchor.UpperRight);
             _feed.supportRichText = true;
-            UiFactory.Anchor(_feed.rectTransform, new Vector2(0.55f, 0.62f), new Vector2(0.98f, 0.88f));
+            UiFactory.Anchor(_feed.rectTransform, new Vector2(0.42f, 0.62f), new Vector2(0.84f, 0.9f));
 
             // Elimination screen (spectating and results arrive in Phase 9).
             var panel = UiFactory.CreatePanel("Eliminated", safe, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.55f));

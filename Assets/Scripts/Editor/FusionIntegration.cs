@@ -159,7 +159,13 @@ namespace WarOfNyx.EditorTools
             Build(BuildTarget.StandaloneWindows64, StandaloneBuildSubtarget.Player, WindowsClientPath);
 
         [MenuItem(MenuRoot + "Launch Local Windows Server (WON-DEV)", priority = 40)]
-        public static void LaunchLocalServer()
+        public static void LaunchLocalServer() => LaunchLocalServer(string.Empty);
+
+        /// <summary>Same dev server, but every Nyx Circle phase lasts 20 s instead of 60 s (whole circle in 3 minutes).</summary>
+        [MenuItem(MenuRoot + "Launch Local Windows Server (WON-DEV, fast circle 20 s)", priority = 41)]
+        public static void LaunchLocalServerFastCircle() => LaunchLocalServer("-zoneSeconds 20 ");
+
+        private static void LaunchLocalServer(string extraArguments)
         {
             string exe = Path.GetFullPath(WindowsServerPath);
             if (!File.Exists(exe))
@@ -172,11 +178,11 @@ namespace WarOfNyx.EditorTools
             Process.Start(new ProcessStartInfo
             {
                 FileName = exe,
-                Arguments = $"-batchmode -nographics -server -session WON-DEV -maxPlayers 12 -minPlayers 2 -lobbyFill 10 -logFile \"{log}\"",
+                Arguments = $"-batchmode -nographics -server -session WON-DEV -maxPlayers 12 -minPlayers 2 -lobbyFill 10 {extraArguments}-logFile \"{log}\"",
                 WorkingDirectory = Path.GetDirectoryName(exe),
                 UseShellExecute = false,
             });
-            Debug.Log($"[WarOfNyx] Local dedicated server started (session WON-DEV). Log: {log}");
+            Debug.Log($"[WarOfNyx] Local dedicated server started (session WON-DEV{(extraArguments.Length > 0 ? ", " + extraArguments.Trim() : string.Empty)}). Log: {log}");
         }
 
         private static void Build(BuildTarget target, StandaloneBuildSubtarget subtarget, string path)

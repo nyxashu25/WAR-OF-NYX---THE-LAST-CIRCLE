@@ -1,13 +1,13 @@
 # Development state (handoff record)
 
-_Last updated: 2026-10-13 — end of Phase 6 authoring_
+_Last updated: 2026-10-13 — end of Phase 7 authoring_
 
 ## Phase map
 15 phases in total: 1–14 from the master prompt, plus **9G Offline Ghost Protocol** (Section 38).
-Code written: **1, 2, 3, 4, 5, 6**. Remaining: 7, 8, 9, 9G, 10, 11, 12, 13, 14.
+Code written: **1, 2, 3, 4, 5, 6, 7**. Remaining: 8, 9, 9G, 10, 11, 12, 13, 14.
 
 ## Current phase
-**Phase 6 – Loadouts, inventory & loot.** Code and tests written. Item rules are verified under .NET. **Not yet run:** everything Unity/Fusion. The manual tests for Phases 2–6 (TESTING.md) are pending the project owner's Unity 6.3 + Fusion 2.1.3 + App ID setup.
+**Phase 7 – The Nyx Circle.** Code and tests written. Circle rules are verified under .NET. **Not yet run:** everything Unity/Fusion. The manual tests for Phases 2–7 (TESTING.md) are pending the project owner's Unity 6.3 + Fusion 2.1.3 + App ID setup.
 
 ## Configuration requested by the project owner
 - Offline Ghost Protocol defaults: **Difficulty = NIGHTMARE, Bots = 23** (in `GameConfig`, clamped by `OfflineCapacityPolicy`; difficulty never lowered).
@@ -18,6 +18,8 @@ Code written: **1, 2, 3, 4, 5, 6**. Remaining: 7, 8, 9, 9G, 10, 11, 12, 13, 14.
 | Core rules | `Core/Flow`, `Core/Events`, `Core/Offline`, `Core/Movement` (+ authority `SpeedMultiplier`), `Core/Networking` (input codec now carries combat bits), `Core/Match` | Yes (.NET) |
 | **Combat rules (Phase 5)** | `Core/Combat/WeaponStats`, `WeaponCatalog` (7 ranged + 4 melee), `WeaponRules`, `HealthRules`, `MeleeRules`, `CombatLoadout` (+`CombatCommand`, `CombatText`, `EventDeduplicator`), `AimGeometry` | Yes (.NET, 47 tests) |
 | **Item rules (Phase 6)** | `Core/Items/ItemTypes` (rarity, medkits, armor, ammo caps, `PlayerInventory`), `LootContainer` (+`LootItem`), `InventoryRules` (+`HealingRules`), `LoadoutGenerator`; weapon reserve moved into the inventory pool | Yes (.NET, 29 tests) |
+| **Circle rules (Phase 7)** | `Core/Zone/ZoneSettings` (spec table, wobble, sway, damage interval), `ZonePlanner` (`ZoneCircle`, `ZonePlan`, `IZoneCentreValidator`), `ZoneTimeline` (`ZoneStage`), `ZoneRules` (+`ZoneDamage`, `ZoneInstability`), `ZoneAnnouncer` (+`ZoneView`); `MovementCommand.LateralWobble` (authority-only, stripped by `InputCodec.Sanitize`); `CombatText.Environmental`; `-zoneSeconds` | Yes (.NET, 29 tests) |
+| Phase 7 Unity/Fusion | `Networking/NetworkNyxCircle` (+`NetworkZoneCircle`), `NetworkPlayer` (+`OutsideZone`, wobble, sway, zone pass), `NetworkCombat` (+`firearmsAllowed`, `ApplyZoneExposure`, `EliminationCause`), `NetworkMatchController` (feed cause), `NetworkSessionManager` (plans the circle at the countdown, stops it on reset), `ArenaSpawnArea` (+`PlayableFraction`), `Gameplay/Effects/NyxCircleVisual`, `OutsideZoneVisual`, `UI/Hud/ZoneHud`, `Minimap`, `UI/Common/UiShapes`, `OnlineArenaController.ShowZone`, camera shake, FIRE button disabled state, crosshair tint, prefab builder (+`NetworkNyxCircle`, auto-rebuild), fast-circle server menu item | No |
 | Phase 6 Unity/Fusion | `Networking/NetworkLootCrate` (+12-slot struct), `NetworkCombat` (loadout, ammo pool, medkits, drop on death, `RPC_TakeLoot`, loot UI driver), `NetworkWeaponSlot.cs` (+`NetworkInventory`), `UI/Hud/LootPanel`, `UI/Common/RarityColors`, `CombatHud` (+inventory/heal/prompt/message), `OnlineArenaController` (+loot modal), router (+medkit, interact) | No |
 | Unity combat data | `Combat/WeaponDefinition` (+`WeaponRegistry`), `Combat/WeaponDatabase` | No |
 | Input | `Characters/PlayerInputRouter.ConsumeInput` (movement + combat, mouse fire only when captured) | No |
@@ -30,7 +32,7 @@ Code written: **1, 2, 3, 4, 5, 6**. Remaining: 7, 8, 9, 9G, 10, 11, 12, 13, 14.
 Scenes `Bootstrap`, `MainMenu`, `PracticeArena`, `MatchLobby`, `BattleArena` (+NavMesh). Prefabs `PlayerPlaceholder`; Fusion-only `Resources/WarOfNyx/NetworkPlayer` (with hitboxes), `MatchController`, `LootCrate`. Assets `MovementConfig`, `GameConfig`, `FX_Additive.mat`, **`ScriptableObjects/Weapons/*.asset` + `Resources/WarOfNyx/WeaponDatabase.asset`**, URP assets, graybox materials.
 
 ## Versions
-Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Test Framework 1.5.1 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **6**.
+Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Test Framework 1.5.1 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **7**.
 
 ## Key decisions (cumulative, newest last)
 1. Unity 6.3 LTS + Fusion 2.1.3. Rules in pure C# shared by server, prediction, offline simulation and bots. Online isolated behind `WON_FUSION`.
@@ -40,13 +42,15 @@ Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Te
 5. Phase 5: all guns hitscan from the camera shoulder point (exact crosshair) with an eye fallback against wall-peeking; lag-compensated hitboxes (body capsule + head sphere, stance-adjusted); player CharacterControllers on *Ignore Raycast* so only rewound hitboxes are hit; deterministic spread seeded by player, shot and pellet; recoil = bloom; weapon network id = catalog index (append-only); one damage entry point on the server; FX from replicated counters (owner plays predicted FX on forward ticks only); fixed dev loadout until Phase 6.
 6. **Phase 6:** spare ammo lives in the inventory by type; loadouts are random packages balanced by power band; medkits consumed on completion only; loot capsule = 12 fixed networked slots; claims via validated owner→server RPC, processed one after another (atomic); items are moved, never copied; the loot panel is a client view with server-checked buttons.
 
+7. **Phase 7:** the server plans all circles at the countdown but replicates only the current phase (no endgame leak); every peer interpolates the same circle from it. Inside/outside is classified per tick on the simulated body position (server authoritative, owner predicted); clients never send zone state. Instability is a deterministic, authority-applied direction bend (tick + player id) so prediction agrees and clients can't remove it. Zone damage runs once per server tick in exposure pulses through the single damage entry point. The phase table is scaled to the map's starting safe zone (the spawn area).
+
 ## Verified tests
-- `dotnet test Tools/CoreTests` → **220/220 passed** (2026-10-13).
-- 95/95 scripts parse as C# 9 (syntax only).
+- `dotnet test Tools/CoreTests` → **249/249 passed** (2026-10-13).
+- 107/107 scripts parse as C# 9 (syntax only).
 
 ## External dependencies still required (project owner)
 - Unity 6.3 LTS (Android, Windows/Linux Dedicated Server modules); Photon account + Fusion 2 App ID + Fusion SDK 2.1.3; 2+ clients for multiplayer tests.
 
 ## Next tasks
-1. Install, import, set up, fix compile errors, run the tests and the manual tests for Phases 2–6 (TESTING.md). Commit the generated assets.
-2. **Phase 7 – The Nyx Circle:** circle geometry and configurable phases (spec 10 table, 60 s each, every next circle inside the previous one, fair centres), server-replicated circle state with smooth client interpolation, inside/outside classification from the server body position, firearms disabled outside (button greyed, notice, no ammo spent: the weapon rules already take the flag), melee still allowed, deterministic movement instability (5–8 % wobble) and aim sway, zone damage 1/2/4/6 HP/s ignoring armor, re-entry restore, energy-barrier visuals, minimap with current and next circle.
+1. Install, import, set up, fix compile errors, run the tests and the manual tests for Phases 2–7 (TESTING.md). Commit the generated assets.
+2. **Phase 8 – Nyx Hunt Protocol (anti-camping):** server samples positions every second; meaningful movement = ≥ 8 m net and ≥ 12 m path in the window; 20 s warning → 25 s "NYX IS WATCHING YOU" → 30 s exposed (10 s beacon, minimap marker for everyone, feed line) + 2 HP/s until real movement; re-alert policy; grace after spawn/reconnect; joins the zone damage pass (one pass per tick, no double damage); death cause "Camping".

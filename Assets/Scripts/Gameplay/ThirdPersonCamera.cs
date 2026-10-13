@@ -43,6 +43,8 @@ namespace WarOfNyx.Gameplay
         private float _currentDistance;
         private float _aimBlend;
         private Vector3 _smoothedPivot;
+        private float _shake;
+        private float _shakeTarget;
 
         public Transform Target => _target;
 
@@ -52,6 +54,12 @@ namespace WarOfNyx.Gameplay
             _camera.fieldOfView = fieldOfView;
             _camera.nearClipPlane = 0.1f;
         }
+
+        /// <summary>
+        /// Mild camera vibration (outside the Nyx Circle, spec 12). 0 = off, 1 = full. Visual only: it
+        /// never changes the aim, and it never turns the camera on its own.
+        /// </summary>
+        public void SetShake(float amount) => _shakeTarget = Mathf.Clamp01(amount);
 
         public void Bind(Transform target, PlayerMovement movement, PlayerInputRouter input)
         {
@@ -107,7 +115,19 @@ namespace WarOfNyx.Gameplay
                 ? allowed
                 : Mathf.Lerp(_currentDistance, allowed, 1f - Mathf.Exp(-zoomSharpness * dt));
 
-            transform.SetPositionAndRotation(shoulder + rotation * Vector3.back * _currentDistance, rotation);
+            var position = shoulder + rotation * Vector3.back * _currentDistance;
+
+            _shake = Mathf.MoveTowards(_shake, _shakeTarget, (dt > 0f ? dt : 1f) * 3f);
+            if (_shake > 0.001f)
+            {
+                // Small, smooth tremor: a few centimetres and a fraction of a degree.
+                float t = Time.unscaledTime * 22f;
+                position += rotation * new Vector3(Mathf.PerlinNoise(t, 0.2f) - 0.5f, Mathf.PerlinNoise(0.6f, t) - 0.5f, 0f) * (0.06f * _shake);
+                rotation *= Quaternion.Euler((Mathf.PerlinNoise(t * 0.7f, 3.1f) - 0.5f) * 0.6f * _shake, 0f,
+                    (Mathf.PerlinNoise(5.3f, t * 0.7f) - 0.5f) * 0.8f * _shake);
+            }
+
+            transform.SetPositionAndRotation(position, rotation);
         }
 
         private float CollisionDistance(Vector3 pivot, Vector3 shoulder, Vector3 backward, float wanted)

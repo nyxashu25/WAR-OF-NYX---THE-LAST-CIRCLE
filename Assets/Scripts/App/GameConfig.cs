@@ -7,8 +7,7 @@ namespace WarOfNyx.App
     /// <summary>
     /// Project-wide static configuration. One asset lives at
     /// Assets/Resources/WarOfNyx/GameConfig.asset (created by War of Nyx > Setup).
-    /// Gameplay tunables (weapons, circle phases, camping) get their own ScriptableObjects
-    /// in later phases; this asset only holds app-level settings.
+    /// It holds app-level settings and the server-side rule tables (match start, loadouts, circle).
     /// </summary>
     [CreateAssetMenu(menuName = "War of Nyx/Game Config", fileName = "GameConfig")]
     public sealed class GameConfig : ScriptableObject
@@ -56,6 +55,11 @@ namespace WarOfNyx.App
         [Header("Starting loadouts (Phase 6, server-side)")]
         [Tooltip("Power budget every randomized starting loadout must fit (spec 7).")]
         public WarOfNyx.Core.Items.LoadoutBudget loadoutBudget = new WarOfNyx.Core.Items.LoadoutBudget();
+
+        [Header("Nyx Circle (Phase 7, server-side)")]
+        [Tooltip("Circle phases (spec 10 table, scaled to each map's starting safe zone), zone damage and instability. " +
+                 "Dedicated servers can shorten every phase with -zoneSeconds for testing.")]
+        public WarOfNyx.Core.Zone.ZoneSettings zone = new WarOfNyx.Core.Zone.ZoneSettings();
 
         public OfflineMatchSettings DefaultOfflineSettings =>
             new OfflineMatchSettings(defaultOfflineBotCount, defaultOfflineDifficulty);

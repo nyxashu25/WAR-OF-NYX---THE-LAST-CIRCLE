@@ -101,5 +101,12 @@ namespace WarOfNyx.Tests.Multiplayer
             Assert.AreEqual(ammo, items.Get(11).ToItem());
             Assert.IsTrue(items.Get(5).ToItem().IsEmpty);
         }
+
+        [Test]
+        public void CircleSurvivesTheNetworkRoundTrip()
+        {
+            var circle = new WarOfNyx.Core.Zone.ZoneCircle(-12.5f, 40.25f, 33f);
+            Assert.AreEqual(circle, NetworkZoneCircle.From(circle).ToCircle());
+        }
     }
 }

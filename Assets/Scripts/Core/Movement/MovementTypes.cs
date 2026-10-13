@@ -35,6 +35,13 @@ namespace WarOfNyx.Core.Movement
         /// server/simulation after decoding input, never taken from the client. 0 or less means 1.
         /// </summary>
         public float SpeedMultiplier;
+
+        /// <summary>
+        /// Authority-applied sideways disturbance of the movement direction (outside the Nyx Circle,
+        /// spec 12), as a fraction: 0.06 bends the direction about 6 % to the right. Speed is kept.
+        /// Never taken from the client.
+        /// </summary>
+        public float LateralWobble;
     }
 
     /// <summary>Facts about the world that the physics layer reports before a step.</summary>

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 using WarOfNyx.Core.Match;
+using WarOfNyx.Core.Zone;
 
 namespace WarOfNyx.Gameplay
 {
@@ -8,9 +9,10 @@ namespace WarOfNyx.Gameplay
     /// The map's starting safe zone for spawning (centre = this transform, <see cref="zoneRadius"/>).
     /// Used only by the authority: it runs <see cref="SpawnPlanner"/> with a physics/navmesh
     /// validator so every spawn is on walkable, open, dry, navigable ground (spec 6).
-    /// From Phase 7 the radius comes from the first Nyx Circle phase.
+    /// From Phase 7 it is also the Nyx Circle's first circle (centre + radius, the spec's 500 m
+    /// table is scaled to it), and it scores candidate circle centres for fair ground.
     /// </summary>
-    public sealed class ArenaSpawnArea : MonoBehaviour, ISpawnValidator
+    public sealed class ArenaSpawnArea : MonoBehaviour, ISpawnValidator, IZoneCentreValidator
     {
         [Tooltip("Radius of the starting safe zone (m). Spawns stay inside it, minus the edge margin.")]
         [SerializeField] private float zoneRadius = 55f;
@@ -87,6 +89,43 @@ namespace WarOfNyx.Gameplay
 
             groundY = feet.y;
             return true;
+        }
+
+        /// <summary>
+        /// Nyx Circle fairness (spec 10): share of points inside a candidate circle that are playable
+        /// ground (solid, dry, walkable slope, on the NavMesh and reachable). Samples the centre plus
+        /// two rings of eight points.
+        /// </summary>
+        public float PlayableFraction(float x, float z, float radius)
+        {
+            int total = 1, good = IsPlayableGround(x, z) ? 1 : 0;
+            if (radius > 0.5f)
+            {
+                foreach (float ring in new[] { 0.5f, 0.9f })
+                {
+                    for (int i = 0; i < 8; i++)
+                    {
+                        float a = (i + ring) * Mathf.PI * 0.25f;
+                        total++;
+                        if (IsPlayableGround(x + Mathf.Sin(a) * radius * ring, z + Mathf.Cos(a) * radius * ring))
+                            good++;
+                    }
+                }
+            }
+            return good / (float)total;
+        }
+
+        private bool IsPlayableGround(float x, float z)
+        {
+            var top = new Vector3(x, transform.position.y + 200f, z);
+            if (!Physics.Raycast(top, Vector3.down, out var hit, 400f, groundMask, QueryTriggerInteraction.Ignore))
+                return false;
+            int water = LayerMask.NameToLayer(waterLayer);
+            if (water >= 0 && hit.collider.gameObject.layer == water)
+                return false;
+            if (Vector3.Angle(hit.normal, Vector3.up) > maxSlopeDegrees)
+                return false;
+            return OnNavMesh(hit.point) && ReachableFromCentre(hit.point);
         }
 
         private bool OnNavMesh(Vector3 feet)

@@ -74,6 +74,18 @@ namespace WarOfNyx.Core.Combat
                 return $"{victim} was eliminated";
             return $"{killer} eliminated {victim} with {weapon}{(headshot ? " (HEADSHOT)" : string.Empty)}";
         }
+
+        /// <summary>Eliminations without a killer: the Nyx Circle (Phase 7), camping (Phase 8), falls.</summary>
+        public static string Environmental(string victim, DamageKind cause)
+        {
+            switch (cause)
+            {
+                case DamageKind.Zone: return $"{victim} was consumed by the Nyx Circle";
+                case DamageKind.Camping: return $"{victim} was taken by the Nyx Hunt";
+                case DamageKind.Fall: return $"{victim} fell to their death";
+                default: return $"{victim} was eliminated";
+            }
+        }
     }
 
     /// <summary>

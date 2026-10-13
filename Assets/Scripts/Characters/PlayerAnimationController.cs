@@ -17,6 +17,9 @@ namespace WarOfNyx.Characters
     [RequireComponent(typeof(PlayerMovement))]
     public sealed class PlayerAnimationController : MonoBehaviour
     {
+        /// <summary>Extra visual offset added on top of the animation (outside-circle trembling, spec 12). Cosmetic only.</summary>
+        public Vector3 TrembleOffset { get; set; }
+
         private static readonly int SpeedId = Animator.StringToHash("Speed");
         private static readonly int GroundedId = Animator.StringToHash("Grounded");
         private static readonly int CrouchingId = Animator.StringToHash("Crouching");
@@ -105,7 +108,7 @@ namespace WarOfNyx.Characters
             float squashY = _heightRatio * (1f - _landSquash);
             float stretchXZ = 1f + _landSquash * 0.5f;
             placeholderVisual.localScale = new Vector3(_visualBaseScale.x * stretchXZ, _visualBaseScale.y * squashY, _visualBaseScale.z * stretchXZ);
-            placeholderVisual.localPosition = new Vector3(_visualBasePosition.x, _visualBasePosition.y * squashY + bob, _visualBasePosition.z);
+            placeholderVisual.localPosition = new Vector3(_visualBasePosition.x, _visualBasePosition.y * squashY + bob, _visualBasePosition.z) + TrembleOffset;
             placeholderVisual.localRotation = Quaternion.Euler(_lean, 0f, 0f);
         }
     }

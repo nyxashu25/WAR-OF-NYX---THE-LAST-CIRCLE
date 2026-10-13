@@ -6,6 +6,7 @@ using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Networking;
+using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay;
 using WarOfNyx.Gameplay.Effects;
 
@@ -40,11 +41,18 @@ namespace WarOfNyx.Networking
         [Networked] private float ProtectionEndsAt { get; set; }
         [Networked] private NetworkBool ProtectionBroken { get; set; }
 
+        /// <summary>
+        /// Outside the Nyx Circle this tick (spec 11-12). Decided by the SERVER from its own simulated
+        /// body position; the owner predicts it the same way, proxies only display it.
+        /// </summary>
+        [Networked] public NetworkBool OutsideZone { get; set; }
+
         private PlayerMovement _movement;
         private PlayerInputRouter _router;
         private NetworkCombat _combat;
         private TextMesh _nameTag;
         private SpawnShieldVisual _shield;
+        private OutsideZoneVisual _outsideVisual;
 
         public string PlayerName => DisplayName.Value;
 
@@ -97,6 +105,7 @@ namespace WarOfNyx.Networking
                 float drop = AppServices.IsInitialized ? AppServices.Config.matchRules.spawnDropHeight : 0f;
                 SpawnEffect.Play(state.Position - Vector3.up * drop);
                 _shield = SpawnShieldVisual.Attach(transform);
+                _outsideVisual = OutsideZoneVisual.Attach(transform);
             }
 
             if (HasInputAuthority)
@@ -152,17 +161,46 @@ namespace WarOfNyx.Networking
                 command = InputCodec.Neutral(command.Yaw, command.Pitch);
 
             bool alive = _combat == null || _combat.IsAlive;
+
+            // Nyx Circle (spec 11-12): classified from this peer's simulated position, never from client data.
+            var zone = NetworkNyxCircle.Instance;
+            bool zoneLive = unlocked && zone != null && zone.IsActive;
+            float now = Runner.SimulationTime;
+            var settings = NetworkNyxCircle.LocalSettings;
+            int tick = Runner.Tick.Raw;
+            int playerId = Object.InputAuthority.PlayerId;
+
             if (alive)
             {
-                // Authority-applied modifiers (never from the client): active weapon speed.
+                // Authority-applied modifiers (never from the client): active weapon speed and,
+                // outside the circle, the deterministic sideways wobble.
                 command.SpeedMultiplier = _combat != null ? _combat.ActiveSpeedMultiplier : 1f;
+                bool outsideBeforeMove = zoneLive && !zone.IsInside(transform.position, now);
+                command.LateralWobble = outsideBeforeMove ? ZoneInstability.Lateral(tick, Runner.DeltaTime, playerId, settings) : 0f;
                 _movement.Simulate(command, Runner.DeltaTime);
                 Movement = NetworkMovementState.From(_movement.State, _movement.IsGrounded, transform.position);
             }
 
+            // After moving: where the body is now decides firearms and zone damage for this tick.
+            bool outside = alive && zoneLive && !zone.IsInside(transform.position, now);
+            OutsideZone = outside;
+
+            float yaw = command.Yaw, pitch = command.Pitch;
+            if (outside)
+            {
+                ZoneInstability.AimSway(tick, Runner.DeltaTime, playerId, settings, out float swayYaw, out float swayPitch);
+                yaw += swayYaw;
+                pitch += swayPitch;
+            }
+
             // Combat after movement: shots start from this tick's position (same order on server and client).
             if (_combat != null)
-                _combat.Simulate(combat, command.Yaw, command.Pitch, command.AimHeld, _movement.State.IsLowStance, _movement.State.IsSprinting, unlocked);
+            {
+                _combat.Simulate(combat, yaw, pitch, command.AimHeld, _movement.State.IsLowStance, _movement.State.IsSprinting, unlocked,
+                    firearmsAllowed: !outside);
+                if (HasStateAuthority && alive && zoneLive)
+                    _combat.ApplyZoneExposure(!outside, zone.DamagePerSecond, Runner.DeltaTime, settings.damageIntervalSeconds);
+            }
         }
 
         public override void Render()
@@ -176,6 +214,12 @@ namespace WarOfNyx.Networking
             if (HasInputAuthority && OnlineArenaController.Instance != null)
                 OnlineArenaController.Instance.ShowSpawnProtection(remaining);
 
+            bool outsideVisible = OutsideZone && (_combat == null || _combat.IsAlive);
+            if (_outsideVisual != null)
+                _outsideVisual.SetActive(outsideVisible);
+            if (HasInputAuthority && OnlineArenaController.Instance != null)
+                OnlineArenaController.Instance.ShowZone(BuildZoneView(), transform.position, Movement.Yaw);
+
             if (_nameTag != null)
                 _nameTag.gameObject.SetActive(_combat == null || _combat.IsAlive);
             if (_nameTag != null && _nameTag.gameObject.activeSelf)
@@ -185,6 +229,26 @@ namespace WarOfNyx.Networking
                 if (cam != null)
                     _nameTag.transform.rotation = Quaternion.LookRotation(_nameTag.transform.position - cam.transform.position);
             }
+        }
+
+        private ZoneView BuildZoneView()
+        {
+            var zone = NetworkNyxCircle.Instance;
+            if (zone == null || !zone.IsActive || Runner == null)
+                return default;
+            float now = Runner.SimulationTime;
+            var current = zone.CircleAt(now);
+            var p = transform.position;
+            return new ZoneView
+            {
+                Active = true,
+                Stage = zone.Stage,
+                Current = current,
+                Time = now,
+                PlayerOutside = OutsideZone,
+                PlayerAlive = _combat == null || _combat.IsAlive,
+                PlayerDistanceToEdge = current.DistanceToEdge(p.x, p.z),
+            };
         }
 
         /// <summary>Owner → server. The server sanitizes; the client never sets its own networked name.</summary>

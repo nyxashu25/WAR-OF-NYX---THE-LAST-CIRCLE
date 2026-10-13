@@ -10,7 +10,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | **Code written; match lifecycle, spawn planner, protection and queue: 40 tests pass under .NET; Unity/Fusion side not yet run** |
 | 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | **Code written; combat rules 47 tests pass under .NET; Unity/Fusion side not yet run** |
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | **Code written; item rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
-| 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | Not started |
+| 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | **Code written; circle rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | Not started |
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | Not started |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | Not started (defaults already configured: NIGHTMARE, 23 bots) |
@@ -108,3 +108,18 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] UI: loot panel, inventory line, healing progress, prompts and result messages; USE / MEDKIT touch buttons live
 - [ ] **Run the loot test in TESTING.md** ← needs the project owner
 - [ ] World loot (crates around the map) is not in the MVP list. Only elimination capsules exist.
+
+## Phase 7 checklist
+- [x] Circle geometry (contains / distance to edge / circle-in-circle) and the configurable phase table (spec 10: 500→…→0 m, 60 s each, 1/2/4/6 HP/s), scaled to each map's starting safe zone (the 120 m test arena uses ×0.11)
+- [x] Server plans every centre at the countdown: each next circle lies entirely inside the previous one (verified over 500 seeds), candidates scored for playable ground (no water, cliffs or unreachable areas)
+- [x] Synchronization: the server replicates only the current phase (from, to, start, end, damage); every peer derives the same smooth shrink. Future circles are never sent
+- [x] Inside/outside decided by the server from the authoritative body position each tick (the owner predicts the same check); the input stream has no inside flag
+- [x] Firearms can't fire outside: no shot, no ammo, no damage, no auto-reload; crossing the edge while holding the trigger stops at the edge (tested tick by tick)
+- [x] Melee, medkits, reloading, switching, looting and movement keep working outside
+- [x] Instability: deterministic 5–8 % sideways wobble (tick + player id, authority-applied, client can't remove it), small aim sway; no forced movement, teleports or camera turns
+- [x] Zone damage in 0.5 s pulses, ignores armor and spawn protection, stops on re-entry, can't be dodged by stepping in and out; elimination by the circle has its own feed line
+- [x] Re-entry restores guns at once and shows "SAFE ZONE ENTERED"
+- [x] Visuals: energy barrier (scrolling hexagons, pulsing glowing edge, particles, lightning), next-circle ring, trembling characters with violet arcs, screen-edge distortion, mild camera vibration; "Reduce flashing / shake" soften visuals only
+- [x] HUD: minimap (map, player, current + next circle, arrow to safety), phase status and timer, RETURN TO SAFE ZONE warning with distance, announcements (shrinking, final in 10 s, final circle), disabled FIRE button
+- [x] Test helper: `-zoneSeconds 20` and a "fast circle" local server menu item
+- [ ] **Run the circle test in TESTING.md** ← needs the project owner

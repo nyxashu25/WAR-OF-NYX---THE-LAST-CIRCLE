@@ -10,7 +10,9 @@ namespace WarOfNyx.EditorTools
     /// Builds the Fusion prefabs in Assets/Resources/WarOfNyx (compiles only with WON_FUSION):
     ///  * NetworkPlayer.prefab: the Phase 2 placeholder player plus NetworkObject, NetworkTransform and
     ///    NetworkPlayer. The local-only PlayerController loop is removed (Fusion's tick drives movement).
-    ///  * MatchController.prefab: NetworkObject plus NetworkMatchController (lobby → match lifecycle).
+    ///  * MatchController.prefab: NetworkObject plus NetworkMatchController (lobby → match lifecycle)
+    ///    and NetworkNyxCircle (Phase 7 shrinking circle).
+    ///  * LootCrate.prefab: NetworkObject plus NetworkLootCrate (Phase 6).
     /// </summary>
     [InitializeOnLoad]
     public static class NetworkPlayerPrefabBuilder
@@ -21,7 +23,7 @@ namespace WarOfNyx.EditorTools
         static NetworkPlayerPrefabBuilder()
         {
             ProjectSetupWizard.RegisterStep("Network player prefab (Phase 3, Fusion)", () => Build(overwrite: false));
-            ProjectSetupWizard.RegisterStep("Match controller prefab (Phase 4, Fusion)", () => BuildMatchController(overwrite: false));
+            ProjectSetupWizard.RegisterStep("Match controller prefab (Phase 4 + Nyx Circle Phase 7, Fusion)", () => BuildMatchController(overwrite: false));
             ProjectSetupWizard.RegisterStep("Loot capsule prefab (Phase 6, Fusion)", () => BuildLootCrate(overwrite: false));
         }
 
@@ -108,13 +110,16 @@ namespace WarOfNyx.EditorTools
 
         public static void BuildMatchController(bool overwrite)
         {
-            if (!overwrite && AssetDatabase.LoadAssetAtPath<GameObject>(MatchControllerPrefabPath) != null)
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(MatchControllerPrefabPath);
+            // Prefabs from before Phase 7 lack the Nyx Circle: rebuild them automatically.
+            if (!overwrite && existing != null && existing.GetComponent<NetworkNyxCircle>() != null)
                 return;
 
             ProjectSetupWizard.EnsureFolder("Assets/Resources/WarOfNyx");
             var go = new GameObject("MatchController");
             go.AddComponent<NetworkObject>();
             go.AddComponent<NetworkMatchController>();
+            go.AddComponent<NetworkNyxCircle>();
             PrefabUtility.SaveAsPrefabAsset(go, MatchControllerPrefabPath);
             Object.DestroyImmediate(go);
             Debug.Log($"[WarOfNyx] Built {MatchControllerPrefabPath}.");

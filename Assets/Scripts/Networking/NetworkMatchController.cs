@@ -116,27 +116,30 @@ namespace WarOfNyx.Networking
         private readonly EventDeduplicator _feedDedup = new EventDeduplicator();
 
         /// <summary>
-        /// Server only: records an elimination decided by the damage system and announces it.
+        /// Server only: records an elimination decided by the damage system (a player or the Nyx Circle) and announces it.
         /// Alive counting and victory are completed in Phase 9.
         /// </summary>
-        public void RegisterElimination(PlayerRef victim, PlayerRef killer, short weaponId, bool headshot)
+        public void RegisterElimination(PlayerRef victim, PlayerRef killer, short weaponId, bool headshot, DamageKind cause)
         {
             if (!HasStateAuthority)
                 return;
             NetEliminationEventId++;
             Eliminations++;
-            Debug.Log($"[WarOfNyx][Match] Elimination #{NetEliminationEventId}: player {killer.PlayerId} -> player {victim.PlayerId} " +
+            Debug.Log($"[WarOfNyx][Match] Elimination #{NetEliminationEventId} ({cause}): player {killer.PlayerId} -> player {victim.PlayerId} " +
                       $"({WeaponRegistry.DisplayName(weaponId)}{(headshot ? ", headshot" : string.Empty)})");
-            RPC_EliminationFeed(NetEliminationEventId, victim, killer, weaponId, headshot);
+            RPC_EliminationFeed(NetEliminationEventId, victim, killer, weaponId, headshot, (byte)cause);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-        public void RPC_EliminationFeed(int eventId, PlayerRef victim, PlayerRef killer, short weaponId, NetworkBool headshot)
+        public void RPC_EliminationFeed(int eventId, PlayerRef victim, PlayerRef killer, short weaponId, NetworkBool headshot, byte cause)
         {
             if (!_feedDedup.TryAccept(eventId) || Application.isBatchMode)
                 return;
 
-            string text = CombatText.Elimination(NameOf(killer), NameOf(victim), WeaponRegistry.DisplayName(weaponId), headshot);
+            var kind = (DamageKind)cause;
+            string text = kind == DamageKind.Weapon || kind == DamageKind.Melee
+                ? CombatText.Elimination(NameOf(killer), NameOf(victim), WeaponRegistry.DisplayName(weaponId), headshot)
+                : CombatText.Environmental(NameOf(victim), kind);
             bool involvesMe = Runner.LocalPlayer != PlayerRef.None && (victim == Runner.LocalPlayer || killer == Runner.LocalPlayer);
             var arena = OnlineArenaController.Instance;
             if (arena != null && arena.Hud != null)

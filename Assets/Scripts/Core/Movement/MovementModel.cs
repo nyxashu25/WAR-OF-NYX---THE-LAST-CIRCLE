@@ -253,6 +253,18 @@ namespace WarOfNyx.Core.Movement
             YawToBasis(command.Yaw, out float fx, out float fz, out float rx, out float rz);
             worldX = rx * x + fx * y;
             worldZ = rz * x + fz * y;
+
+            // Outside-circle instability: bend the direction sideways, keep the length (no speed change).
+            float wobble = command.LateralWobble;
+            if (wobble != 0f && !float.IsNaN(wobble) && !float.IsInfinity(wobble))
+            {
+                wobble = Math.Clamp(wobble, -0.25f, 0.25f);
+                float bentX = worldX + worldZ * wobble;
+                float bentZ = worldZ - worldX * wobble;
+                float norm = 1f / MathF.Sqrt(1f + wobble * wobble);
+                worldX = bentX * norm;
+                worldZ = bentZ * norm;
+            }
         }
 
         private static void MoveTowards(ref float x, ref float z, float targetX, float targetZ, float maxDelta)

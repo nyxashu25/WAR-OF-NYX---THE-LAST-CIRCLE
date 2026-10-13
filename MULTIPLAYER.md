@@ -110,4 +110,14 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Server-only:** loadout rolls (`LoadoutGenerator`, per-player seed), dropping loot on elimination (items are *moved*: slots and inventory are cleared in the same step), every claim (`RPC_TakeLoot` → re-check alive, capsule exists, ≤ 3.75 m, item still there → `LootContainer.TryTake` → `InventoryRules.ApplyPickup` → swapped/remaining items back into the same slot). Claims are processed one after another on the server, so the same item can never be granted twice.
 - **Client-only:** proximity prompt, loot panel, comparisons. These are views of replicated state, and buttons only send requests.
 - **Prediction:** reload/medkit timing is predicted by the owner like the rest of combat. Loot results arrive from the server (`RPC_LootResult`).
-- `NetworkProtocol.Version` = **6**.
+- `NetworkProtocol.Version` = **6** at the end of Phase 6.
+
+## Phase 7: the Nyx Circle (code written, not yet run)
+- **Server-only:** circle planning (`ZonePlanner`, seeded per match, fair-ground scoring through `ArenaSpawnArea`), the phase schedule (`ZoneTimeline`), zone damage (`ZoneDamage`, once per server tick through `NetworkCombat.ReceiveDamage`, kind `Zone`, no attacker).
+- **Replicated (`NetworkNyxCircle`, on the MatchController):** active flag, phase index/count, the current phase's start and target circle, start/end time, damage per second, final-phase start. Only the current target is ever sent, so clients can't see the endgame circles early. Values change once per phase, so the bandwidth cost is negligible.
+- **Derived on every peer:** the shrinking circle = interpolation of the replicated phase at the simulation time (the barrier uses `LocalRenderTime`, so it moves smoothly between ticks).
+- **Inside/outside:** `NetworkPlayer` classifies its own simulated position each tick, before moving (wobble) and after moving (firearms, damage). The server's result is authoritative and replicated as `OutsideZone`; the owner predicts the same check, and Fusion corrects any mismatch. Clients never send zone state, and `InputCodec.Sanitize` wipes the authority-only `LateralWobble`.
+- **Instability:** `ZoneInstability.Lateral(tick, dt, playerId)` is applied by the authority into `MovementCommand.LateralWobble`. Prediction computes the same value from the same tick, so it doesn't cause corrections.
+- **Firearm lock:** `NetworkCombat.Simulate(..., firearmsAllowed)` passes it to `WeaponRules.TryFire`. Blocked attempts cost nothing. Shots fired from inside resolve in the tick they were fired (all guns are hitscan; nothing is in flight to cancel).
+- **Feed:** `RegisterElimination` / `RPC_EliminationFeed` carry the cause (weapon, melee, zone). Circle announcements are derived locally from the replicated stage (`ZoneAnnouncer`), so they need no RPC and can't repeat.
+- `NetworkProtocol.Version` = **7**.

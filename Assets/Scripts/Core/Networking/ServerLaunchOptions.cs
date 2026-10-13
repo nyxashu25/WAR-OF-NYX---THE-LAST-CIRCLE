@@ -7,6 +7,7 @@ namespace WarOfNyx.Core.Networking
     /// Command-line options for the headless dedicated server (spec 3 "Hosting Strategy").
     ///
     ///   WarOfNyxServer -batchmode -nographics -server -session WON-DEV -maxPlayers 12 -port 27015 -region eu
+    ///   (testing: -minPlayers 2 -lobbyFill 10 -zoneSeconds 20)
     ///
     /// Unknown arguments are ignored (Unity adds its own). Invalid values fall back to defaults
     /// and are reported in <see cref="Warnings"/> so the server log shows what happened.
@@ -30,6 +31,8 @@ namespace WarOfNyx.Core.Networking
         public int MinPlayersToStart { get; private set; } = -1;
         /// <summary>Seconds to wait for more players once the minimum is reached (-lobbyFill). -1 = configured value.</summary>
         public float LobbyFillSeconds { get; private set; } = -1f;
+        /// <summary>Length of every Nyx Circle phase (-zoneSeconds, testing only). -1 = configured value (60 s).</summary>
+        public float ZoneStageSeconds { get; private set; } = -1f;
         public string Warnings { get; private set; } = string.Empty;
 
         public static ServerLaunchOptions Parse(string[] args)
@@ -76,6 +79,12 @@ namespace WarOfNyx.Core.Networking
                         else
                             options.Warn($"invalid -lobbyFill '{value}', using configured value");
                         break;
+                    case "zoneseconds":
+                        if (TryInt(value, out int zone) && zone >= 5 && zone <= 600)
+                            options.ZoneStageSeconds = zone;
+                        else
+                            options.Warn($"invalid -zoneSeconds '{value}' (allowed 5-600), using configured value");
+                        break;
                     case "port":
                         if (TryInt(value, out int port) && port >= 0 && port <= 65535)
                             options.Port = port;
@@ -96,7 +105,8 @@ namespace WarOfNyx.Core.Networking
 
         public override string ToString() =>
             $"session={SessionName} maxPlayers={MaxPlayers} minPlayers={(MinPlayersToStart < 0 ? "config" : MinPlayersToStart.ToString())} " +
-            $"lobbyFill={(LobbyFillSeconds < 0f ? "config" : LobbyFillSeconds + "s")} port={Port} region={(Region.Length == 0 ? "best" : Region)}";
+            $"lobbyFill={(LobbyFillSeconds < 0f ? "config" : LobbyFillSeconds + "s")} zoneSeconds={(ZoneStageSeconds < 0f ? "config" : ZoneStageSeconds + "s")} " +
+            $"port={Port} region={(Region.Length == 0 ? "best" : Region)}";
 
         private static bool IsFlag(string s) => !string.IsNullOrEmpty(s) && s[0] == '-' && !(s.Length > 1 && char.IsDigit(s[1]));
 

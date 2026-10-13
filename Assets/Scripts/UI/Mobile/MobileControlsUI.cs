@@ -28,6 +28,9 @@ namespace WarOfNyx.UI.Mobile
         private TouchLookArea _lookArea;
         private Image _sprintImage;
         private PlayerInputRouter _router;
+        private Image _fireImage;
+        private Text _fireLabel;
+        private bool _fireBlocked;
 
         public bool Visible => _canvas != null && _canvas.gameObject.activeSelf;
 
@@ -37,6 +40,24 @@ namespace WarOfNyx.UI.Mobile
             var ui = go.AddComponent<MobileControlsUI>();
             ui.Build(router);
             return ui;
+        }
+
+        /// <summary>
+        /// Outside the Nyx Circle (spec 11): the FIRE button is shown disabled. Pressing it still sends
+        /// the input; the SERVER refuses the shot (the UI is never the enforcement).
+        /// </summary>
+        public void SetFireBlocked(bool blocked)
+        {
+            if (_fireImage == null || _fireBlocked == blocked)
+                return;
+            _fireBlocked = blocked;
+            _fireImage.color = ButtonColor(!blocked);
+            if (_fireLabel != null)
+            {
+                _fireLabel.text = blocked ? "NO FIRE\nMELEE ONLY" : "FIRE";
+                _fireLabel.fontSize = blocked ? 22 : 30;
+                _fireLabel.color = blocked ? NyxPalette.WithAlpha(NyxPalette.Crimson, 0.9f) : NyxPalette.TextPrimary;
+            }
         }
 
         public void SetVisible(bool visible)
@@ -79,7 +100,8 @@ namespace WarOfNyx.UI.Mobile
             _sprintImage = AddToggleButton(safe, "SPRINT", BottomLeft, new Vector2(430f, 740f), 120f, router.ToggleSprint);
 
             // Right cluster (offsets from the bottom-right corner).
-            AddButton(safe, "FIRE", "<Gamepad>/rightTrigger", BottomRight, new Vector2(-270f, 300f), 180f, active: true);
+            _fireImage = AddButton(safe, "FIRE", "<Gamepad>/rightTrigger", BottomRight, new Vector2(-270f, 300f), 180f, active: true);
+            _fireLabel = _fireImage.GetComponentInChildren<Text>();
             AddButton(safe, "JUMP", "<Gamepad>/buttonSouth", BottomRight, new Vector2(-110f, 140f), 140f, active: true);
             AddButton(safe, "RELOAD", "<Gamepad>/buttonWest", BottomRight, new Vector2(-110f, 330f), 110f, active: true);
             AddButton(safe, "AIM", "<Gamepad>/leftTrigger", BottomRight, new Vector2(-450f, 300f), 120f, active: true);

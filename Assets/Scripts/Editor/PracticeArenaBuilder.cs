@@ -180,8 +180,9 @@ namespace WarOfNyx.EditorTools
         {
             var scene = CreateArenaBase(p, out var spawn);
 
-            // Starting safe zone for spawn planning: the whole 120 m graybox (radius 55 m).
-            // This test map is far smaller than NYX ISLAND, so 65 m separation relaxes automatically.
+            // Starting safe zone for spawn planning and the Nyx Circle's first circle: the whole 120 m
+            // graybox (radius 55 m). This test map is far smaller than NYX ISLAND, so 65 m separation
+            // relaxes automatically and the spec's 500 m circle table is scaled by 55/500.
             var area = new GameObject("SpawnArea").AddComponent<ArenaSpawnArea>();
             area.transform.position = Vector3.zero;
             Object.DestroyImmediate(spawn.gameObject);

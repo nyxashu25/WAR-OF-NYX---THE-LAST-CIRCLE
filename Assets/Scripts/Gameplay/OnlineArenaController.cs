@@ -10,6 +10,7 @@ using WarOfNyx.Characters;
 using WarOfNyx.Core.Events;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
+using WarOfNyx.Core.Zone;
 using WarOfNyx.UI.Common;
 using WarOfNyx.UI.Hud;
 using WarOfNyx.UI.Mobile;
@@ -34,6 +35,14 @@ namespace WarOfNyx.Gameplay
 
         /// <summary>Loot capsule panel for the local player (null on the dedicated server).</summary>
         public LootPanel Loot { get; private set; }
+
+        /// <summary>Nyx Circle HUD and minimap for the local player (null on the dedicated server).</summary>
+        public ZoneHud Zone { get; private set; }
+
+        private readonly ZoneAnnouncer _zoneAnnouncer = new ZoneAnnouncer();
+        private string _pendingHeadline;
+        private Color _pendingHeadlineColor;
+        private bool _zoneShown;
 
         private bool _modalOpen;
 
@@ -82,6 +91,10 @@ namespace WarOfNyx.Gameplay
             BuildHud();
             Hud = CombatHud.Create(transform);
             Loot = LootPanel.Create(transform);
+            Zone = ZoneHud.Create(transform);
+            var area = ArenaSpawnArea.Current;
+            if (area != null)
+                Zone.Minimap.BakeMap(area.transform.position, area.ZoneRadius * 1.15f);
             _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ =>
             {
                 if (_modalOpen)
@@ -124,8 +137,13 @@ namespace WarOfNyx.Gameplay
                 return;
             _localMovement = null;
             _localRouter = null;
+            if (_camera != null)
+                _camera.SetShake(0f);
             if (_mobile != null)
+            {
+                _mobile.SetFireBlocked(false);
                 _mobile.SetVisible(false);
+            }
             UpdateCursor();
         }
 
@@ -161,6 +179,15 @@ namespace WarOfNyx.Gameplay
 
             UpdateMatchOverlay(session);
 
+            if (_pendingHeadline != null && _banner.text.Length == 0 && Zone != null)
+            {
+                Zone.ShowHeadline(_pendingHeadline, _pendingHeadlineColor);
+                _pendingHeadline = null;
+            }
+            if (!_zoneShown && Zone != null)
+                Zone.Hide();
+            _zoneShown = false;
+
             if (_stats.gameObject.activeSelf && _localMovement != null)
             {
                 MovementState s = _localMovement.State;
@@ -169,6 +196,51 @@ namespace WarOfNyx.Gameplay
                               $"POS {p.x:0.0}, {p.y:0.0}, {p.z:0.0}";
             }
         }
+
+        /// <summary>
+        /// Called every frame by the local networked player with the circle state (spec 10-12):
+        /// updates the zone HUD and minimap, announcements, camera tremble, and the disabled fire button.
+        /// </summary>
+        public void ShowZone(in ZoneView view, Vector3 playerPosition, float yaw)
+        {
+            if (IsHeadless || Zone == null)
+                return;
+
+            _zoneShown = true;
+            Zone.Apply(view, playerPosition, yaw);
+
+            foreach (var a in _zoneAnnouncer.Update(view))
+            {
+                if (!a.Headline)
+                {
+                    Hud?.AddFeed(a.Text, a.Kind == ZoneAnnouncementKind.FinalWarning);
+                    continue;
+                }
+                var color = a.Kind == ZoneAnnouncementKind.LeftSafeZone ? NyxPalette.Crimson
+                    : a.Kind == ZoneAnnouncementKind.EnteredSafeZone ? NyxPalette.ElectricCyan
+                    : a.Kind == ZoneAnnouncementKind.PhaseStarted ? NyxPalette.NyxPurple
+                    : NyxPalette.VictoryGold;
+                // Never on top of the "3, 2, 1, FIGHT!" banner: hold it until the banner clears.
+                if (_banner != null && _banner.text.Length > 0)
+                {
+                    _pendingHeadline = a.Text;
+                    _pendingHeadlineColor = color;
+                }
+                else
+                {
+                    Zone.ShowHeadline(a.Text, color);
+                }
+            }
+
+            bool outside = view.Active && view.PlayerAlive && view.PlayerOutside;
+            if (_camera != null)
+                _camera.SetShake(outside ? (ReduceShake ? 0.2f : 1f) : 0f);
+            if (_mobile != null)
+                _mobile.SetFireBlocked(outside);
+            Hud?.SetFirearmsBlocked(outside);
+        }
+
+        private static bool ReduceShake => AppServices.IsInitialized && AppServices.UserSettings.Data.reduceCameraShake;
 
         /// <summary>Called every frame by the local networked player with its replicated protection time.</summary>
         public void ShowSpawnProtection(float secondsRemaining) => _protectionRemaining = secondsRemaining;
