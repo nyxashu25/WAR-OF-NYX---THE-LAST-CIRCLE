@@ -48,5 +48,5 @@ Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Te
 - Unity 6.3 LTS (Android, Windows/Linux Dedicated Server modules); Photon account + Fusion 2 App ID + Fusion SDK 2.1.3; 2+ clients for multiplayer tests.
 
 ## Next tasks
-1. Install, import, set up, fix compile errors, run the tests and the manual tests for Phases 2–5 (TESTING.md). Commit the generated assets.
+1. Install, import, set up, fix compile errors, run the tests and the manual tests for Phases 2–6 (TESTING.md). Commit the generated assets.
 2. **Phase 7 – The Nyx Circle:** circle geometry and configurable phases (spec 10 table, 60 s each, every next circle inside the previous one, fair centres), server-replicated circle state with smooth client interpolation, inside/outside classification from the server body position, firearms disabled outside (button greyed, notice, no ammo spent: the weapon rules already take the flag), melee still allowed, deterministic movement instability (5–8 % wobble) and aim sway, zone damage 1/2/4/6 HP/s ignoring armor, re-entry restore, energy-barrier visuals, minimap with current and next circle.
