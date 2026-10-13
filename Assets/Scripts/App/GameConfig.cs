@@ -1,4 +1,5 @@
 using UnityEngine;
+using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Offline;
 
 namespace WarOfNyx.App
@@ -47,6 +48,10 @@ namespace WarOfNyx.App
         [Tooltip("Session name a dev dedicated server is started with (-session). JOIN DEV SERVER connects to it.")]
         public string devServerSession = "WON-DEV";
         [Range(2, 24)] public int privateRoomMaxPlayers = 12;
+
+        [Header("Match start & spawning (Phase 4, server-authoritative)")]
+        [Tooltip("Lobby, loading, countdown and spawn rules. Dedicated servers can override min players / lobby fill on the command line.")]
+        public MatchRules matchRules = new MatchRules();
 
         public OfflineMatchSettings DefaultOfflineSettings =>
             new OfflineMatchSettings(defaultOfflineBotCount, defaultOfflineDifficulty);

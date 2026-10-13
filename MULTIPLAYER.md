@@ -57,7 +57,7 @@ The server validates every command. It enforces speed and teleport limits, fire 
 | Input packing and server-side sanitizing | `Core/Networking/InputCodec.cs` | server (decode), client (encode) |
 | Dedicated-server launch arguments | `Core/Networking/ServerLaunchOptions.cs` + `App/GameBootstrap.cs` | server |
 | Room codes, display-name sanitizing | `Core/Networking/SessionCodes.cs` | server (authoritative), client (pre-check) |
-| Temporary ring spawns | `Core/Networking/SpawnRing.cs`, `Gameplay/ArenaSpawnArea.cs` | server |
+| ~~Temporary ring spawns~~ (replaced in Phase 4 by `SpawnPlanner`) | `Gameplay/ArenaSpawnArea.cs` | server |
 | Local presentation (camera, touch UI, HUD, leave) | `Gameplay/OnlineArenaController.cs` | clients |
 
 **Tick flow (owner client and server):** at the start of each tick, restore the networked `MovementState`, grounded flag and position. Then read this tick's input. If the input is missing, use a neutral command (stand still, gravity still applies). Run `PlayerMovement.Simulate(cmd, Runner.DeltaTime)` and write the networked state back. Fusion re-runs this for every corrected tick on the owner, so prediction and reconciliation fall out of the same code.
@@ -70,3 +70,21 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - *Client:* joins by room code or the dev server session.
 
 **Not yet (Phase 4+):** matchmaking queue, waiting lobby and synchronized countdown, real spawn selection, late-join rejection, reconnect grace, lag compensation (Phase 5), interest management tuning (Phase 13). Region selection (`-region`) is parsed but not applied.
+
+## Phase 4: matchmaking and synchronized start (code written, not yet run)
+
+| Piece | File | Runs on |
+|---|---|---|
+| Start-up rules (min/max players, fill timer, load timeout, countdown, protection, spawn separation) | `Core/Match/MatchRules.cs`, `GameConfig.matchRules` | server |
+| Match lifecycle state machine | `Core/Match/MatchLifecycle.cs` | server |
+| Networked lifecycle view, load reports, shared start time | `Networking/NetworkMatchController.cs` | server writes, clients read |
+| Spawn selection | `Core/Match/SpawnPlanner.cs` + `Gameplay/ArenaSpawnArea.cs` (validator) | server |
+| Spawn protection | `Core/Match/SpawnProtection.cs`, `NetworkPlayer` | server; shield visual on clients |
+| Quick Match queue | `Core/Match/MatchmakingQueue.cs`, main menu | client |
+| Lobby UI | `UI/Lobby/LobbyUIController.cs` (MatchLobby scene) | client |
+
+- **Matchmaking:** dedicated servers publish `pv` (protocol version) and `mode` session properties and are visible. Quick Match is a Fusion random join filtered on those properties. Private rooms are invisible and joined only by code.
+- **No late joins:** when loading starts, the server closes the session (`SessionInfo.IsOpen = false`) and refuses connection requests. Joins that still slip through are disconnected.
+- **Synchronized start:** the server sets the start time (simulation seconds) when the countdown begins. `NetworkPlayer` ignores movement input until `MovementAllowedAt(Runner.SimulationTime)`. The server and the owner's prediction evaluate this with the same tick time, so everyone gains control on the same tick, however long their device took to load.
+- **Spawning:** after all players report loaded (or the 20 s timeout removes stragglers), the server plans spawns once and spawns everyone 1.2 m above validated ground, facing the zone centre, locked until FIGHT.
+- **Bump `NetworkProtocol.Version`** whenever inputs or networked state change, so old clients can't match with new servers.

@@ -120,6 +120,9 @@ namespace WarOfNyx.EditorTools
             Check(report, "MainMenu in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == MainMenuScenePath && s.enabled));
             Check(report, "PracticeArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.ScenePath && s.enabled));
             Check(report, "Player placeholder prefab exists", AssetDatabase.LoadAssetAtPath<GameObject>(PracticeArenaBuilder.PrefabPath) != null);
+            Check(report, "MatchLobby in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.MatchLobbyScenePath && s.enabled));
+            Check(report, "FX material (Resources/WarOfNyx/FX_Additive)", AssetDatabase.LoadAssetAtPath<Material>(PracticeArenaBuilder.FxMaterialPath) != null);
+            Check(report, "BattleArena NavMesh baked", AssetDatabase.LoadMainAssetAtPath(PracticeArenaBuilder.BattleArenaNavMeshPath) != null);
             Check(report, "BattleArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.BattleArenaScenePath && s.enabled));
             Check(report, "MovementConfig asset exists", AssetDatabase.LoadAssetAtPath<WarOfNyx.Characters.MovementConfig>(PracticeArenaBuilder.MovementConfigPath) != null);
             Check(report, "URP is the default render pipeline", GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset);

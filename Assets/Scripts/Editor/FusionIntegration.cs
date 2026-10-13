@@ -136,6 +136,8 @@ namespace WarOfNyx.EditorTools
 
             bool prefab = AssetDatabase.LoadAssetAtPath<GameObject>(NetworkPlayerPrefabPath) != null;
             report.AppendLine((prefab ? "OK    " : "FAIL  ") + "Network player prefab (Resources/WarOfNyx/NetworkPlayer)");
+            bool controller = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/WarOfNyx/MatchController.prefab") != null;
+            report.AppendLine((controller ? "OK    " : "FAIL  ") + "Match controller prefab (Resources/WarOfNyx/MatchController)");
 
             report.AppendLine("INFO  Fusion App ID cannot be checked from here: open Fusion > Fusion Hub and confirm it is set.");
         }
@@ -168,7 +170,7 @@ namespace WarOfNyx.EditorTools
             Process.Start(new ProcessStartInfo
             {
                 FileName = exe,
-                Arguments = $"-batchmode -nographics -server -session WON-DEV -maxPlayers 12 -logFile \"{log}\"",
+                Arguments = $"-batchmode -nographics -server -session WON-DEV -maxPlayers 12 -minPlayers 2 -lobbyFill 10 -logFile \"{log}\"",
                 WorkingDirectory = Path.GetDirectoryName(exe),
                 UseShellExecute = false,
             });

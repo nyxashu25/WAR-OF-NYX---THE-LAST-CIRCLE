@@ -22,13 +22,14 @@ Values marked **[T]** are tunable starting points stored in ScriptableObjects or
 `MainMenu → Matchmaking → WaitingLobby → MatchPreparation → SynchronizedSpawn → Countdown → ActiveMatch → FinalCircle → MatchEnded → ResultsScreen → ReturnToLobby`
 - Offline/practice skip Matchmaking and WaitingLobby. Any state can abort to MainMenu. *(Implemented in `GameStateMachine`.)*
 - Online start: server sends one **start timestamp**. Everyone spawns during preparation, sees **3‑2‑1‑FIGHT!**, and gets control at the same server tick. Slow loaders are not waited on forever: there is a load timeout **[T 20 s]**, and players who miss it are removed before spawn.
+- Lobby start policy [T]: public servers start loading once `minPlayersToStart` players are in (12 for public play; `-minPlayers 2` for the explicit dev two-player mode), after a `lobbyFillSeconds` window (15 s) to let more join, or immediately when full. Private rooms start only when the host presses START (the host may start alone for testing). If too few players finish loading, the start is abandoned and the lobby reopens. *(Implemented: `MatchLifecycle`.)*
 - No fresh joins once a match is active. Reconnects within the **60 s [T]** grace window get their own authoritative state back.
 - Lobby sizes: dev 2–4, public MVP 12, scalability target 24 (40–60 later). Higher counts must not be claimed until they are measured.
 
 ## 4. Spawning (spec 6)
 - The server picks from navmesh-valid candidate points inside the starting circle. It rejects points in walls, water, closed interiors or overlapping capsules.
-- Minimum separation **65 m [T]**, spread across regions. If placement fails, relax the separation in steps (65 → 50 → 40 m), never below a hard floor of **25 m**. Never place a player at an invalid spot.
-- Spawn protection lasts **3 s [T]**. It ends early on attacking, picking up a combat item, or any other aggressive action.
+- Minimum separation **65 m [T]**, spread across regions (randomized farthest-point picking). If placement fails, relax step by step (65 → 50 → 40 → 25 m). As a last resort on very small test maps, use a 3 m anti-overlap floor (logged as relaxed). Never place a player at an invalid spot. If even that fails, the server ends the start attempt with an error instead of spawning anyone. *(Implemented: `SpawnPlanner`, `ArenaSpawnArea`.)*
+- Spawn protection lasts **3 s [T] counted from FIGHT!** (players are locked during the countdown). It ends early on attacking, picking up a combat item, or any other aggressive action. It is granted only at spawn and never refreshed. *(Implemented: `SpawnProtectionState`, `NetworkPlayer`; damage blocking arrives in Phase 5.)*
 - VFX: blue‑purple portal, energy burst, landing, ground shockwave, spawn sound.
 
 ## 5. Starting loadouts (spec 7)

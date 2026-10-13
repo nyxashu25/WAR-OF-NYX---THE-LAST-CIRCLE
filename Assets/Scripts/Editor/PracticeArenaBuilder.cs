@@ -26,6 +26,9 @@ namespace WarOfNyx.EditorTools
     {
         public const string ScenePath = ProjectSetupWizard.ScenesFolder + "/PracticeArena.unity";
         public const string BattleArenaScenePath = ProjectSetupWizard.ScenesFolder + "/BattleArena.unity";
+        public const string BattleArenaNavMeshPath = ProjectSetupWizard.ScenesFolder + "/BattleArena_NavMesh.asset";
+        public const string MatchLobbyScenePath = ProjectSetupWizard.ScenesFolder + "/MatchLobby.unity";
+        public const string FxMaterialPath = "Assets/Resources/WarOfNyx/FX_Additive.mat";
         public const string PrefabFolder = "Assets/Prefabs/Characters";
         public const string PrefabPath = PrefabFolder + "/PlayerPlaceholder.prefab";
         public const string ConfigFolder = "Assets/ScriptableObjects/Gameplay";
@@ -66,6 +69,11 @@ namespace WarOfNyx.EditorTools
 
             if (overwrite || !File.Exists(ScenePath))
                 CreateScene(prefab.GetComponent<PlayerController>(), palette);
+
+            CreateFxMaterial();
+
+            if (overwrite || !File.Exists(MatchLobbyScenePath))
+                CreateMatchLobbyScene();
 
             if (overwrite || !File.Exists(BattleArenaScenePath))
                 CreateBattleArenaScene(palette);
@@ -172,13 +180,75 @@ namespace WarOfNyx.EditorTools
         {
             var scene = CreateArenaBase(p, out var spawn);
 
+            // Starting safe zone for spawn planning: the whole 120 m graybox (radius 55 m).
+            // This test map is far smaller than NYX ISLAND, so 65 m separation relaxes automatically.
             var area = new GameObject("SpawnArea").AddComponent<ArenaSpawnArea>();
-            area.transform.position = new Vector3(0f, 0f, -36f);
+            area.transform.position = Vector3.zero;
             Object.DestroyImmediate(spawn.gameObject);
 
             new GameObject("OnlineArena").AddComponent<OnlineArenaController>();
 
+            BakeNavMesh(BattleArenaNavMeshPath);
             EditorSceneManager.SaveScene(scene, BattleArenaScenePath);
+        }
+
+        /// <summary>Waiting lobby scene: the server gathers players here before loading the arena.</summary>
+        private static void CreateMatchLobbyScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
+            var cam = camGo.AddComponent<Camera>();
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color32(0x0B, 0x0B, 0x18, 0xFF);
+            camGo.AddComponent<AudioListener>();
+            new GameObject("Lobby").AddComponent<WarOfNyx.UI.Lobby.LobbyUIController>();
+            EditorSceneManager.SaveScene(scene, MatchLobbyScenePath);
+        }
+
+        /// <summary>
+        /// Bakes a NavMesh from the scene's colliders and stores it as an asset next to the scene.
+        /// Spawn validation (and Ghost Protocol bots later) require it.
+        /// </summary>
+        private static void BakeNavMesh(string assetPath)
+        {
+            var surface = new GameObject("NavMesh").AddComponent<Unity.AI.Navigation.NavMeshSurface>();
+            surface.collectObjects = Unity.AI.Navigation.CollectObjects.All;
+            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+            surface.BuildNavMesh();
+            if (surface.navMeshData == null)
+            {
+                Debug.LogWarning("[WarOfNyx] NavMesh bake produced no data; spawn validation will use physics only.");
+                return;
+            }
+
+            AssetDatabase.DeleteAsset(assetPath);
+            AssetDatabase.CreateAsset(surface.navMeshData, assetPath);
+        }
+
+        /// <summary>Additive particle material used by spawn/shield effects (loaded from Resources at runtime).</summary>
+        private static void CreateFxMaterial()
+        {
+            ProjectSetupWizard.EnsureFolder("Assets/Resources/WarOfNyx");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(FxMaterialPath);
+            if (material == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, FxMaterialPath);
+            }
+
+            if (material.HasProperty("_Surface"))
+            {
+                material.SetFloat("_Surface", 1f);   // transparent
+                material.SetFloat("_Blend", 2f);     // additive
+                material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                material.SetFloat("_DstBlend", (float)BlendMode.One);
+                material.SetFloat("_ZWrite", 0f);
+                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                material.renderQueue = (int)RenderQueue.Transparent;
+            }
+            material.color = Color.white;
+            EditorUtility.SetDirty(material);
         }
 
         private static UnityEngine.SceneManagement.Scene CreateArenaBase(Palette p, out Transform spawn)
@@ -317,7 +387,7 @@ namespace WarOfNyx.EditorTools
         private static void AddToBuildSettings()
         {
             var scenes = EditorBuildSettings.scenes.ToList();
-            foreach (var path in new[] { ScenePath, BattleArenaScenePath })
+            foreach (var path in new[] { ScenePath, MatchLobbyScenePath, BattleArenaScenePath })
             {
                 if (!scenes.Any(s => s.path == path))
                     scenes.Add(new EditorBuildSettingsScene(path, true));

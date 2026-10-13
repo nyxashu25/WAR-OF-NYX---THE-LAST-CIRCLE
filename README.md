@@ -8,10 +8,10 @@ An original anime-style third-person battle royale for **Android**, built with *
 |---|---|
 | Internal id | `WarOfNyx` |
 | Android package | `com.nyxgames.warofnyx` |
-| Current phase | **Phase 3 – Online multiplayer (Photon Fusion 2.1)** (code written; core networking tested under .NET; needs Fusion SDK + App ID + Unity to run) |
+| Current phase | **Phase 4 – Matchmaking, lobby, synchronized start, random spawning** (code written; match rules tested under .NET; needs Fusion SDK + App ID + Unity to run) |
 | Offline default | Ghost Protocol, **NIGHTMARE**, **23 bots** (automatically lowered on devices that can't run 23) |
 
-> **Honest status:** the pure rules core (`WarOfNyx.Core`: flow, movement, networking rules) compiles and passes **104/104** tests under .NET (`dotnet test Tools/CoreTests`). No Unity-side or Fusion code has been compiled in Unity yet. Written so far: menu, settings, Practice Arena movement (PC + touch), and online test sessions (dedicated server, private rooms, server-authoritative predicted movement). Combat, circle, bots and matchmaking are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> **Honest status:** the pure rules core (`WarOfNyx.Core`: flow, movement, networking, match start and spawn rules) compiles and passes **144/144** tests under .NET (`dotnet test Tools/CoreTests`). No Unity-side or Fusion code has been compiled in Unity yet. Written so far: menu and settings; Practice Arena movement (PC + touch); online play with Quick Match, waiting lobby, private rooms, a dedicated server, the synchronized 3‑2‑1 start, validated random spawns and spawn protection. Combat, circle, loot, bots and results are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ---
 

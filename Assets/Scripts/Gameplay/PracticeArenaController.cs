@@ -10,6 +10,7 @@ using WarOfNyx.Characters;
 using WarOfNyx.Core.Events;
 using WarOfNyx.Core.Flow;
 using WarOfNyx.Core.Movement;
+using WarOfNyx.Gameplay.Effects;
 using WarOfNyx.UI.Common;
 using WarOfNyx.UI.Mobile;
 
@@ -135,6 +136,7 @@ namespace WarOfNyx.Gameplay
             _player = Instantiate(playerPrefab);
             _player.name = "Player (local)";
             _player.Spawn(position, yaw);
+            SpawnEffect.Play(position);
         }
 
         private void RespawnPlayer()

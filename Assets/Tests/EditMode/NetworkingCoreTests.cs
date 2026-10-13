@@ -202,45 +202,4 @@ namespace WarOfNyx.Tests
             Assert.IsFalse(cmd.JumpPressed);
         }
     }
-
-    public class SpawnRingTests
-    {
-        [Test]
-        public void SlotsAreEvenlySeparated()
-        {
-            const int slots = 12;
-            const float radius = 20f;
-            float expected = SpawnRing.NeighbourDistance(slots, radius);
-            for (int i = 0; i < slots; i++)
-            {
-                SpawnRing.Slot(i, slots, radius, out float ax, out float az, out _);
-                SpawnRing.Slot(i + 1, slots, radius, out float bx, out float bz, out _);
-                float d = MathF.Sqrt((ax - bx) * (ax - bx) + (az - bz) * (az - bz));
-                Assert.AreEqual(expected, d, 1e-3f);
-                Assert.AreEqual(radius, MathF.Sqrt(ax * ax + az * az), 1e-3f);
-            }
-        }
-
-        [Test]
-        public void SpawnsFaceTheCentre()
-        {
-            SpawnRing.Slot(0, 4, 10f, out float x, out float z, out float yaw);
-            Assert.AreEqual(0f, x, 1e-4f);
-            Assert.AreEqual(10f, z, 1e-4f);
-            Assert.AreEqual(180f, yaw, 1e-3f, "north slot looks south");
-
-            SpawnRing.Slot(1, 4, 10f, out x, out _, out yaw);
-            Assert.AreEqual(10f, x, 1e-4f);
-            Assert.AreEqual(270f, yaw, 1e-3f, "east slot looks west");
-        }
-
-        [Test]
-        public void IndexWrapsAround()
-        {
-            SpawnRing.Slot(5, 4, 10f, out float ax, out float az, out _);
-            SpawnRing.Slot(1, 4, 10f, out float bx, out float bz, out _);
-            Assert.AreEqual(bx, ax, 1e-5f);
-            Assert.AreEqual(bz, az, 1e-5f);
-        }
-    }
 }

@@ -11,6 +11,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 46 `.cs` files under `Assets/` (Phase 2) | **0 syntax errors** | Parse only |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 3 (adds `NetworkingCoreTests`) | **104 passed, 0 failed** | 35 new: launch args, room codes, names, input codec, spawn ring |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 60 `.cs` files under `Assets/` (Phase 3, incl. Fusion module) | **0 syntax errors** | Parse only. Fusion API names were checked against the official Fusion 2.1.3 API reference, but never compiled against the SDK |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 4 (adds `MatchStartTests`; removes the retired spawn-ring tests) | **144 passed, 0 failed** | 43 new: lifecycle, spawn planner, protection, matchmaking queue, countdown, flow catch-up, server args |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 72 `.cs` files under `Assets/` (Phase 4) | **0 syntax errors** | Parse only. New Fusion members checked against the 2.1.3 API reference |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -100,3 +102,26 @@ Prerequisites: Fusion 2.1.3 imported, App ID set, **Run Project Setup** done, bo
 - Enter a non-existent room code → a clear error appears on the ONLINE screen and you stay in the menu.
 - Stop the server while clients are connected → clients return to the menu with "Session ended / Disconnected".
 - Unity's network simulation (NetworkProjectConfig → Network Conditions) at 100 ms / 2 % loss → the local player still moves smoothly (prediction), and remote players stay smooth (interpolation).
+
+## Phase 4 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/MatchStartTests.cs` | Lifecycle: waiting, minimum, fill timer, full lobby, cancel on leave, load timeout kick and continue, too few loaded → back to lobby, leaver during loading, reset when empty, duplicate join, private-room host start, solo test start. Spawn planner: 65 m for 12 players on 500 m, inside zone and margin, relaxing on small maps, never invalid ground, clean failure, no overlap, deterministic seed, facing the centre, spread across regions. Protection, matchmaking queue, countdown text, phase → flow, flow catch-up, server args | **43/43 pass** (.NET) |
+| `Tests/PlayMode/SpawnValidationPlayModeTests.cs` | Validator with real colliders: never inside a wall or under a roof, never off the map | Not run (needs Unity) |
+
+## Manual test: matchmaking and synchronized start (Phase 4 acceptance)
+Prerequisites: as for Phase 3. Re-run **Run Project Setup** (it adds the MatchLobby scene, the FX material, the NavMesh and the MatchController prefab). If BattleArena was generated in Phase 3, use **Rebuild Practice Arena (overwrite)** so it gets the spawn zone and NavMesh.
+
+**A. Dedicated server, Quick Match, two players**
+1. **Build Windows Dedicated Server**, then **Launch Local Windows Server (WON-DEV)**. The launch arguments include `-minPlayers 2 -lobbyFill 10`. The log shows the lobby.
+2. Client 1: ONLINE → **QUICK MATCH**. It lands in the WAITING LOBBY with `PLAYERS 1 / 12  NEEDED TO START 2`.
+3. Client 2: **QUICK MATCH**. Both show `MATCH STARTS IN 10s`.
+4. After 10 s both load BattleArena. Each client sees `WAITING FOR ALL PLAYERS TO LOAD`, then both spawn with the portal effect, dropping in at **different places** (server log: `min separation … m`).
+5. Both see **3 → 2 → 1 → FIGHT!** at the same moment. Nobody can move before FIGHT; looking around works.
+6. After FIGHT, each has a cyan shield and `SPAWN PROTECTION 3.0s` counting down.
+7. A third client pressing QUICK MATCH during or after loading does **not** join this match. It keeps searching, and after 30 s **PLAY OFFLINE WITH BOTS** appears.
+8. Both leave → the server log shows "Returning to the lobby and reopening the session". A new Quick Match can join again.
+
+**B. Load timeout**: start a match, then kill one client during loading (Task Manager). After 20 s the server removes it and starts with the others (if at least 2 remain). Otherwise it returns to the lobby.
+
+**C. Private room**: HOST PRIVATE ROOM → lobby with START (the host can start alone for testing) → friend joins by code → START → same countdown and spawn behaviour.

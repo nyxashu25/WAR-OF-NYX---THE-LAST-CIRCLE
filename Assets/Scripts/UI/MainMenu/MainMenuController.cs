@@ -6,6 +6,7 @@ using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Core.Events;
 using WarOfNyx.Core.Flow;
+using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Networking;
 using WarOfNyx.Core.Offline;
 using WarOfNyx.Platform;
@@ -59,6 +60,13 @@ namespace WarOfNyx.UI.MainMenu
         private InputField _roomInput;
         private Text _onlineStatus;
         private readonly List<MenuButton> _onlineActions = new List<MenuButton>();
+        private MenuButton _quickMatchButton;
+        private MenuButton _cancelQueueButton;
+        private MenuButton _offlineOfferButton;
+        private GameObject _queueRow;
+        private Text _queueStatus;
+        private MatchmakingQueue _queue;
+        private bool _attemptInFlight;
 
         // Settings state
         private readonly List<(GraphicsQualityTier tier, MenuButton button)> _qualityButtons = new List<(GraphicsQualityTier, MenuButton)>();
@@ -110,6 +118,91 @@ namespace WarOfNyx.UI.MainMenu
         {
             if (_noticeText != null && _noticeText.enabled && Time.unscaledTime >= _noticeHideAt)
                 _noticeText.enabled = false;
+
+            UpdateQuickMatch();
+        }
+
+        // ------------------------------------------------------------------ Quick Match queue (Phase 4)
+
+        private void OnQuickMatchPressed()
+        {
+            if (!OnlineServices.IsAvailable || (_queue != null && _queue.IsActive))
+                return;
+
+            SaveName();
+            _queue = new MatchmakingQueue(AppServices.Config.matchmakingOfflineOfferSeconds);
+            _queue.Start(Time.unscaledTime);
+            _queueRow.SetActive(true);
+            _offlineOfferButton.Button.gameObject.SetActive(false);
+            RefreshOnline();
+        }
+
+        private void UpdateQuickMatch()
+        {
+            if (_queue == null || !_queue.IsActive || _queueStatus == null)
+                return;
+
+            float now = Time.unscaledTime;
+            if (_queue.ShouldAttempt(now) && !_attemptInFlight)
+            {
+                _queue.ReportAttemptStarted();
+                RunQuickMatchAttempt();
+            }
+
+            int seconds = Mathf.FloorToInt(_queue.Elapsed(now));
+            _queueStatus.text = $"SEARCHING FOR A MATCH  {seconds / 60}:{seconds % 60:00}   (attempt {_queue.Attempts})" +
+                                (string.IsNullOrEmpty(_queue.LastFailure) ? string.Empty : "\n" + _queue.LastFailure);
+
+            // Spec 38.2: offer offline play, but never switch on the player's behalf.
+            bool offer = _queue.ShouldOfferOffline(now);
+            if (_offlineOfferButton.Button.gameObject.activeSelf != offer)
+                _offlineOfferButton.Button.gameObject.SetActive(offer);
+        }
+
+        private async void RunQuickMatchAttempt()
+        {
+            var session = OnlineServices.Session;
+            _attemptInFlight = true;
+            bool joined = false;
+            try
+            {
+                joined = await session.QuickMatchAsync();
+            }
+            finally
+            {
+                _attemptInFlight = false;
+            }
+
+            if (this == null)
+                return; // joined: the lobby scene replaced the menu
+
+            if (_queue == null || !_queue.IsActive)
+            {
+                if (joined)
+                    await session.LeaveAsync(); // cancelled while the join was in flight
+                return;
+            }
+
+            if (joined)
+                _queue.ReportJoined();
+            else
+                _queue.ReportAttemptFailed(Time.unscaledTime, string.IsNullOrEmpty(session.LastError) ? "No open match yet." : session.LastError);
+        }
+
+        private void CancelQuickMatch()
+        {
+            _queue?.Cancel();
+            if (_queueRow != null)
+                _queueRow.SetActive(false);
+            if (_queueStatus != null)
+                _queueStatus.text = string.Empty;
+            RefreshOnline();
+        }
+
+        private void OnOfflineOfferPressed()
+        {
+            CancelQuickMatch();
+            Show(MenuScreen.OfflineSetup);
         }
 
         // ------------------------------------------------------------------ UI construction
@@ -365,6 +458,8 @@ namespace WarOfNyx.UI.MainMenu
 
         private void OnBack()
         {
+            if (_current == MenuScreen.Online)
+                CancelQuickMatch();
             if (_current != MenuScreen.Home)
                 Show(MenuScreen.Home);
         }
@@ -409,17 +504,25 @@ namespace WarOfNyx.UI.MainMenu
         private GameObject BuildOnline(RectTransform parent)
         {
             var root = UiFactory.CreateRect("OnlineScreen", parent);
-            UiFactory.Anchor(root, new Vector2(0.10f, 0.10f), new Vector2(0.90f, 0.95f));
-            UiFactory.AddVerticalLayout(root.gameObject, 14f, null, TextAnchor.UpperCenter);
+            UiFactory.Anchor(root, new Vector2(0.08f, 0.04f), new Vector2(0.92f, 0.97f));
+            UiFactory.AddVerticalLayout(root.gameObject, 12f, null, TextAnchor.UpperCenter);
 
-            UiFactory.CreateText(root, "ONLINE - TEST SESSIONS", 60, NyxPalette.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold, 76f);
+            UiFactory.CreateText(root, "ONLINE BATTLE ROYALE", 60, NyxPalette.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold, 72f);
             UiFactory.CreateText(root,
-                "Phase 3: real players on a Photon Fusion session. Public matches run on a dedicated server (JOIN DEV SERVER). " +
-                "HOST PRIVATE ROOM makes this device the host - for testing with friends only. Matchmaking and lobby arrive in Phase 4.",
-                24, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 70f);
+                "QUICK MATCH joins an open public match on a dedicated server. Private rooms are for testing with friends (your device hosts).",
+                22, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 50f);
 
             _nameInput = UiFactory.CreateInputField(root, "YOUR NAME", PlayerNames.MaxLength);
             _nameInput.text = AppServices.UserSettings.Data.playerName ?? string.Empty;
+
+            _quickMatchButton = UiFactory.CreateButton(root, "QUICK MATCH", OnQuickMatchPressed, 104f, 40);
+            _queueStatus = UiFactory.CreateText(root, string.Empty, 28, NyxPalette.ElectricCyan, TextAnchor.MiddleLeft, FontStyle.Bold, 44f);
+            var queueRow = UiFactory.CreateRow("QueueActions", root, 80f, 16f);
+            _cancelQueueButton = UiFactory.CreateButton(queueRow, "CANCEL SEARCH", CancelQuickMatch, 80f, 28);
+            _offlineOfferButton = UiFactory.CreateButton(queueRow, "PLAY OFFLINE WITH BOTS", OnOfflineOfferPressed, 80f, 28);
+            _queueRow = queueRow.gameObject;
+            _queueRow.SetActive(false);
+
             _roomInput = UiFactory.CreateInputField(root, "ROOM CODE (empty = new code when hosting)", SessionCodes.MaxLength);
 
             var row = UiFactory.CreateRow("OnlineActions", root, 96f, 16f);
@@ -427,10 +530,14 @@ namespace WarOfNyx.UI.MainMenu
             _onlineActions.Add(UiFactory.CreateButton(row, "JOIN ROOM", OnJoinPressed, 96f, 30));
             _onlineActions.Add(UiFactory.CreateButton(row, $"JOIN DEV SERVER ({AppServices.Config.devServerSession})", OnJoinDevPressed, 96f, 26));
 
-            _onlineStatus = UiFactory.CreateText(root, string.Empty, 28, NyxPalette.VictoryGold, TextAnchor.MiddleLeft, FontStyle.Bold, 80f);
+            _onlineStatus = UiFactory.CreateText(root, string.Empty, 28, NyxPalette.VictoryGold, TextAnchor.MiddleLeft, FontStyle.Bold, 60f);
 
             var back = UiFactory.CreateRow("Back", root, 90f, 16f);
-            UiFactory.CreateButton(back, "BACK", () => Show(MenuScreen.Home), 90f, 32);
+            UiFactory.CreateButton(back, "BACK", () =>
+            {
+                CancelQuickMatch();
+                Show(MenuScreen.Home);
+            }, 90f, 32);
 
             return root.gameObject;
         }
@@ -440,7 +547,8 @@ namespace WarOfNyx.UI.MainMenu
             var session = OnlineServices.Session;
             bool busy = session != null && (session.State == OnlineSessionState.Starting || session.State == OnlineSessionState.Running);
             foreach (var button in _onlineActions)
-                button.Interactable = session != null && !busy;
+                button.Interactable = session != null && !busy && !(_queue != null && _queue.IsActive);
+            _quickMatchButton.Interactable = session != null && !busy && !(_queue != null && _queue.IsActive);
 
             if (session == null)
                 _onlineStatus.text = OnlineServices.UnavailableMessage;

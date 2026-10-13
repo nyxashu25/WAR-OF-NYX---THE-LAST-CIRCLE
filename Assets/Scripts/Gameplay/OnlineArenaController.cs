@@ -8,6 +8,7 @@ using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Characters;
 using WarOfNyx.Core.Events;
+using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.UI.Common;
 using WarOfNyx.UI.Mobile;
@@ -35,6 +36,10 @@ namespace WarOfNyx.Gameplay
         private GameObject _menuPanel;
         private Text _status;
         private Text _stats;
+        private Text _banner;
+        private Text _phase;
+        private Text _protection;
+        private float _protectionRemaining;
         private bool _menuOpen;
 
         private static bool IsHeadless => Application.isBatchMode ||
@@ -133,6 +138,8 @@ namespace WarOfNyx.Gameplay
             if (!_menuOpen && mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
                 UpdateCursor();
 
+            UpdateMatchOverlay(session);
+
             if (_stats.gameObject.activeSelf && _localMovement != null)
             {
                 MovementState s = _localMovement.State;
@@ -140,6 +147,44 @@ namespace WarOfNyx.Gameplay
                 _stats.text = $"STATE {s.Mode}{(s.IsSprinting ? " (SPRINT)" : string.Empty)}\nSPEED {s.HorizontalSpeed:0.00} m/s\n" +
                               $"POS {p.x:0.0}, {p.y:0.0}, {p.z:0.0}";
             }
+        }
+
+        /// <summary>Called every frame by the local networked player with its replicated protection time.</summary>
+        public void ShowSpawnProtection(float secondsRemaining) => _protectionRemaining = secondsRemaining;
+
+        private void UpdateMatchOverlay(IOnlineSessionService session)
+        {
+            var match = session?.Match;
+            if (match == null)
+            {
+                _banner.text = string.Empty;
+                _phase.text = string.Empty;
+                _protection.text = string.Empty;
+                return;
+            }
+
+            AppServices.Flow.TryAdvanceTo(MatchPresentation.ToFlowState(match.Phase));
+
+            switch (match.Phase)
+            {
+                case MatchPhase.Loading:
+                    _banner.text = string.Empty;
+                    _phase.text = $"WAITING FOR ALL PLAYERS TO LOAD  {match.LoadedPlayers}/{match.Players}";
+                    break;
+                case MatchPhase.Countdown:
+                case MatchPhase.Active:
+                    // Same server start time on every device: "3", "2", "1", "FIGHT!".
+                    _banner.text = MatchPresentation.CountdownText(-match.SecondsSinceStart);
+                    _banner.color = _banner.text == "FIGHT!" ? NyxPalette.Crimson : NyxPalette.TextPrimary;
+                    _phase.text = match.Phase == MatchPhase.Countdown ? "GET READY" : string.Empty;
+                    break;
+                default:
+                    _banner.text = string.Empty;
+                    _phase.text = string.Empty;
+                    break;
+            }
+
+            _protection.text = _protectionRemaining > 0f ? $"SPAWN PROTECTION  {_protectionRemaining:0.0}s" : string.Empty;
         }
 
         private void ToggleMenu()
@@ -188,6 +233,18 @@ namespace WarOfNyx.Gameplay
             _stats = UiFactory.CreateText(safe, string.Empty, 22, NyxPalette.TextPrimary, TextAnchor.UpperLeft);
             UiFactory.Anchor(_stats.rectTransform, new Vector2(0.02f, 0.74f), new Vector2(0.4f, 0.91f));
             _stats.gameObject.SetActive(false);
+
+            _banner = UiFactory.CreateText(safe, string.Empty, 200, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UiFactory.Anchor(_banner.rectTransform, new Vector2(0.2f, 0.4f), new Vector2(0.8f, 0.8f));
+            var outline = _banner.gameObject.AddComponent<Outline>();
+            outline.effectColor = NyxPalette.NyxPurple;
+            outline.effectDistance = new Vector2(5f, -5f);
+
+            _phase = UiFactory.CreateText(safe, string.Empty, 32, NyxPalette.VictoryGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UiFactory.Anchor(_phase.rectTransform, new Vector2(0.15f, 0.3f), new Vector2(0.85f, 0.4f));
+
+            _protection = UiFactory.CreateText(safe, string.Empty, 26, NyxPalette.ElectricCyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UiFactory.Anchor(_protection.rectTransform, new Vector2(0.3f, 0.82f), new Vector2(0.7f, 0.88f));
 
             var menuButton = UiFactory.CreateButton(safe, "II", ToggleMenu, 90f, 34);
             var rect = (RectTransform)menuButton.Button.transform;

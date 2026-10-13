@@ -7,7 +7,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 1 | Architecture & project initialization | — | S | Code written; core tests pass under .NET; **not yet verified in Unity** |
 | 2 | Character, camera, PC + touch controls, Practice Arena graybox | 1 | M | **Code written; movement model 30/30 tests pass under .NET; Unity side not yet verified** |
 | 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | **Code written; core networking 35/35 tests pass under .NET; needs Fusion SDK + App ID + Unity to run.** Gate: nothing advanced until the two-client test passes |
-| 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | Not started |
+| 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | **Code written; match lifecycle, spawn planner, protection and queue: 40 tests pass under .NET; Unity/Fusion side not yet run** |
 | 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | Not started |
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | Not started |
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | Not started |
@@ -69,3 +69,17 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] Main menu ONLINE screen: name, room code, HOST PRIVATE ROOM, JOIN ROOM, JOIN DEV SERVER
 - [ ] **Import Fusion 2.1.3 + App ID, fix compile issues, run the two-client manual test (TESTING.md)** ← next action, needs the project owner
 - [ ] Automated multi-peer test (moved to Phase 4–5)
+
+## Phase 4 checklist
+- [x] Quick Match: random join of open, same-version public sessions; retry back-off; offers PLAY OFFLINE WITH BOTS after 30 s but never switches on its own
+- [x] Waiting lobby scene: room, players n/max, players needed, lobby countdown, loading progress, connection and ping, host START, LEAVE
+- [x] Server match lifecycle (`MatchLifecycle`): min-player threshold (dev two-player mode via `-minPlayers 2`), lobby fill timer, full-lobby instant start, load timeout with straggler removal, reset to the lobby when empty
+- [x] Late joins refused (session closed + connection requests refused once loading starts)
+- [x] Synchronized start: server start time; input unlocks on the same tick for server and every predicting client; "3‑2‑1‑FIGHT!" from the same clock
+- [x] Server-side random spawns (`SpawnPlanner` + `ArenaSpawnArea`): ground, slope, water, overlap, roof, navmesh and reachability checks; 65 m separation relaxed safely (50 → 40 → 25 → 3 m); never invalid
+- [x] Spawn effects (portal, beam, sparks, shockwave, sound) and drop-in landing
+- [x] Spawn protection (3 s after FIGHT, ended by any aggressive action), shield bubble, HUD timer
+- [x] Health initialized to 100, armor 0 (damage in Phase 5)
+- [ ] Starting inventory/loadout: moved to Phase 6, where the inventory system is built (spec Phase 6 task 1)
+- [ ] **Run the multi-client test in TESTING.md** ← needs the project owner (Unity + Fusion + App ID)
+- [ ] Automated multi-peer PlayMode test (Fusion multi-peer mode): moved to Phase 5

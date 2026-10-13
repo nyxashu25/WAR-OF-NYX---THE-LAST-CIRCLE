@@ -26,6 +26,10 @@ namespace WarOfNyx.Core.Networking
         public int Port { get; private set; } = DefaultPort;
         /// <summary>Photon region code (e.g. "eu", "us", "asia"). Empty = best region.</summary>
         public string Region { get; private set; } = string.Empty;
+        /// <summary>Players needed to start (-minPlayers). -1 = use the configured MatchRules (2 = dev two-player test mode).</summary>
+        public int MinPlayersToStart { get; private set; } = -1;
+        /// <summary>Seconds to wait for more players once the minimum is reached (-lobbyFill). -1 = configured value.</summary>
+        public float LobbyFillSeconds { get; private set; } = -1f;
         public string Warnings { get; private set; } = string.Empty;
 
         public static ServerLaunchOptions Parse(string[] args)
@@ -60,6 +64,18 @@ namespace WarOfNyx.Core.Networking
                         else
                             options.Warn($"invalid -maxPlayers '{value}' (allowed {MinPlayers}-{MaxPlayersLimit}), using {DefaultMaxPlayers}");
                         break;
+                    case "minplayers":
+                        if (TryInt(value, out int min) && min >= 1 && min <= MaxPlayersLimit)
+                            options.MinPlayersToStart = min;
+                        else
+                            options.Warn($"invalid -minPlayers '{value}', using configured value");
+                        break;
+                    case "lobbyfill":
+                        if (TryInt(value, out int fill) && fill >= 0 && fill <= 600)
+                            options.LobbyFillSeconds = fill;
+                        else
+                            options.Warn($"invalid -lobbyFill '{value}', using configured value");
+                        break;
                     case "port":
                         if (TryInt(value, out int port) && port >= 0 && port <= 65535)
                             options.Port = port;
@@ -79,7 +95,8 @@ namespace WarOfNyx.Core.Networking
         }
 
         public override string ToString() =>
-            $"session={SessionName} maxPlayers={MaxPlayers} port={Port} region={(Region.Length == 0 ? "best" : Region)}";
+            $"session={SessionName} maxPlayers={MaxPlayers} minPlayers={(MinPlayersToStart < 0 ? "config" : MinPlayersToStart.ToString())} " +
+            $"lobbyFill={(LobbyFillSeconds < 0f ? "config" : LobbyFillSeconds + "s")} port={Port} region={(Region.Length == 0 ? "best" : Region)}";
 
         private static bool IsFlag(string s) => !string.IsNullOrEmpty(s) && s[0] == '-' && !(s.Length > 1 && char.IsDigit(s[1]));
 

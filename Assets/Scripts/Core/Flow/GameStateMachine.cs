@@ -110,6 +110,44 @@ namespace WarOfNyx.Core.Flow
             return true;
         }
 
+        private static readonly GameFlowState[] CanonicalOrder =
+        {
+            GameFlowState.Matchmaking, GameFlowState.WaitingLobby, GameFlowState.MatchPreparation,
+            GameFlowState.SynchronizedSpawn, GameFlowState.Countdown, GameFlowState.ActiveMatch,
+            GameFlowState.FinalCircle, GameFlowState.MatchEnded, GameFlowState.ResultsScreen, GameFlowState.ReturnToLobby,
+        };
+
+        /// <summary>
+        /// Moves forward through every intermediate state until <paramref name="target"/> is reached
+        /// (clients follow the server's phase, which can skip states between two updates).
+        /// States that don't apply to the mode (e.g. Matchmaking offline) are skipped.
+        /// Never moves backwards; returns true when <see cref="Current"/> equals the target.
+        /// </summary>
+        public bool TryAdvanceTo(GameFlowState target)
+        {
+            if (Current == target)
+                return true;
+            if (Current == GameFlowState.MainMenu || target == GameFlowState.MainMenu)
+                return false;
+
+            int from = Array.IndexOf(CanonicalOrder, Current);
+            int to = Array.IndexOf(CanonicalOrder, target);
+            if (from < 0 || to < 0 || to <= from)
+                return false;
+
+            for (int i = from + 1; i <= to; i++)
+            {
+                var next = CanonicalOrder[i];
+                // FinalCircle is optional: only enter it when it is the actual target.
+                if (next == GameFlowState.FinalCircle && target != GameFlowState.FinalCircle)
+                    continue;
+                if (CanTransition(next))
+                    Apply(next);
+            }
+
+            return Current == target;
+        }
+
         /// <summary>Ends the session (disconnect, quit, load failure) and returns to the main menu.</summary>
         public void AbortToMainMenu()
         {

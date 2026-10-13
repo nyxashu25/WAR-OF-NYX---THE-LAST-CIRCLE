@@ -8,37 +8,47 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using WarOfNyx.App;
 using WarOfNyx.Core.Flow;
-using FlowMode = WarOfNyx.Core.Flow.GameMode;
-using GameMode = Fusion.GameMode;
+using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Networking;
 using WarOfNyx.Gameplay;
+using FlowMode = WarOfNyx.Core.Flow.GameMode;
+using GameMode = Fusion.GameMode;
 
 namespace WarOfNyx.Networking
 {
     /// <summary>
-    /// Owns the Photon Fusion <see cref="NetworkRunner"/> and implements <see cref="IOnlineSessionService"/>
-    /// for the rest of the game (Phase 3).
+    /// Owns the Photon Fusion <see cref="NetworkRunner"/> and implements <see cref="IOnlineSessionService"/>.
     ///
     /// Roles:
     ///   Dedicated server  GameMode.Server  headless authority; public matches (spec 3/20).
-    ///   Host              GameMode.Host    a device is client + authority; PRIVATE TEST ROOMS ONLY.
-    ///   Client            GameMode.Client  joins a server or host by session name / room code.
+    ///   Host              GameMode.Host    device is client + authority; PRIVATE TEST ROOMS ONLY.
+    ///   Client            GameMode.Client  Quick Match (random open public session) or join by code.
     ///
-    /// Server-only work here: spawning/despawning player objects. Client-only work: polling the
-    /// local input router once per tick (OnInput). Matchmaking, waiting lobby, late-join
-    /// rejection and real spawn selection arrive in Phase 4.
+    /// Match flow (Phase 4), all decided on the authority by <see cref="MatchLifecycle"/>:
+    ///   session starts in the MatchLobby scene → players gather → lifecycle starts loading →
+    ///   session closed to new joins, server loads BattleArena for everyone → each client reports
+    ///   "loaded" → server plans spawns (SpawnPlanner) and spawns everyone, input locked →
+    ///   shared start time → "FIGHT!" → everyone gains control on the same tick.
+    ///   If everyone leaves, the server returns to the lobby and reopens the session.
     /// </summary>
     public sealed class NetworkSessionManager : MonoBehaviour, INetworkRunnerCallbacks, IOnlineSessionService
     {
         public const string PlayerPrefabResource = "WarOfNyx/NetworkPlayer";
+        public const string MatchLobbyScenePath = "Assets/Scenes/MatchLobby.unity";
         public const string BattleArenaScenePath = "Assets/Scenes/BattleArena.unity";
 
-        private readonly Dictionary<PlayerRef, NetworkObject> _players = new Dictionary<PlayerRef, NetworkObject>();
-        private readonly List<PlayerRef> _pendingSpawns = new List<PlayerRef>();
+        private readonly Dictionary<PlayerRef, NetworkObject> _avatars = new Dictionary<PlayerRef, NetworkObject>();
+        private readonly Dictionary<int, PlayerRef> _playerRefs = new Dictionary<int, PlayerRef>();
         private NetworkRunner _runner;
         private NetworkObject _playerPrefab;
-        private bool _sceneReady;
-        private int _nextSpawnSlot;
+        private NetworkObject _matchControllerPrefab;
+        private NetworkMatchController _matchController;
+        private MatchLifecycle _lifecycle;
+        private MatchRules _rules;
+        private ServerLaunchOptions _serverOptions;
+        private bool _pendingLoadReport;
+        private int _lobbySceneIndex = -1;
+        private int _arenaSceneIndex = -1;
 
         public OnlineSessionState State { get; private set; } = OnlineSessionState.Idle;
         public OnlineRole Role { get; private set; } = OnlineRole.None;
@@ -52,9 +62,14 @@ namespace WarOfNyx.Networking
             ? Mathf.RoundToInt((float)(_runner.GetPlayerRtt(_runner.LocalPlayer) * 1000.0))
             : 0;
 
+        public IMatchStateView Match => NetworkMatchController.Instance;
+
         public event Action<OnlineSessionState> StateChanged;
 
-        /// <summary>Registers the Fusion implementation before the first scene loads (so the dedicated server bootstrap finds it).</summary>
+        private bool IsAuthority => _runner != null && _runner.IsServer;
+        private float Now => _runner != null ? _runner.SimulationTime : 0f;
+
+        /// <summary>Registers the Fusion implementation before the first scene loads (the dedicated-server bootstrap needs it).</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Register()
         {
@@ -65,17 +80,21 @@ namespace WarOfNyx.Networking
 
         // ------------------------------------------------------------------ IOnlineSessionService
 
+        public Task<bool> QuickMatchAsync() =>
+            StartAsync(GameMode.Client, OnlineRole.Client, null, 0, 0, quickMatch: true);
+
         public Task<bool> HostPrivateRoomAsync(string roomCode, int maxPlayers) =>
-            StartAsync(GameMode.Host, OnlineRole.Host, roomCode, maxPlayers, 0);
+            StartAsync(GameMode.Host, OnlineRole.Host, roomCode, maxPlayers, 0, quickMatch: false);
 
         public Task<bool> JoinAsync(string sessionName) =>
-            StartAsync(GameMode.Client, OnlineRole.Client, sessionName, 0, 0);
+            StartAsync(GameMode.Client, OnlineRole.Client, sessionName, 0, 0, quickMatch: false);
 
         public Task<bool> StartDedicatedServerAsync(ServerLaunchOptions options)
         {
+            _serverOptions = options;
             if (!string.IsNullOrEmpty(options.Region))
                 Debug.LogWarning("[WarOfNyx][Server] -region is parsed but not applied yet; set Fixed Region in PhotonAppSettings (Phase 12).");
-            return StartAsync(GameMode.Server, OnlineRole.DedicatedServer, options.SessionName, options.MaxPlayers, options.Port);
+            return StartAsync(GameMode.Server, OnlineRole.DedicatedServer, options.SessionName, options.MaxPlayers, options.Port, quickMatch: false);
         }
 
         public async Task LeaveAsync()
@@ -87,42 +106,53 @@ namespace WarOfNyx.Networking
             }
 
             SetState(OnlineSessionState.ShuttingDown);
-            await _runner.Shutdown(); // OnShutdown does the cleanup and the scene change
+            await _runner.Shutdown(); // OnShutdown cleans up and returns to the menu
         }
 
         // ------------------------------------------------------------------ Start-up
 
-        private async Task<bool> StartAsync(GameMode mode, OnlineRole role, string sessionName, int maxPlayers, int port)
+        private async Task<bool> StartAsync(GameMode mode, OnlineRole role, string sessionName, int maxPlayers, int port, bool quickMatch)
         {
             if (State == OnlineSessionState.Starting || State == OnlineSessionState.Running)
                 return Fail("Already in an online session.");
 
-            if (!SessionCodes.TrySanitize(sessionName, out string code))
+            string code = null;
+            if (!quickMatch && !SessionCodes.TrySanitize(sessionName, out code))
                 return Fail($"Invalid room code '{sessionName}'. Use 4-16 letters, digits or '-'.");
 
             bool authority = mode != GameMode.Client;
-            int sceneIndex = SceneUtility.GetBuildIndexByScenePath(BattleArenaScenePath);
+            _lobbySceneIndex = SceneUtility.GetBuildIndexByScenePath(MatchLobbyScenePath);
+            _arenaSceneIndex = SceneUtility.GetBuildIndexByScenePath(BattleArenaScenePath);
+
+            AppServices.EnsureInitialized();
             if (authority)
             {
                 _playerPrefab = Resources.Load<NetworkObject>(PlayerPrefabResource);
-                if (_playerPrefab == null)
-                    return Fail("Network player prefab missing. Run War of Nyx > Setup > Run Project Setup with Fusion installed.");
-                if (sceneIndex < 0)
-                    return Fail("BattleArena scene is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
+                _matchControllerPrefab = Resources.Load<NetworkObject>(NetworkMatchController.PrefabResource);
+                if (_playerPrefab == null || _matchControllerPrefab == null)
+                    return Fail("Network prefabs missing. Run War of Nyx > Setup > Run Project Setup with Fusion installed.");
+                if (_lobbySceneIndex < 0 || _arenaSceneIndex < 0)
+                    return Fail("MatchLobby/BattleArena scenes are not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
+
+                _rules = BuildRules(role, maxPlayers);
+                _lifecycle = new MatchLifecycle(_rules, privateRoom: role == OnlineRole.Host);
+                HookLifecycle(_lifecycle);
+            }
+            else
+            {
+                _lifecycle = null;
             }
 
-            AppServices.EnsureInitialized();
             if (AppServices.Flow.Current == GameFlowState.MainMenu)
                 AppServices.Flow.TryStartSession(FlowMode.OnlineBattleRoyale);
 
             Role = role;
-            SessionName = code;
-            MaxPlayers = authority ? Mathf.Clamp(maxPlayers, ServerLaunchOptions.MinPlayers, ServerLaunchOptions.MaxPlayersLimit) : 0;
+            SessionName = code ?? "(searching)";
+            MaxPlayers = authority ? _rules.maxPlayers : 0;
             LastError = string.Empty;
-            _players.Clear();
-            _pendingSpawns.Clear();
-            _nextSpawnSlot = 0;
-            _sceneReady = false;
+            _avatars.Clear();
+            _playerRefs.Clear();
+            _pendingLoadReport = false;
             SetState(OnlineSessionState.Starting);
 
             var runnerObject = new GameObject($"NetworkRunner ({role})");
@@ -132,25 +162,39 @@ namespace WarOfNyx.Networking
             _runner.AddCallbacks(this);
             var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
+            var matchProperties = new Dictionary<string, SessionProperty>
+            {
+                { NetworkProtocol.VersionKey, NetworkProtocol.Version },
+                { NetworkProtocol.ModeKey, NetworkProtocol.ModeBattleRoyale },
+            };
+
             var args = new StartGameArgs
             {
                 GameMode = mode,
-                SessionName = code,
+                SessionName = code, // null for Quick Match = join a random open session
                 SceneManager = sceneManager,
             };
 
             if (authority)
             {
-                args.PlayerCount = MaxPlayers;
+                args.PlayerCount = _rules.maxPlayers;
+                args.IsOpen = true;
+                // Public servers are listed for Quick Match; private rooms are only reachable by code.
+                args.IsVisible = role == OnlineRole.DedicatedServer;
+                args.SessionProperties = matchProperties;
                 var sceneInfo = new NetworkSceneInfo();
-                sceneInfo.AddSceneRef(SceneRef.FromIndex(sceneIndex), LoadSceneMode.Single, LocalPhysicsMode.None, true);
+                sceneInfo.AddSceneRef(SceneRef.FromIndex(_lobbySceneIndex), LoadSceneMode.Single, LocalPhysicsMode.None, true);
                 args.Scene = sceneInfo;
+            }
+            else if (quickMatch)
+            {
+                args.SessionProperties = matchProperties; // only same-version battle royale sessions
             }
 
             if (mode == GameMode.Server && port > 0)
                 args.Address = NetAddress.Any((ushort)port);
 
-            Debug.Log($"[WarOfNyx][Online] Starting {role} session '{code}'...");
+            Debug.Log($"[WarOfNyx][Online] Starting {role} {(quickMatch ? "quick match search" : $"session '{code}'")}...");
 
             StartGameResult result;
             try
@@ -167,33 +211,58 @@ namespace WarOfNyx.Networking
             if (!result.Ok)
             {
                 CleanupRunner();
-                return Fail($"Could not {(authority ? "create" : "join")} '{code}': {result.ShutdownReason} {result.ErrorMessage}".Trim());
+                string reason;
+                switch (result.ShutdownReason)
+                {
+                    case ShutdownReason.GameNotFound:
+                        reason = quickMatch ? "No open match found yet." : $"Room '{code}' does not exist.";
+                        break;
+                    case ShutdownReason.GameClosed:
+                        reason = "That match has already started (late joining is not allowed).";
+                        break;
+                    case ShutdownReason.GameIsFull:
+                        reason = "That match is full.";
+                        break;
+                    case ShutdownReason.GameIdAlreadyExists:
+                        reason = $"Room '{code}' already exists. Pick another code.";
+                        break;
+                    default:
+                        reason = $"Could not {(authority ? "create" : "join")} the session: {result.ShutdownReason} {result.ErrorMessage}".Trim();
+                        break;
+                }
+                return Fail(reason, quiet: quickMatch);
             }
 
             if (!authority)
+            {
                 MaxPlayers = _runner.SessionInfo != null ? _runner.SessionInfo.MaxPlayers : 0;
+                SessionName = _runner.SessionInfo != null ? _runner.SessionInfo.Name : SessionName;
+            }
 
             SetState(OnlineSessionState.Running);
-            AdvanceFlowToActive();
-            Debug.Log($"[WarOfNyx][Online] {role} running in session '{code}' (max {MaxPlayers}).");
+            Debug.Log($"[WarOfNyx][Online] {role} running in session '{SessionName}' (max {MaxPlayers}).");
             return true;
         }
 
-        private static void AdvanceFlowToActive()
+        private MatchRules BuildRules(OnlineRole role, int maxPlayers)
         {
-            // Phase 3 has no lobby or countdown yet: walk straight to the active state.
-            var flow = AppServices.Flow;
-            flow.TryTransition(GameFlowState.WaitingLobby);
-            flow.TryTransition(GameFlowState.MatchPreparation);
-            flow.TryTransition(GameFlowState.SynchronizedSpawn);
-            flow.TryTransition(GameFlowState.Countdown);
-            flow.TryTransition(GameFlowState.ActiveMatch);
+            var configured = AppServices.Config.matchRules ?? new MatchRules();
+            if (role == OnlineRole.Host)
+                return configured.With(-1, Mathf.Clamp(maxPlayers, 1, ServerLaunchOptions.MaxPlayersLimit), -1f);
+
+            var o = _serverOptions;
+            return o == null
+                ? configured.Clone()
+                : configured.With(o.MinPlayersToStart, o.MaxPlayers, o.LobbyFillSeconds);
         }
 
-        private bool Fail(string message)
+        private bool Fail(string message, bool quiet = false)
         {
             LastError = message;
-            Debug.LogError("[WarOfNyx][Online] " + message);
+            if (quiet)
+                Debug.Log("[WarOfNyx][Online] " + message);
+            else
+                Debug.LogError("[WarOfNyx][Online] " + message);
             SetState(OnlineSessionState.Failed);
             if (AppServices.IsInitialized)
                 AppServices.Flow.AbortToMainMenu();
@@ -213,79 +282,200 @@ namespace WarOfNyx.Networking
             if (_runner != null)
             {
                 _runner.RemoveCallbacks(this);
-                if (_runner.gameObject != null)
-                    Destroy(_runner.gameObject);
+                Destroy(_runner.gameObject);
             }
             _runner = null;
+            _lifecycle = null;
+            _matchController = null;
             Role = OnlineRole.None;
         }
 
-        // ------------------------------------------------------------------ Server: players
+        // ------------------------------------------------------------------ Server: lifecycle reactions
 
-        private void SpawnPlayer(NetworkRunner runner, PlayerRef player)
+        private void HookLifecycle(MatchLifecycle lifecycle)
         {
-            if (_players.ContainsKey(player))
+            lifecycle.LoadingStarted += OnLoadingStarted;
+            lifecycle.PlayersKicked += OnPlayersKicked;
+            lifecycle.SpawnRequested += OnSpawnRequested;
+            lifecycle.Activated += at => Debug.Log($"[WarOfNyx][Match] FIGHT! Match active at t={at:0.00}s with {lifecycle.PlayerCount} players.");
+            lifecycle.ResetToLobby += OnResetToLobby;
+        }
+
+        private void OnLoadingStarted()
+        {
+            Debug.Log($"[WarOfNyx][Match] Starting match with {_lifecycle.PlayerCount} players: closing session, loading arena.");
+            SetSessionOpen(false);
+            _runner.LoadScene(SceneRef.FromIndex(_arenaSceneIndex), LoadSceneMode.Single);
+        }
+
+        private void OnPlayersKicked(IReadOnlyList<int> playerIds)
+        {
+            foreach (int id in playerIds)
+            {
+                Debug.LogWarning($"[WarOfNyx][Match] Player {id} did not load in time and was removed.");
+                if (_playerRefs.TryGetValue(id, out var player))
+                    _runner.Disconnect(player);
+            }
+        }
+
+        private void OnSpawnRequested(IReadOnlyList<int> playerIds)
+        {
+            var area = ArenaSpawnArea.Current;
+            if (area == null)
+            {
+                Debug.LogError("[WarOfNyx][Spawn] No ArenaSpawnArea in the arena scene; cannot spawn safely.");
+                LastError = "The arena has no spawn area.";
+                _ = LeaveAsync();
+                return;
+            }
+
+            int seed = Environment.TickCount ^ (playerIds.Count * 7919);
+            var plan = area.PlanSpawns(playerIds.Count, _rules, seed);
+            if (!plan.Success)
+            {
+                // Never place players at invalid positions (spec 6).
+                Debug.LogError($"[WarOfNyx][Spawn] Spawn planning failed: {plan.Failure}");
+                LastError = "No valid spawn layout: " + plan.Failure;
+                _ = LeaveAsync();
+                return;
+            }
+
+            float protectionEndsAt = Now + _rules.countdownSeconds + _rules.spawnProtectionSeconds;
+            for (int i = 0; i < playerIds.Count; i++)
+            {
+                if (!_playerRefs.TryGetValue(playerIds[i], out var player))
+                    continue;
+                var p = plan.Points[i];
+                SpawnAvatar(player, new Vector3(p.X, p.Y + _rules.spawnDropHeight, p.Z), p.Yaw, protectionEndsAt);
+            }
+
+            Debug.Log($"[WarOfNyx][Spawn] Spawned {playerIds.Count} players, min separation {plan.Separation} m" +
+                      (plan.Relaxed ? " (relaxed)." : "."));
+        }
+
+        private void OnResetToLobby()
+        {
+            Debug.Log("[WarOfNyx][Match] Returning to the lobby and reopening the session.");
+            foreach (var avatar in _avatars.Values)
+            {
+                if (avatar != null)
+                    _runner.Despawn(avatar);
+            }
+            _avatars.Clear();
+            SetSessionOpen(true);
+            if (SceneManager.GetActiveScene().buildIndex != _lobbySceneIndex)
+                _runner.LoadScene(SceneRef.FromIndex(_lobbySceneIndex), LoadSceneMode.Single);
+        }
+
+        private void SetSessionOpen(bool open)
+        {
+            if (_runner.SessionInfo != null && _runner.SessionInfo.IsValid)
+                _runner.SessionInfo.IsOpen = open;
+        }
+
+        private void SpawnAvatar(PlayerRef player, Vector3 position, float yaw, float protectionEndsAt)
+        {
+            if (_avatars.ContainsKey(player))
                 return;
 
-            Vector3 position = Vector3.up;
-            float yaw = 0f;
-            var area = ArenaSpawnArea.Current;
-            if (area != null)
-                area.GetSpawn(_nextSpawnSlot++, out position, out yaw);
-            else
-                Debug.LogWarning("[WarOfNyx][Online] No ArenaSpawnArea in the scene; spawning at the origin.");
-
-            var spawned = runner.Spawn(_playerPrefab, position, Quaternion.Euler(0f, yaw, 0f), player,
-                (r, obj) => obj.GetComponent<NetworkPlayer>().InitializeSpawn(position, yaw, player.PlayerId));
-
+            var spawned = _runner.Spawn(_playerPrefab, position, Quaternion.Euler(0f, yaw, 0f), player,
+                (r, obj) => obj.GetComponent<NetworkPlayer>().InitializeSpawn(position, yaw, player.PlayerId, protectionEndsAt));
             if (spawned != null)
             {
-                _players[player] = spawned;
-                runner.SetPlayerObject(player, spawned);
-                Debug.Log($"[WarOfNyx][Online] Spawned player {player.PlayerId} at {position}.");
+                _avatars[player] = spawned;
+                _runner.SetPlayerObject(player, spawned);
+            }
+        }
+
+        /// <summary>Server: a player's device reported that the arena finished loading.</summary>
+        public void OnPlayerLoaded(PlayerRef player)
+        {
+            if (_lifecycle != null && player != PlayerRef.None)
+                _lifecycle.MarkLoaded(player.PlayerId, Now);
+        }
+
+        private void SpawnMatchControllerIfNeeded()
+        {
+            if (!IsAuthority || _matchController != null || _lifecycle == null)
+                return;
+            var obj = _runner.Spawn(_matchControllerPrefab);
+            _matchController = obj.GetComponent<NetworkMatchController>();
+            _matchController.InitializeServer(_lifecycle, this);
+        }
+
+        // ------------------------------------------------------------------ Client: load report
+
+        private void Update()
+        {
+            if (_pendingLoadReport && NetworkMatchController.Instance != null)
+            {
+                _pendingLoadReport = false;
+                NetworkMatchController.Instance.ReportLocalLoaded();
             }
         }
 
         // ------------------------------------------------------------------ INetworkRunnerCallbacks
 
+        public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
+        {
+            // Late joining is not allowed (spec 20): only accept while the lobby is gathering.
+            if (_lifecycle != null && !_lifecycle.AcceptingPlayers)
+                request.Refuse();
+            else
+                request.Accept();
+        }
+
         public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
-            if (!runner.IsServer)
+            if (!runner.IsServer || _lifecycle == null)
                 return;
 
-            Debug.Log($"[WarOfNyx][Online] Player {player.PlayerId} joined ({PlayerCount}/{MaxPlayers}).");
-            if (_sceneReady)
-                SpawnPlayer(runner, player);
-            else
-                _pendingSpawns.Add(player);
+            if (!_lifecycle.TryAddPlayer(player.PlayerId, Now))
+            {
+                Debug.Log($"[WarOfNyx][Match] Refusing player {player.PlayerId}: match already starting or full.");
+                runner.Disconnect(player);
+                return;
+            }
+
+            _playerRefs[player.PlayerId] = player;
+            Debug.Log($"[WarOfNyx][Match] Player {player.PlayerId} joined the lobby ({_lifecycle.PlayerCount}/{_rules.maxPlayers}).");
         }
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
-            if (!runner.IsServer)
+            if (!runner.IsServer || _lifecycle == null)
                 return;
 
-            _pendingSpawns.Remove(player);
-            if (_players.TryGetValue(player, out var obj))
+            if (_avatars.TryGetValue(player, out var avatar))
             {
-                if (obj != null)
-                    runner.Despawn(obj);
-                _players.Remove(player);
+                if (avatar != null)
+                    runner.Despawn(avatar);
+                _avatars.Remove(player);
             }
-            Debug.Log($"[WarOfNyx][Online] Player {player.PlayerId} left.");
+            _playerRefs.Remove(player.PlayerId);
+            _lifecycle.RemovePlayer(player.PlayerId, Now);
+            Debug.Log($"[WarOfNyx][Match] Player {player.PlayerId} left ({_lifecycle.PlayerCount} remaining).");
         }
 
-        public void OnSceneLoadStart(NetworkRunner runner) => _sceneReady = false;
+        public void OnSceneLoadStart(NetworkRunner runner) { }
 
         public void OnSceneLoadDone(NetworkRunner runner)
         {
-            _sceneReady = true;
-            if (!runner.IsServer)
+            int index = SceneManager.GetActiveScene().buildIndex;
+            if (index == _lobbySceneIndex)
+            {
+                SpawnMatchControllerIfNeeded();
                 return;
+            }
 
-            foreach (var player in _pendingSpawns.ToArray())
-                SpawnPlayer(runner, player);
-            _pendingSpawns.Clear();
+            if (index == _arenaSceneIndex)
+            {
+                // Every peer (host included) reports once; the dedicated server has no player of its own.
+                if (NetworkMatchController.Instance != null)
+                    NetworkMatchController.Instance.ReportLocalLoaded();
+                else
+                    _pendingLoadReport = true;
+            }
         }
 
         public void OnInput(NetworkRunner runner, NetworkInput input)
@@ -301,9 +491,12 @@ namespace WarOfNyx.Networking
             Debug.Log($"[WarOfNyx][Online] Runner shut down: {shutdownReason}");
             bool wasServer = Role == OnlineRole.DedicatedServer;
 
-            _players.Clear();
-            _pendingSpawns.Clear();
+            _avatars.Clear();
+            _playerRefs.Clear();
             _runner = null;
+            _lifecycle = null;
+            _matchController = null;
+            _pendingLoadReport = false;
             Role = OnlineRole.None;
 
             if (shutdownReason != ShutdownReason.Ok && string.IsNullOrEmpty(LastError))
@@ -335,14 +528,15 @@ namespace WarOfNyx.Networking
 
         public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
         {
-            LastError = "Connection failed: " + reason;
+            LastError = reason == NetConnectFailedReason.ServerRefused
+                ? "The match already started or is full."
+                : "Connection failed: " + reason;
             Debug.LogWarning("[WarOfNyx][Online] " + LastError);
         }
 
         public void OnConnectedToServer(NetworkRunner runner) =>
             Debug.Log("[WarOfNyx][Online] Connected to server.");
 
-        public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
         public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
         public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
         public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }

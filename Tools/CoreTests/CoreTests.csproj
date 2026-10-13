@@ -31,6 +31,7 @@
     <Compile Include="../../Assets/Tests/EditMode/OfflineSettingsTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/MovementModelTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/NetworkingCoreTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/MatchStartTests.cs" LinkBase="Tests" />
   </ItemGroup>
 
   <ItemGroup>
