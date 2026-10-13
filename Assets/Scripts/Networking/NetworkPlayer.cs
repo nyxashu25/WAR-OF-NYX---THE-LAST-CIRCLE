@@ -64,11 +64,11 @@ namespace WarOfNyx.Networking
         }
 
         /// <summary>Server only, before the object exists on the network: initial authoritative state.</summary>
-        public void InitializeSpawn(Vector3 position, float yaw, int playerId, float protectionEndsAt)
+        public void InitializeSpawn(Vector3 position, float yaw, int playerId, float protectionEndsAt, int loadoutSeed)
         {
             Movement = NetworkMovementState.From(MovementState.Initial(yaw), false, position);
             DisplayName = PlayerNames.Fallback(playerId);
-            GetComponent<NetworkCombat>().InitializeSpawn(); // health 100, development loadout (Phase 6: randomized)
+            GetComponent<NetworkCombat>().InitializeSpawn(loadoutSeed); // health 100 + randomized starting loadout
             ProtectionEndsAt = protectionEndsAt;
             ProtectionBroken = false;
         }
@@ -162,7 +162,7 @@ namespace WarOfNyx.Networking
 
             // Combat after movement: shots start from this tick's position (same order on server and client).
             if (_combat != null)
-                _combat.Simulate(combat, command.Yaw, command.Pitch, command.AimHeld, _movement.State.IsLowStance, unlocked);
+                _combat.Simulate(combat, command.Yaw, command.Pitch, command.AimHeld, _movement.State.IsLowStance, _movement.State.IsSprinting, unlocked);
         }
 
         public override void Render()

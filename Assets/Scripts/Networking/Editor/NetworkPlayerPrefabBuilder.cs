@@ -16,11 +16,13 @@ namespace WarOfNyx.EditorTools
     public static class NetworkPlayerPrefabBuilder
     {
         public const string MatchControllerPrefabPath = "Assets/Resources/WarOfNyx/MatchController.prefab";
+        public const string LootCratePrefabPath = "Assets/Resources/WarOfNyx/LootCrate.prefab";
 
         static NetworkPlayerPrefabBuilder()
         {
             ProjectSetupWizard.RegisterStep("Network player prefab (Phase 3, Fusion)", () => Build(overwrite: false));
             ProjectSetupWizard.RegisterStep("Match controller prefab (Phase 4, Fusion)", () => BuildMatchController(overwrite: false));
+            ProjectSetupWizard.RegisterStep("Loot capsule prefab (Phase 6, Fusion)", () => BuildLootCrate(overwrite: false));
         }
 
         [MenuItem("War of Nyx/Multiplayer/Rebuild Network Prefabs", priority = 10)]
@@ -28,6 +30,7 @@ namespace WarOfNyx.EditorTools
         {
             Build(overwrite: true);
             BuildMatchController(overwrite: true);
+            BuildLootCrate(overwrite: true);
         }
 
         public static void Build(bool overwrite)
@@ -87,6 +90,20 @@ namespace WarOfNyx.EditorTools
             PrefabUtility.SaveAsPrefabAsset(instance, path);
             Object.DestroyImmediate(instance);
             Debug.Log($"[WarOfNyx] Built {path}.");
+        }
+
+        public static void BuildLootCrate(bool overwrite)
+        {
+            if (!overwrite && AssetDatabase.LoadAssetAtPath<GameObject>(LootCratePrefabPath) != null)
+                return;
+
+            ProjectSetupWizard.EnsureFolder("Assets/Resources/WarOfNyx");
+            var go = new GameObject("LootCrate");
+            go.AddComponent<NetworkObject>();
+            go.AddComponent<NetworkLootCrate>();
+            PrefabUtility.SaveAsPrefabAsset(go, LootCratePrefabPath);
+            Object.DestroyImmediate(go);
+            Debug.Log($"[WarOfNyx] Built {LootCratePrefabPath}.");
         }
 
         public static void BuildMatchController(bool overwrite)

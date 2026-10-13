@@ -8,7 +8,6 @@ namespace WarOfNyx.Core.Combat
     {
         public short WeaponId;
         public int Magazine;
-        public int Reserve;
         public float NextFireAt;
         /// <summary>0 = not reloading.</summary>
         public float ReloadEndsAt;
@@ -33,7 +32,6 @@ namespace WarOfNyx.Core.Combat
             {
                 WeaponId = weaponId,
                 Magazine = stats.IsRanged ? stats.magazineSize : 0,
-                Reserve = stats.IsRanged ? stats.startingReserve : 0,
             };
         }
     }
@@ -70,8 +68,9 @@ namespace WarOfNyx.Core.Combat
     /// </summary>
     public static class WeaponRules
     {
+        /// <param name="reserveAvailable">Spare ammo of this weapon's type in the inventory (only used to suggest a reload).</param>
         public static FireDecision TryFire(ref WeaponState s, WeaponStats w, float now,
-            bool triggerHeld, bool triggerPressed, bool aiming, bool firearmsAllowed)
+            bool triggerHeld, bool triggerPressed, bool aiming, bool firearmsAllowed, int reserveAvailable)
         {
             var decision = new FireDecision();
             if (w == null || !w.IsRanged)
@@ -80,7 +79,7 @@ namespace WarOfNyx.Core.Combat
                 return decision;
             }
 
-            UpdateReload(ref s, w, now);
+            // Reload completion is handled by the caller (it owns the ammo pool).
 
             bool continuingBurst = w.fireMode == FireMode.Burst && s.BurstRemaining > 0;
             if (continuingBurst && now < s.NextBurstShotAt)
@@ -122,7 +121,7 @@ namespace WarOfNyx.Core.Combat
             {
                 s.BurstRemaining = 0;
                 decision.Reason = FireBlockReason.EmptyMagazine;
-                decision.ShouldAutoReload = s.Reserve > 0;
+                decision.ShouldAutoReload = reserveAvailable > 0;
                 return decision;
             }
 
@@ -150,27 +149,27 @@ namespace WarOfNyx.Core.Combat
 
             decision.Fired = true;
             decision.Pellets = Math.Max(1, w.pellets);
-            decision.ShouldAutoReload = s.Magazine == 0 && s.Reserve > 0;
+            decision.ShouldAutoReload = s.Magazine == 0 && reserveAvailable > 0;
             return decision;
         }
 
-        public static bool TryStartReload(ref WeaponState s, WeaponStats w, float now)
+        public static bool TryStartReload(ref WeaponState s, WeaponStats w, float now, int reserveAvailable)
         {
-            if (w == null || !w.IsRanged || s.IsReloading || s.Magazine >= w.magazineSize || s.Reserve <= 0)
+            if (w == null || !w.IsRanged || s.IsReloading || s.Magazine >= w.magazineSize || reserveAvailable <= 0)
                 return false;
             s.ReloadEndsAt = now + w.reloadSeconds;
             s.BurstRemaining = 0;
             return true;
         }
 
-        /// <summary>Completes a reload whose time is up: moves ammo from reserve into the magazine.</summary>
-        public static bool UpdateReload(ref WeaponState s, WeaponStats w, float now)
+        /// <summary>Completes a reload whose time is up: moves ammo from the inventory pool into the magazine.</summary>
+        public static bool UpdateReload(ref WeaponState s, WeaponStats w, float now, ref int reserve)
         {
             if (!s.IsReloading || now < s.ReloadEndsAt)
                 return false;
-            int take = Math.Min(w.magazineSize - s.Magazine, s.Reserve);
+            int take = Math.Min(w.magazineSize - s.Magazine, reserve);
             s.Magazine += Math.Max(0, take);
-            s.Reserve -= Math.Max(0, take);
+            reserve -= Math.Max(0, take);
             s.ReloadEndsAt = 0f;
             return true;
         }

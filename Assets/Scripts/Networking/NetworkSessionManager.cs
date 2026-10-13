@@ -346,7 +346,8 @@ namespace WarOfNyx.Networking
                 if (!_playerRefs.TryGetValue(playerIds[i], out var player))
                     continue;
                 var p = plan.Points[i];
-                SpawnAvatar(player, new Vector3(p.X, p.Y + _rules.spawnDropHeight, p.Z), p.Yaw, protectionEndsAt);
+                SpawnAvatar(player, new Vector3(p.X, p.Y + _rules.spawnDropHeight, p.Z), p.Yaw, protectionEndsAt,
+                    loadoutSeed: unchecked(seed * 31 + playerIds[i] * 7919 + i)); // independent random loadout per player
             }
 
             Debug.Log($"[WarOfNyx][Spawn] Spawned {playerIds.Count} players, min separation {plan.Separation} m" +
@@ -373,13 +374,13 @@ namespace WarOfNyx.Networking
                 _runner.SessionInfo.IsOpen = open;
         }
 
-        private void SpawnAvatar(PlayerRef player, Vector3 position, float yaw, float protectionEndsAt)
+        private void SpawnAvatar(PlayerRef player, Vector3 position, float yaw, float protectionEndsAt, int loadoutSeed)
         {
             if (_avatars.ContainsKey(player))
                 return;
 
             var spawned = _runner.Spawn(_playerPrefab, position, Quaternion.Euler(0f, yaw, 0f), player,
-                (r, obj) => obj.GetComponent<NetworkPlayer>().InitializeSpawn(position, yaw, player.PlayerId, protectionEndsAt));
+                (r, obj) => obj.GetComponent<NetworkPlayer>().InitializeSpawn(position, yaw, player.PlayerId, protectionEndsAt, loadoutSeed));
             if (spawned != null)
             {
                 _avatars[player] = spawned;

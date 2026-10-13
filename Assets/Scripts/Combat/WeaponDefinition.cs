@@ -58,7 +58,7 @@ namespace WarOfNyx.Combat
 
         public static string DisplayName(short networkId) => Get(networkId)?.displayName ?? string.Empty;
 
-        /// <summary>Starting magazine/reserve from the tuned stats.</summary>
+        /// <summary>A freshly acquired weapon with a full magazine (spare ammo lives in the inventory).</summary>
         public static WeaponState CreateState(short networkId)
         {
             var stats = Get(networkId);
@@ -68,7 +68,6 @@ namespace WarOfNyx.Combat
             {
                 WeaponId = networkId,
                 Magazine = stats.IsRanged ? stats.magazineSize : 0,
-                Reserve = stats.IsRanged ? stats.startingReserve : 0,
             };
         }
 

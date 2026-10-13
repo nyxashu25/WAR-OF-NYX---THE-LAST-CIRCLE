@@ -65,7 +65,7 @@ namespace WarOfNyx.Tests
             var s = Fresh(w.id);
             int shots = 0;
             for (float t = 0f; t < 1f; t += 1f / 60f)
-                if (WeaponRules.TryFire(ref s, w, t, true, false, false, true).Fired)
+                if (WeaponRules.TryFire(ref s, w, t, true, false, false, true, 90).Fired)
                     shots++;
             Assert.AreEqual(9, shots, "9 rounds per second at 60 Hz");
             Assert.AreEqual(30 - 9, s.Magazine);
@@ -79,7 +79,7 @@ namespace WarOfNyx.Tests
             var s = Fresh(w.id);
             int shots = 0;
             for (float t = 0f; t < 1f; t += 1f / 120f)
-                if (WeaponRules.TryFire(ref s, w, t, true, true, false, true).Fired)
+                if (WeaponRules.TryFire(ref s, w, t, true, true, false, true, 90).Fired)
                     shots++;
             Assert.AreEqual(5, shots);
         }
@@ -89,8 +89,8 @@ namespace WarOfNyx.Tests
         {
             var w = WeaponCatalog.Get(WeaponCatalog.NeonPistol);
             var s = Fresh(w.id);
-            Assert.IsTrue(WeaponRules.TryFire(ref s, w, 0f, true, true, false, true).Fired);
-            var held = WeaponRules.TryFire(ref s, w, 1f, true, false, false, true);
+            Assert.IsTrue(WeaponRules.TryFire(ref s, w, 0f, true, true, false, true, 90).Fired);
+            var held = WeaponRules.TryFire(ref s, w, 1f, true, false, false, true, 90);
             Assert.IsFalse(held.Fired);
             Assert.AreEqual(FireBlockReason.NoTrigger, held.Reason);
         }
@@ -102,7 +102,7 @@ namespace WarOfNyx.Tests
             var s = Fresh(w.id);
             int shots = 0;
             for (float t = 0f; t < 0.3f; t += 1f / 60f)
-                if (WeaponRules.TryFire(ref s, w, t, false, t == 0f, false, true).Fired)
+                if (WeaponRules.TryFire(ref s, w, t, false, t == 0f, false, true, 90).Fired)
                     shots++;
             Assert.AreEqual(3, shots);
             Assert.AreEqual(21, s.Magazine);
@@ -113,7 +113,7 @@ namespace WarOfNyx.Tests
         {
             var w = WeaponCatalog.Get(WeaponCatalog.CrimsonShotgun);
             var s = Fresh(w.id);
-            var d = WeaponRules.TryFire(ref s, w, 0f, true, true, false, true);
+            var d = WeaponRules.TryFire(ref s, w, 0f, true, true, false, true, 90);
             Assert.IsTrue(d.Fired);
             Assert.AreEqual(8, d.Pellets);
             Assert.AreEqual(5, s.Magazine);
@@ -125,32 +125,34 @@ namespace WarOfNyx.Tests
             var w = WeaponCatalog.Get(WeaponCatalog.Nx7AssaultRifle);
             var s = Fresh(w.id);
 
-            var outside = WeaponRules.TryFire(ref s, w, 0f, true, true, false, firearmsAllowed: false);
+            var outside = WeaponRules.TryFire(ref s, w, 0f, true, true, false, firearmsAllowed: false, reserveAvailable: 90);
             Assert.AreEqual(FireBlockReason.FirearmsDisabled, outside.Reason);
             Assert.AreEqual(30, s.Magazine, "spec 11: no ammo consumed outside the circle");
 
-            WeaponRules.TryFire(ref s, w, 0f, true, true, false, true);
-            var cooldown = WeaponRules.TryFire(ref s, w, 0.01f, true, true, false, true);
+            WeaponRules.TryFire(ref s, w, 0f, true, true, false, true, 90);
+            var cooldown = WeaponRules.TryFire(ref s, w, 0.01f, true, true, false, true, 90);
             Assert.AreEqual(FireBlockReason.Cooldown, cooldown.Reason);
             Assert.AreEqual(29, s.Magazine);
         }
 
         [Test]
-        public void EmptyMagazineAsksForReloadAndReloadMovesReserve()
+        public void EmptyMagazineAsksForReloadAndReloadDrawsFromTheAmmoPool()
         {
             var w = WeaponCatalog.Get(WeaponCatalog.NeonPistol);
             var s = Fresh(w.id);
             s.Magazine = 0;
-            var d = WeaponRules.TryFire(ref s, w, 0f, true, true, false, true);
+            int pool = 48;
+            var d = WeaponRules.TryFire(ref s, w, 0f, true, true, false, true, pool);
             Assert.AreEqual(FireBlockReason.EmptyMagazine, d.Reason);
             Assert.IsTrue(d.ShouldAutoReload);
+            Assert.IsFalse(WeaponRules.TryFire(ref s, w, 0f, true, true, false, true, 0).ShouldAutoReload, "no spare ammo: no reload");
 
-            Assert.IsTrue(WeaponRules.TryStartReload(ref s, w, 0f));
-            Assert.AreEqual(FireBlockReason.Reloading, WeaponRules.TryFire(ref s, w, 0.5f, true, true, false, true).Reason);
-            Assert.IsFalse(WeaponRules.UpdateReload(ref s, w, 1.39f));
-            Assert.IsTrue(WeaponRules.UpdateReload(ref s, w, 1.4f));
+            Assert.IsTrue(WeaponRules.TryStartReload(ref s, w, 0f, pool));
+            Assert.AreEqual(FireBlockReason.Reloading, WeaponRules.TryFire(ref s, w, 0.5f, true, true, false, true, pool).Reason);
+            Assert.IsFalse(WeaponRules.UpdateReload(ref s, w, 1.39f, ref pool));
+            Assert.IsTrue(WeaponRules.UpdateReload(ref s, w, 1.4f, ref pool));
             Assert.AreEqual(12, s.Magazine);
-            Assert.AreEqual(48 - 12, s.Reserve);
+            Assert.AreEqual(48 - 12, pool);
         }
 
         [Test]
@@ -159,11 +161,11 @@ namespace WarOfNyx.Tests
             var w = WeaponCatalog.Get(WeaponCatalog.Nx7AssaultRifle);
             var s = Fresh(w.id);
             s.Magazine = 5;
-            s.Reserve = 10;
-            WeaponRules.TryStartReload(ref s, w, 0f);
-            WeaponRules.UpdateReload(ref s, w, 10f);
+            int pool = 10;
+            WeaponRules.TryStartReload(ref s, w, 0f, pool);
+            WeaponRules.UpdateReload(ref s, w, 10f, ref pool);
             Assert.AreEqual(15, s.Magazine);
-            Assert.AreEqual(0, s.Reserve);
+            Assert.AreEqual(0, pool);
         }
 
         [Test]
@@ -171,15 +173,14 @@ namespace WarOfNyx.Tests
         {
             var w = WeaponCatalog.Get(WeaponCatalog.Nx7AssaultRifle);
             var full = Fresh(w.id);
-            Assert.IsFalse(WeaponRules.TryStartReload(ref full, w, 0f), "magazine already full");
+            Assert.IsFalse(WeaponRules.TryStartReload(ref full, w, 0f, 90), "magazine already full");
 
             var dry = Fresh(w.id);
             dry.Magazine = 3;
-            dry.Reserve = 0;
-            Assert.IsFalse(WeaponRules.TryStartReload(ref dry, w, 0f), "no reserve ammo");
+            Assert.IsFalse(WeaponRules.TryStartReload(ref dry, w, 0f, 0), "no spare ammo");
 
             var knife = Fresh(WeaponCatalog.CombatKnife);
-            Assert.IsFalse(WeaponRules.TryStartReload(ref knife, WeaponCatalog.Get(WeaponCatalog.CombatKnife), 0f));
+            Assert.IsFalse(WeaponRules.TryStartReload(ref knife, WeaponCatalog.Get(WeaponCatalog.CombatKnife), 0f, 90));
         }
 
         [Test]
@@ -188,11 +189,12 @@ namespace WarOfNyx.Tests
             var w = WeaponCatalog.Get(WeaponCatalog.Nx7AssaultRifle);
             var s = Fresh(w.id);
             s.Magazine = 0;
-            WeaponRules.TryStartReload(ref s, w, 0f);
+            int pool = 90;
+            WeaponRules.TryStartReload(ref s, w, 0f, pool);
             WeaponRules.CancelReload(ref s);
-            WeaponRules.UpdateReload(ref s, w, 10f);
+            WeaponRules.UpdateReload(ref s, w, 10f, ref pool);
             Assert.AreEqual(0, s.Magazine);
-            Assert.AreEqual(90, s.Reserve);
+            Assert.AreEqual(90, pool);
         }
 
         [Test]
@@ -202,7 +204,7 @@ namespace WarOfNyx.Tests
             var s = Fresh(w.id);
             float first = WeaponRules.CurrentSpread(s, w, 0f, aiming: false);
             for (int i = 0; i < 10; i++)
-                WeaponRules.TryFire(ref s, w, i * 0.12f, true, false, false, true);
+                WeaponRules.TryFire(ref s, w, i * 0.12f, true, false, false, true, 90);
             float sustained = WeaponRules.CurrentSpread(s, w, 1.2f, false);
             Assert.Greater(sustained, first);
             Assert.LessOrEqual(sustained, w.hipSpread + w.maxBloom + 1e-4f);
@@ -388,7 +390,6 @@ namespace WarOfNyx.Tests
             Assert.AreEqual(3, slots.Length);
             Assert.AreEqual(WeaponCatalog.Nx7AssaultRifle, WeaponCatalog.Get(slots[0].WeaponId).id);
             Assert.AreEqual(30, slots[0].Magazine);
-            Assert.AreEqual(90, slots[0].Reserve);
             Assert.AreEqual(WeaponCatalog.NeonPistol, WeaponCatalog.Get(slots[1].WeaponId).id);
             Assert.AreEqual(WeaponCatalog.Katana, WeaponCatalog.Get(slots[2].WeaponId).id);
         }

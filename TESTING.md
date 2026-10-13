@@ -15,6 +15,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 72 `.cs` files under `Assets/` (Phase 4) | **0 syntax errors** | Parse only. New Fusion members checked against the 2.1.3 API reference |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 5 (adds `CombatRulesTests`) | **191 passed, 0 failed** | 47 new: catalog, fire rate, semi/auto/burst, pellets, ammo never spent on blocked shots, reload, spread/bloom, falloff, headshots, health/armor/protection, melee timing/arc, combat input, loadout, kill feed, dedup, aim geometry, weapon speed. Caught and fixed a real bloom-tuning bug |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 87 `.cs` files under `Assets/` (Phase 5) | **0 syntax errors** | Parse only. Lag-compensation / hitbox members checked against the Fusion 2.1.3 API reference |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 6 (adds `ItemsTests`; reload tests rewritten for the ammo pool) | **220 passed, 0 failed** | 29 new: loadout band over 1,000 seeds, packages, caps, capsule contents, single claim, rarity, pickups (fill, swap, melee, partial, refuse, armor), racing claim, healing (choice, channel, interrupt, cap, missing medkit) |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 95 `.cs` files under `Assets/` (Phase 6) | **0 syntax errors** | Parse only |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -145,3 +147,19 @@ Prerequisites: re-run **Run Project Setup**. It creates the weapon assets and **
 7. B reaches 0 → B's capsule topples, B sees **ELIMINATED – Eliminated by A with …**, both kill feeds show `A eliminated B with …` exactly once, and A can walk through B's body.
 8. Both clients agree on the result. The server log shows `Elimination #1: player X -> player Y`.
 9. Fairness: a client can't fire faster than the weapon allows, and spamming fire while reloading or switching does nothing.
+
+## Phase 6 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/ItemsTests.cs` | Every package can land in the power band; 1,000 generated loadouts all valid and inside the band, all six packages appear; deterministic seeds; spec package table; ammo and medkit caps; eliminated player drops everything (magazines kept); single claim; invalid indices; capsule rarity; full container; pickups: fill empty slot, swap active, melee to melee slot, partial ammo, full refused with nothing lost, armor better/worse; two players racing for one item → exactly one copy; medkit choice; channel/heal/consume; interrupted heal costs nothing; heal cap; can't use missing/unneeded medkits; spec medkit table | **29/29 pass** (.NET) |
+| `Tests/Multiplayer/NetworkStateTests.cs` (+2) | Inventory and loot slots survive the network round trip | Not run (needs Unity + Fusion) |
+
+## Manual test: loadouts and looting (Phase 6 acceptance)
+Prerequisites: re-run **Run Project Setup** (builds the LootCrate prefab).
+1. Two players start a match. Each spawns with a **different random package**. The server log shows `[Loadout] Shadow Runner (power 58): …`. The HUD shows e.g. `ARMOR L1  MEDKITS S1 M1 L0  LIGHT AMMO 80`, and slot 2 is empty.
+2. Take some damage, then press **H / MEDKIT**: `HEALING …%`. Sprinting or firing cancels it and keeps the medkit. Completing it heals (never above 100) and uses one medkit. At full health: "Health is already full."
+3. A eliminates B. A glowing capsule (colour = best item's rarity) appears where B fell, with a light beam.
+4. A walks up: `[E] OPEN LOOT – B (90s)`. E opens the panel with B's weapon (with its remaining magazine), ammo, medkits and armor.
+5. TAKE B's primary → it goes into A's empty slot 2 (or SWAP replaces the active weapon, and A's old weapon appears in the capsule). TAKE the ammo → the reserve increases. TAKE ALL → takes what fits.
+6. Concurrency: with a third player, both open the same capsule and click the same item at the same time → exactly one gets it, the other sees "Already taken."
+7. Walking away, Esc or CLOSE closes the panel. An empty capsule disappears. An untouched one disappears after 90 s (it blinks in the last 10 s).

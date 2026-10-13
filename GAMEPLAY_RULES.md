@@ -33,7 +33,7 @@ Values marked **[T]** are tunable starting points stored in ScriptableObjects or
 - VFX: blue‑purple portal, energy burst, landing, ground shockwave, spawn sound.
 
 ## 5. Starting loadouts (spec 7)
-Every player gets 1 primary + 1 melee + ammo + 1–2 medkits + Level 1 armor, chosen by the server from a **power budget**: each item has a power score and every loadout must land within ±10 % of the target **[T]**.
+Every player gets 1 primary + 1 melee + 2 magazines of spare ammo (by type) + 1–2 medkits + Level 1 armor, chosen by the server from a **power budget**: each item has a power score (weapons 10–31, Small/Standard medkit 4/7, armor L1 6) and every loadout must land within **58 ±10 % [T]**. The package is random, and the medkit mix (Small/Standard) is picked so the total fits. *(Implemented: `LoadoutGenerator`; verified over 1,000 seeds.)*
 
 | Package | Primary | Melee | Medkits |
 |---|---|---|---|
@@ -104,11 +104,13 @@ Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · H
 ## 10. Health, medkits, armor (spec 15) [T]
 - HP 100. Small medkit 25 HP / 2 s · Standard 50 / 4 s · Advanced 75 / 6 s. Healing is channeled; sprinting, attacking or firing interrupts it. Health never goes above max.
 - Armor L1/L2/L3 reduces weapon damage by 15/25/35 % **[T]**. It does **not** reduce zone or camping damage.
+- Carry limits [T]: Light/Rifle ammo 240, Shells 48, Marksman 60; up to 6 medkits of each size. The MEDKIT button uses the smallest kit that fully heals, otherwise the largest available. *(Implemented: `HealingRules`, `PlayerInventory`.)*
 
 ## 11. Elimination & loot (spec 14)
 - At 0 HP the server confirms the elimination. It records the killer and source, updates the alive count and kill stats, spawns a **loot capsule** with the victim's whole inventory (keeping ammo counts and weapon state), announces it, and moves the victim to spectate or results.
 - Capsule color shows the best item: Common white, Uncommon green, Rare blue, Epic purple, Legendary gold.
 - Claims are **atomic on the server**: the first valid claim wins and nothing is ever duplicated. Capsules disappear after **90 s [T]** or when empty.
+- Taking: weapons fill an empty matching slot, otherwise SWAP replaces the active ranged weapon (or the melee weapon), and the old one goes back into the capsule. TAKE ALL only fills empty weapon slots. Ammo and medkits stack up to the carry limits, and the rest stays in the capsule. Armor is taken only if better (the old armor goes into the capsule). Reach 3 m (the server allows 3.75 m). Weapon and ammo pickups end spawn protection. *(Implemented: `LootContainer`, `InventoryRules`, `NetworkLootCrate`, `NetworkCombat.RPC_TakeLoot`.)*
 
 ## 12. Victory (spec 21)
 - The last living competitor wins, decided by the server only.

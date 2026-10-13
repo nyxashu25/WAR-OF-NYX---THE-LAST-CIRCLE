@@ -104,3 +104,10 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Damage:** only `NetworkCombat.ReceiveDamage` (server) changes health. It checks spawn protection and armor. Eliminations record killer, weapon and headshot, increment kills, and broadcast one feed event.
 - **Never trusted from clients:** hits, damage, ammo counts, reload completion, fire timing, speed multipliers, kills.
 - `NetworkProtocol.Version` = **5**.
+
+## Phase 6: inventory and loot (code written, not yet run)
+- **Networked state:** `NetworkCombat.Inv` (ammo ×4, medkits ×3, armor) and heal channel (type, start, end). Capsules: `NetworkLootCrate` holds 12 fixed item slots in one struct, plus expiry, highest rarity and owner name.
+- **Server-only:** loadout rolls (`LoadoutGenerator`, per-player seed), dropping loot on elimination (items are *moved*: slots and inventory are cleared in the same step), every claim (`RPC_TakeLoot` → re-check alive, capsule exists, ≤ 3.75 m, item still there → `LootContainer.TryTake` → `InventoryRules.ApplyPickup` → swapped/remaining items back into the same slot). Claims are processed one after another on the server, so the same item can never be granted twice.
+- **Client-only:** proximity prompt, loot panel, comparisons. These are views of replicated state, and buttons only send requests.
+- **Prediction:** reload/medkit timing is predicted by the owner like the rest of combat. Loot results arrive from the server (`RPC_LootResult`).
+- `NetworkProtocol.Version` = **6**.

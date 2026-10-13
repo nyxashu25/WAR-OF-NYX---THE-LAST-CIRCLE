@@ -3,9 +3,12 @@ using Fusion;
 using UnityEngine;
 using WarOfNyx.Combat;
 using WarOfNyx.Core.Combat;
+using WarOfNyx.Core.Items;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Gameplay;
 using WarOfNyx.Gameplay.Effects;
+using WarOfNyx.UI.Common;
+using WarOfNyx.UI.Hud;
 
 namespace WarOfNyx.Networking
 {
@@ -46,7 +49,10 @@ namespace WarOfNyx.Networking
 
         [Networked] public float Health { get; set; }
         [Networked] public float MaxHealth { get; set; }
-        [Networked] public byte ArmorLevel { get; set; }
+        [Networked] public NetworkInventory Inv { get; set; }
+        [Networked] private byte HealType { get; set; }
+        [Networked] private float HealStartedAt { get; set; }
+        [Networked] private float HealEndsAt { get; set; }
         [Networked] public NetworkBool Alive { get; set; }
         [Networked] public int Kills { get; set; }
         [Networked] public float DamageDealt { get; set; }
@@ -97,21 +103,30 @@ namespace WarOfNyx.Networking
 
         // ------------------------------------------------------------------ spawn
 
-        /// <summary>Server only, before spawn: full health and the Phase 5 development loadout.</summary>
-        public void InitializeSpawn()
+        /// <summary>
+        /// Server only, before spawn: full health and a randomized, power-budgeted starting loadout
+        /// (spec 7): primary + melee + spare ammo + 1-2 medkits + Level 1 armor.
+        /// </summary>
+        public void InitializeSpawn(int loadoutSeed)
         {
             MaxHealth = NetworkPlayer.DefaultMaxHealth;
             Health = MaxHealth;
-            ArmorLevel = 0; // Phase 6 loadouts grant Level 1 armor
             Alive = true;
             Kills = 0;
             DamageDealt = 0f;
             EliminatedBy = PlayerRef.None;
             EliminatedByWeapon = WeaponCatalog.NoWeapon;
+            HealEndsAt = 0f;
 
+            var budget = App.AppServices.IsInitialized ? App.AppServices.Config.loadoutBudget : new LoadoutBudget();
+            var loadout = LoadoutGenerator.Generate(loadoutSeed, budget, WeaponRegistry.Get);
             for (int i = 0; i < CombatLoadout.SlotCount; i++)
-                SetSlot(i, WeaponRegistry.CreateState(WeaponCatalog.NetworkIdOf(CombatLoadout.DevelopmentLoadout[i])));
+                SetSlot(i, loadout.Slots[i]);
+            Inv = NetworkInventory.From(loadout.Inventory);
             ActiveSlot = 0;
+            Debug.Log($"[WarOfNyx][Loadout] {loadout.Package.Name} (power {loadout.Power:0}): " +
+                      $"{WeaponRegistry.DisplayName(loadout.Slots[0].WeaponId)} + {WeaponRegistry.DisplayName(loadout.Slots[2].WeaponId)}, " +
+                      $"medkits S{loadout.Inventory.SmallMedkits}/M{loadout.Inventory.StandardMedkits}, armor L{loadout.Inventory.ArmorLevel}");
         }
 
         public override void Spawned()
@@ -125,7 +140,7 @@ namespace WarOfNyx.Networking
 
         // ------------------------------------------------------------------ simulation (server + predicting owner)
 
-        public void Simulate(in CombatCommand cmd, float yaw, float pitch, bool aiming, bool lowStance, bool unlocked)
+        public void Simulate(in CombatCommand cmd, float yaw, float pitch, bool aiming, bool lowStance, bool sprinting, bool unlocked)
         {
             ApplyLifeState();
             if (!Alive)
@@ -138,6 +153,9 @@ namespace WarOfNyx.Networking
 
             float now = Runner.SimulationTime;
             int active = ActiveSlot;
+            var inventory = Inv.ToInventory();
+            var heal = new HealState { Type = (MedkitType)HealType, StartedAt = HealStartedAt, EndsAt = HealEndsAt };
+            bool attacked = false;
 
             // Weapon switching (1/2/3 or next).
             int target = CombatLoadout.ResolveSwitch(active, cmd, i => !GetSlot(i).ToState().IsEmptySlot);
@@ -154,45 +172,76 @@ namespace WarOfNyx.Networking
 
             var state = GetSlot(active).ToState();
             var weapon = WeaponRegistry.Get(state.WeaponId);
-            if (weapon == null)
-                return;
-
-            WeaponRules.UpdateReload(ref state, weapon, now);
-            if (cmd.ReloadPressed && WeaponRules.TryStartReload(ref state, weapon, now))
-                ReloadCount++;
-
-            // Melee: the melee button always swings the melee slot; with the melee weapon out, fire swings too.
-            var melee = new MeleeState { SwingStartedAt = MeleeSwingStartedAt, NextSwingAt = MeleeNextSwingAt, SwingCount = MeleeSwingCount };
-            var meleeWeapon = WeaponRegistry.Get(GetSlot(CombatLoadout.MeleeSlot).WeaponId);
-            bool wantsMelee = cmd.MeleePressed || (weapon.IsMelee && cmd.FirePressed);
-            if (wantsMelee && now >= SwitchReadyAt && meleeWeapon != null && MeleeRules.TryStartSwing(ref melee, meleeWeapon, now))
+            if (weapon != null)
             {
-                _player.OnAggressiveAction(AggressiveAction.MeleeAttack); // before resolving: protection never covers an attack
-                WeaponRules.CancelReload(ref state);
-                if (IsPredictedForward)
-                    _rig?.PlaySwing();
-            }
-            if (meleeWeapon != null && MeleeRules.TryResolve(ref melee, meleeWeapon, now) && HasStateAuthority)
-                ResolveMelee(meleeWeapon, yaw);
-
-            // Firearms. Phase 7 supplies the inside-the-circle flag (spec 11); until then always allowed.
-            if (weapon.IsRanged && now >= SwitchReadyAt && !melee.InProgress)
-            {
-                var decision = WeaponRules.TryFire(ref state, weapon, now, cmd.FireHeld, cmd.FirePressed, aiming, firearmsAllowed: true);
-                if (decision.Fired)
+                // Reload draws from the inventory's ammo of this weapon's type.
+                if (weapon.IsRanged)
                 {
-                    _player.OnAggressiveAction(AggressiveAction.FiredWeapon);
-                    ShotCount++;
-                    FireShot(weapon, decision, yaw, pitch, lowStance);
+                    int pool = inventory.GetAmmo(weapon.ammoType);
+                    if (WeaponRules.UpdateReload(ref state, weapon, now, ref pool))
+                        inventory.SetAmmo(weapon.ammoType, pool);
+                    if (cmd.ReloadPressed && WeaponRules.TryStartReload(ref state, weapon, now, pool))
+                        ReloadCount++;
                 }
-                if (decision.ShouldAutoReload && WeaponRules.TryStartReload(ref state, weapon, now))
-                    ReloadCount++;
+
+                // Melee: the melee button always swings the melee slot; with the melee weapon out, fire swings too.
+                var melee = new MeleeState { SwingStartedAt = MeleeSwingStartedAt, NextSwingAt = MeleeNextSwingAt, SwingCount = MeleeSwingCount };
+                var meleeWeapon = WeaponRegistry.Get(GetSlot(CombatLoadout.MeleeSlot).WeaponId);
+                bool wantsMelee = cmd.MeleePressed || (weapon.IsMelee && cmd.FirePressed);
+                if (wantsMelee && now >= SwitchReadyAt && meleeWeapon != null && MeleeRules.TryStartSwing(ref melee, meleeWeapon, now))
+                {
+                    _player.OnAggressiveAction(AggressiveAction.MeleeAttack); // before resolving: protection never covers an attack
+                    WeaponRules.CancelReload(ref state);
+                    attacked = true;
+                    if (IsPredictedForward)
+                        _rig?.PlaySwing();
+                }
+                if (meleeWeapon != null && MeleeRules.TryResolve(ref melee, meleeWeapon, now) && HasStateAuthority)
+                    ResolveMelee(meleeWeapon, yaw);
+
+                // Firearms. Phase 7 supplies the inside-the-circle flag (spec 11); until then always allowed.
+                if (weapon.IsRanged && now >= SwitchReadyAt && !melee.InProgress)
+                {
+                    int pool = inventory.GetAmmo(weapon.ammoType);
+                    var decision = WeaponRules.TryFire(ref state, weapon, now, cmd.FireHeld, cmd.FirePressed, aiming,
+                        firearmsAllowed: true, reserveAvailable: pool);
+                    if (decision.Fired)
+                    {
+                        _player.OnAggressiveAction(AggressiveAction.FiredWeapon);
+                        ShotCount++;
+                        attacked = true;
+                        FireShot(weapon, decision, yaw, pitch, lowStance);
+                    }
+                    if (decision.ShouldAutoReload && WeaponRules.TryStartReload(ref state, weapon, now, pool))
+                        ReloadCount++;
+                }
+
+                MeleeSwingStartedAt = melee.SwingStartedAt;
+                MeleeNextSwingAt = melee.NextSwingAt;
+                MeleeSwingCount = melee.SwingCount;
             }
+
+            // Medkits (spec 15): channelled; sprinting or attacking interrupts; consumed only on completion.
+            if (heal.Active && (attacked || sprinting))
+                HealingRules.Interrupt(ref heal);
+            var health = new HealthState { Health = Health, MaxHealth = MaxHealth, ArmorLevel = inventory.ArmorLevel, Alive = Alive };
+            if (cmd.MedkitPressed && !heal.Active)
+            {
+                var choice = HealingRules.ChooseMedkit(inventory, MaxHealth - Health);
+                var reason = choice.HasValue
+                    ? HealingRules.TryStart(ref heal, inventory, choice.Value, health, now)
+                    : HealBlockReason.NoMedkit;
+                if (reason != HealBlockReason.None && IsPredictedForward)
+                    LocalMessage(reason == HealBlockReason.FullHealth ? "Health is already full." : "No medkits.");
+            }
+            if (HealingRules.TryComplete(ref heal, ref inventory, ref health, now) > 0f)
+                Health = health.Health;
 
             SetSlot(active, state);
-            MeleeSwingStartedAt = melee.SwingStartedAt;
-            MeleeNextSwingAt = melee.NextSwingAt;
-            MeleeSwingCount = melee.SwingCount;
+            Inv = NetworkInventory.From(inventory);
+            HealType = (byte)heal.Type;
+            HealStartedAt = heal.StartedAt;
+            HealEndsAt = heal.EndsAt;
         }
 
         private bool IsPredictedForward => HasInputAuthority && Runner.IsForward;
@@ -321,7 +370,7 @@ namespace WarOfNyx.Networking
             if (!HasStateAuthority)
                 return default;
 
-            var health = new HealthState { Health = Health, MaxHealth = MaxHealth, ArmorLevel = ArmorLevel, Alive = Alive };
+            var health = new HealthState { Health = Health, MaxHealth = MaxHealth, ArmorLevel = Inv.ArmorLevel, Alive = Alive };
             var result = HealthRules.ApplyDamage(ref health, amount, kind, _player.IsSpawnProtected);
             Health = health.Health;
 
@@ -333,9 +382,118 @@ namespace WarOfNyx.Networking
                 Alive = false;
                 EliminatedBy = attacker;
                 EliminatedByWeapon = weaponId;
+                HealEndsAt = 0f;
                 ApplyLifeState();
+                DropLoot();
             }
             return result;
+        }
+
+        /// <summary>
+        /// Server: move everything this player carried into a loot capsule at the body (spec 14).
+        /// Items are MOVED: the player's slots and inventory are cleared in the same step, so
+        /// nothing can be duplicated.
+        /// </summary>
+        private void DropLoot()
+        {
+            var slots = new[] { Slot0.ToState(), Slot1.ToState(), Slot2.ToState() };
+            var contents = LootContainer.FromEliminated(slots, Inv.ToInventory());
+            for (int i = 0; i < CombatLoadout.SlotCount; i++)
+                SetSlot(i, WeaponState.Empty);
+            Inv = default;
+
+            var crate = NetworkLootCrate.SpawnFor(Runner, transform.position, contents, _player.PlayerName);
+            if (crate != null)
+                Debug.Log($"[WarOfNyx][Loot] {_player.PlayerName} dropped a capsule with {contents.Count} items.");
+        }
+
+        // ------------------------------------------------------------------ looting (server-validated)
+
+        /// <summary>
+        /// Owner → server: take one item (index 0-11) or everything that fits (index -1) from a capsule.
+        /// The server re-checks: alive, capsule exists, within reach, item still there. Claims run one
+        /// at a time on the server, so two players can never both get the same item.
+        /// </summary>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        public void RPC_TakeLoot(NetworkId crateId, int index)
+        {
+            if (!Alive)
+                return;
+            if (!Runner.TryFindObject(crateId, out var obj) || !obj.TryGetComponent<NetworkLootCrate>(out var crate))
+            {
+                RPC_LootResult("That capsule is gone.");
+                return;
+            }
+            if ((crate.transform.position - transform.position).sqrMagnitude > NetworkLootCrate.ServerRange * NetworkLootCrate.ServerRange)
+            {
+                RPC_LootResult("Too far away.");
+                return;
+            }
+
+            var container = crate.ToContainer();
+            var slots = new[] { Slot0.ToState(), Slot1.ToState(), Slot2.ToState() };
+            var inventory = Inv.ToInventory();
+            string message = null;
+            int taken = 0;
+
+            int first = index >= 0 ? index : 0;
+            int last = index >= 0 ? index : LootContainer.Capacity - 1;
+            for (int i = first; i <= last; i++)
+            {
+                if (!container.TryTake(i, out var item))
+                {
+                    if (index >= 0)
+                        message = "Already taken.";
+                    continue;
+                }
+
+                // TAKE ALL never swaps weapons away; it only fills empty weapon slots.
+                if (index < 0 && item.Kind == LootKind.Weapon)
+                {
+                    int target = InventoryRules.TargetSlot(slots, ActiveSlot, WeaponRegistry.Get(item.WeaponId));
+                    if (target < 0 || !slots[target].IsEmptySlot)
+                    {
+                        container.Put(i, item);
+                        continue;
+                    }
+                }
+
+                var outcome = InventoryRules.ApplyPickup(ref inventory, slots, ActiveSlot, item, WeaponRegistry.Get);
+                if (!outcome.ReturnToContainer.IsEmpty)
+                    container.Put(i, outcome.ReturnToContainer);
+                if (outcome.Result != PickupResult.Refused)
+                {
+                    taken++;
+                    if (outcome.IsCombatItem)
+                        _player.OnAggressiveAction(AggressiveAction.PickedUpCombatItem); // spec 6: ends spawn protection
+                }
+                message = outcome.Message;
+            }
+
+            for (int i = 0; i < CombatLoadout.SlotCount; i++)
+                SetSlot(i, slots[i]);
+            if (GetSlot(ActiveSlot).ToState().IsEmptySlot)
+                ActiveSlot = (byte)(slots[0].IsEmptySlot ? CombatLoadout.MeleeSlot : 0);
+            Inv = NetworkInventory.From(inventory);
+            crate.Store(container);
+
+            if (index < 0)
+                message = taken > 0 ? $"Took {taken} item{(taken == 1 ? string.Empty : "s")}." : "Nothing you can carry.";
+            RPC_LootResult(message ?? string.Empty);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        public void RPC_LootResult(string message)
+        {
+            if (!string.IsNullOrEmpty(message))
+                LocalMessage(message);
+        }
+
+        private static void LocalMessage(string message)
+        {
+            var arena = OnlineArenaController.Instance;
+            if (arena != null && arena.Hud != null)
+                arena.Hud.ShowMessage(message);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -459,30 +617,184 @@ namespace WarOfNyx.Networking
         {
             var arena = OnlineArenaController.Instance;
             var hud = arena != null ? arena.Hud : null;
-            if (hud == null || weapon == null)
+            if (hud == null)
                 return;
 
             float now = Runner.SimulationTime;
+            var inventory = Inv.ToInventory();
+            bool ranged = weapon != null && weapon.IsRanged;
+            int spare = ranged ? inventory.GetAmmo(weapon.ammoType) : 0;
+
             hud.SetVitals(Health, MaxHealth);
-            hud.SetWeapon(weapon.displayName, weapon.IsRanged, state.Magazine, state.Reserve, WeaponRules.ReloadProgress(state, weapon, now));
+            hud.SetWeapon(weapon != null ? weapon.displayName : "Unarmed", ranged, state.Magazine, spare,
+                weapon != null ? WeaponRules.ReloadProgress(state, weapon, now) : 0f);
+            hud.SetInventory($"ARMOR L{inventory.ArmorLevel}     MEDKITS  S{inventory.SmallMedkits}  M{inventory.StandardMedkits}  L{inventory.AdvancedMedkits}     " +
+                             (ranged ? AmmoInfo.DisplayName(weapon.ammoType).ToUpperInvariant() + " " + spare : string.Empty));
+            var heal = new HealState { Type = (MedkitType)HealType, StartedAt = HealStartedAt, EndsAt = HealEndsAt };
+            hud.SetHealing(HealingRules.Progress(heal, now), Medkits.DisplayName(heal.Type));
             hud.SetSlots(WeaponRegistry.DisplayName(Slot0.WeaponId), WeaponRegistry.DisplayName(Slot1.WeaponId),
                 WeaponRegistry.DisplayName(Slot2.WeaponId), ActiveSlot);
 
             var cam = Camera.main;
-            bool aiming = _player.LocalAimHeld;
-            float spread = weapon.IsRanged ? WeaponRules.CurrentSpread(state, weapon, now, aiming) : 0.5f;
+            float spread = ranged ? WeaponRules.CurrentSpread(state, weapon, now, _player.LocalAimHeld) : 0.5f;
             hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, Alive);
 
             if (!Alive)
-            {
-                string killer = NameOf(EliminatedBy);
-                hud.ShowEliminated(killer, WeaponRegistry.DisplayName(EliminatedByWeapon));
-            }
+                hud.ShowEliminated(NameOf(EliminatedBy), WeaponRegistry.DisplayName(EliminatedByWeapon));
             else
-            {
                 hud.HideEliminated();
-            }
+
+            UpdateLocalLoot(arena, hud);
         }
+
+        // ------------------------------------------------------------------ local loot interaction (client UI only)
+
+        private NetworkLootCrate _nearbyCrate;
+        private NetworkLootCrate _openCrate;
+        private bool _lootHooked;
+        private readonly List<LootEntryView> _lootEntries = new List<LootEntryView>();
+
+        private void HookLootUi(OnlineArenaController arena)
+        {
+            if (_lootHooked || arena.Loot == null)
+                return;
+            _lootHooked = true;
+            var router = GetComponent<Characters.PlayerInputRouter>();
+            router.InteractPressed += OnInteractPressed;
+            arena.Loot.TakeRequested += i => { if (_openCrate != null) RPC_TakeLoot(_openCrate.Object.Id, i); };
+            arena.Loot.TakeAllRequested += () => { if (_openCrate != null) RPC_TakeLoot(_openCrate.Object.Id, -1); };
+            arena.Loot.CloseRequested += CloseLoot;
+            arena.ModalCloseRequested += CloseLoot;
+        }
+
+        private void OnInteractPressed()
+        {
+            var arena = OnlineArenaController.Instance;
+            if (arena == null || arena.MenuOpen || !HasInputAuthority)
+                return;
+            if (_openCrate != null)
+                CloseLoot();
+            else if (_nearbyCrate != null && Alive)
+                OpenLoot(_nearbyCrate);
+        }
+
+        private void OpenLoot(NetworkLootCrate crate)
+        {
+            var arena = OnlineArenaController.Instance;
+            _openCrate = crate;
+            arena.Loot.Open(crate.OwnerName.Value.ToUpperInvariant() + " - LOOT CAPSULE");
+            arena.SetModalOpen(true);
+        }
+
+        private void CloseLoot()
+        {
+            var arena = OnlineArenaController.Instance;
+            _openCrate = null;
+            if (arena == null)
+                return;
+            if (arena.Loot != null)
+                arena.Loot.Close();
+            arena.SetModalOpen(false);
+        }
+
+        private void UpdateLocalLoot(OnlineArenaController arena, CombatHud hud)
+        {
+            HookLootUi(arena);
+
+            // Nearest capsule within reach (client-side, for the prompt only; the server re-checks).
+            _nearbyCrate = null;
+            float best = NetworkLootCrate.InteractRange * NetworkLootCrate.InteractRange;
+            if (Alive)
+            {
+                foreach (var crate in NetworkLootCrate.Active)
+                {
+                    if (crate == null)
+                        continue;
+                    float d = (crate.transform.position - transform.position).sqrMagnitude;
+                    if (d <= best)
+                    {
+                        best = d;
+                        _nearbyCrate = crate;
+                    }
+                }
+            }
+
+            if (_openCrate != null && (_openCrate != _nearbyCrate || !Alive))
+                CloseLoot(); // walked away, capsule emptied/expired, or eliminated
+
+            string key = Application.isMobilePlatform ? "USE" : "E";
+            hud.SetPrompt(_nearbyCrate != null && _openCrate == null
+                ? $"[{key}] OPEN LOOT - {_nearbyCrate.OwnerName.Value}  ({Mathf.CeilToInt(_nearbyCrate.SecondsLeft)}s)"
+                : string.Empty);
+
+            if (_openCrate != null && arena.Loot != null)
+                RefreshLootPanel(arena.Loot);
+        }
+
+        private void RefreshLootPanel(LootPanel panel)
+        {
+            var slots = new[] { Slot0.ToState(), Slot1.ToState(), Slot2.ToState() };
+            var inventory = Inv.ToInventory();
+            _lootEntries.Clear();
+
+            for (int i = 0; i < LootContainer.Capacity; i++)
+            {
+                var item = _openCrate.Get(i);
+                var view = new LootEntryView { Enabled = true, Action = "TAKE" };
+                switch (item.Kind)
+                {
+                    case LootKind.Weapon:
+                    {
+                        var stats = WeaponRegistry.Get(item.WeaponId);
+                        if (stats == null)
+                            break;
+                        view.Name = stats.displayName;
+                        view.Color = RarityColors.For(stats.rarity);
+                        int target = InventoryRules.TargetSlot(slots, ActiveSlot, stats);
+                        var current = target >= 0 ? WeaponRegistry.Get(slots[target].WeaponId) : null;
+                        string ammo = stats.IsRanged
+                            ? $"{item.Magazine}/{stats.magazineSize} loaded, {AmmoInfo.DisplayName(stats.ammoType)}"
+                            : "Melee";
+                        view.Detail = current != null
+                            ? $"{ammo}  |  replaces {current.displayName} ({current.damage:0} -> {stats.damage:0} dmg)"
+                            : $"{ammo}  |  {stats.damage:0} dmg";
+                        view.Action = current != null ? $"SWAP [{target + 1}]" : "TAKE";
+                        break;
+                    }
+                    case LootKind.Ammo:
+                        view.Name = AmmoInfo.DisplayName(item.Ammo);
+                        view.Color = RarityColors.For(Rarity.Common);
+                        view.Detail = $"x{item.Count}  (you carry {inventory.GetAmmo(item.Ammo)}/{AmmoInfo.Cap(item.Ammo)})";
+                        view.Enabled = inventory.GetAmmo(item.Ammo) < AmmoInfo.Cap(item.Ammo);
+                        view.Action = view.Enabled ? "TAKE" : "FULL";
+                        break;
+                    case LootKind.Medkit:
+                        view.Name = Medkits.DisplayName(item.Medkit);
+                        view.Color = RarityColors.For(Medkits.RarityOf(item.Medkit));
+                        view.Detail = $"x{item.Count}  (+{Medkits.HealAmount(item.Medkit):0} HP, {Medkits.UseSeconds(item.Medkit):0}s)";
+                        view.Enabled = inventory.GetMedkits(item.Medkit) < Medkits.MaxPerType;
+                        view.Action = view.Enabled ? "TAKE" : "FULL";
+                        break;
+                    case LootKind.Armor:
+                        view.Name = ArmorInfo.DisplayName(item.ArmorLevel);
+                        view.Color = RarityColors.For(ArmorInfo.RarityOf(item.ArmorLevel));
+                        view.Detail = $"you wear Level {inventory.ArmorLevel}";
+                        view.Enabled = item.ArmorLevel > inventory.ArmorLevel;
+                        view.Action = view.Enabled ? (inventory.ArmorLevel > 0 ? "SWAP" : "EQUIP") : "OWNED";
+                        break;
+                }
+                _lootEntries.Add(view);
+            }
+
+            panel.SetEntries(_lootEntries);
+            panel.SetInventorySummary(
+                $"YOU: [1] {Display(slots[0])}  [2] {Display(slots[1])}  [3] {Display(slots[2])}\n" +
+                $"Armor L{inventory.ArmorLevel}   Medkits S{inventory.SmallMedkits} M{inventory.StandardMedkits} L{inventory.AdvancedMedkits}   " +
+                $"Ammo L{inventory.LightAmmo} R{inventory.RifleAmmo} S{inventory.ShellAmmo} M{inventory.MarksmanAmmo}   " +
+                $"Capsule closes in {Mathf.CeilToInt(_openCrate.SecondsLeft)}s");
+        }
+
+        private static string Display(in WeaponState s) => s.IsEmptySlot ? "-" : WeaponRegistry.DisplayName(s.WeaponId);
 
         private string NameOf(PlayerRef player)
         {

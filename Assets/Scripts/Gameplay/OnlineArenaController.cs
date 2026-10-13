@@ -32,6 +32,15 @@ namespace WarOfNyx.Gameplay
         /// <summary>Combat HUD for the local player (null on the dedicated server).</summary>
         public CombatHud Hud { get; private set; }
 
+        /// <summary>Loot capsule panel for the local player (null on the dedicated server).</summary>
+        public LootPanel Loot { get; private set; }
+
+        private bool _modalOpen;
+
+        public event Action ModalCloseRequested;
+
+        public bool MenuOpen => _menuOpen;
+
         private readonly List<IDisposable> _subscriptions = new List<IDisposable>();
         private PlayerMovement _localMovement;
         private PlayerInputRouter _localRouter;
@@ -72,7 +81,14 @@ namespace WarOfNyx.Gameplay
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             BuildHud();
             Hud = CombatHud.Create(transform);
-            _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ => ToggleMenu()));
+            Loot = LootPanel.Create(transform);
+            _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ =>
+            {
+                if (_modalOpen)
+                    ModalCloseRequested?.Invoke(); // Esc / Android back closes the loot panel first
+                else
+                    ToggleMenu();
+            }));
 
             if (OnlineServices.Session == null || OnlineServices.Session.State != OnlineSessionState.Running)
                 _status.text = "NOT CONNECTED - open this scene from the main menu (ONLINE).";
@@ -192,12 +208,25 @@ namespace WarOfNyx.Gameplay
             _protection.text = _protectionRemaining > 0f ? $"SPAWN PROTECTION  {_protectionRemaining:0.0}s" : string.Empty;
         }
 
+        /// <summary>
+        /// A modal panel (loot) is open: free the cursor and pause local input (the match keeps running).
+        /// </summary>
+        public void SetModalOpen(bool open)
+        {
+            if (_modalOpen == open)
+                return;
+            _modalOpen = open;
+            if (_localRouter != null)
+                _localRouter.InputEnabled = !open && !_menuOpen;
+            UpdateCursor();
+        }
+
         private void ToggleMenu()
         {
             _menuOpen = !_menuOpen;
             _menuPanel.SetActive(_menuOpen);
             if (_localRouter != null)
-                _localRouter.InputEnabled = !_menuOpen; // neutral input; the match keeps running
+                _localRouter.InputEnabled = !_menuOpen && !_modalOpen; // neutral input; the match keeps running
             if (EventSystem.current != null)
                 EventSystem.current.SetSelectedGameObject(null);
             UpdateCursor();
@@ -219,7 +248,7 @@ namespace WarOfNyx.Gameplay
 
         private void UpdateCursor()
         {
-            bool capture = !_menuOpen && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
+            bool capture = !_menuOpen && !_modalOpen && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
             Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !capture;
         }

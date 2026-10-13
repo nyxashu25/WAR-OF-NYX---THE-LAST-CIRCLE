@@ -37,6 +37,7 @@ namespace WarOfNyx.Core.Combat
         public WeaponCategory category = WeaponCategory.Ranged;
         public FireMode fireMode = FireMode.Auto;
         public AmmoType ammoType = AmmoType.Rifle;
+        public WarOfNyx.Core.Items.Rarity rarity = WarOfNyx.Core.Items.Rarity.Common;
 
         // ---- Damage ----
         public float damage = 20f;
@@ -55,7 +56,7 @@ namespace WarOfNyx.Core.Combat
         /// <summary>Trigger cycles per second (for Burst: bursts per second).</summary>
         public float roundsPerSecond = 9f;
         public int magazineSize = 30;
-        /// <summary>Reserve ammunition granted with the weapon (Phase 6 moves reserves into the inventory by ammo type).</summary>
+        /// <summary>Spare ammunition (of <see cref="ammoType"/>) added to the inventory when this is a starting weapon.</summary>
         public int startingReserve = 90;
         public float reloadSeconds = 2f;
         public int burstCount = 3;

@@ -9,7 +9,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | **Code written; core networking 35/35 tests pass under .NET; needs Fusion SDK + App ID + Unity to run.** Gate: nothing advanced until the two-client test passes |
 | 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | **Code written; match lifecycle, spawn planner, protection and queue: 40 tests pass under .NET; Unity/Fusion side not yet run** |
 | 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | **Code written; combat rules 47 tests pass under .NET; Unity/Fusion side not yet run** |
-| 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | Not started |
+| 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | **Code written; item rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | Not started |
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | Not started |
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | Not started |
@@ -96,3 +96,15 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [ ] **Run the two-player elimination test (TESTING.md)** ← needs the project owner (Unity + Fusion + App ID)
 - [ ] Combat in the offline Practice Arena: arrives with the local authoritative simulation (9G)
 - [ ] Automated multi-peer test: deferred to Phase 13 (needs Fusion multi-peer configuration; see KNOWN_ISSUES)
+
+## Phase 6 checklist
+- [x] Item model: rarity (Common–Legendary), ammo by type with caps, medkits S/M/L (25/50/75 HP, 2/4/6 s), armor L1–3; player inventory as a networked value type
+- [x] Randomized starting loadouts: the six spec packages, medkit mix chosen so every loadout lands inside a ±10 % power band (verified over 1,000 seeds); primary + melee + spare ammo + 1–2 medkits + Level 1 armor
+- [x] Spare ammo moved from weapons into the inventory by ammo type (reload draws from it)
+- [x] Medkits: channelled, interrupted by sprinting or attacking, consumed only on completion, never above max health; MEDKIT picks the best-fitting kit
+- [x] Elimination capsules: everything the player carried (weapons keep magazines), rarity colour, 90 s lifetime, despawn when empty
+- [x] Looting: TAKE / SWAP per item (with weapon comparison), TAKE ALL (never swaps weapons away), armor only if better, partial stacks; server re-checks distance and availability; atomic one-at-a-time claims (no duplication, verified)
+- [x] Weapon / ammo pickups end spawn protection
+- [x] UI: loot panel, inventory line, healing progress, prompts and result messages; USE / MEDKIT touch buttons live
+- [ ] **Run the loot test in TESTING.md** ← needs the project owner
+- [ ] World loot (crates around the map) is not in the MVP list. Only elimination capsules exist.

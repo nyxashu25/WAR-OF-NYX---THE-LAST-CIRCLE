@@ -64,7 +64,7 @@ namespace WarOfNyx.Tests.Multiplayer
         {
             var state = new WarOfNyx.Core.Combat.WeaponState
             {
-                WeaponId = 4, Magazine = 17, Reserve = 51, NextFireAt = 12.5f, ReloadEndsAt = 13.25f,
+                WeaponId = 4, Magazine = 17, NextFireAt = 12.5f, ReloadEndsAt = 13.25f,
                 BurstRemaining = 2, NextBurstShotAt = 12.57f, Bloom = 1.4f, BloomUpdatedAt = 12.4f, ShotsFired = 93,
             };
             Assert.AreEqual(state, NetworkWeaponSlot.From(state).ToState());
@@ -76,6 +76,30 @@ namespace WarOfNyx.Tests.Multiplayer
             var combat = new WarOfNyx.Core.Combat.CombatCommand { FireHeld = true, ReloadPressed = true, SelectSlot = 3 };
             var data = NetworkInputData.From(new MovementCommand { MoveY = 1f }, combat);
             Assert.AreEqual(combat, data.ToCombat());
+        }
+
+        [Test]
+        public void InventorySurvivesTheNetworkRoundTrip()
+        {
+            var inv = new WarOfNyx.Core.Items.PlayerInventory
+            {
+                LightAmmo = 120, RifleAmmo = 60, ShellAmmo = 12, MarksmanAmmo = 20,
+                SmallMedkits = 2, StandardMedkits = 1, AdvancedMedkits = 3, ArmorLevel = 2,
+            };
+            Assert.AreEqual(inv, NetworkInventory.From(inv).ToInventory());
+        }
+
+        [Test]
+        public void LootSlotsSurviveTheNetworkRoundTrip()
+        {
+            var items = new NetworkLootItems();
+            var weapon = WarOfNyx.Core.Items.LootItem.Weapon(new WarOfNyx.Core.Combat.WeaponState { WeaponId = 3, Magazine = 7 });
+            var ammo = WarOfNyx.Core.Items.LootItem.AmmoStack(WarOfNyx.Core.Combat.AmmoType.Shell, 18);
+            items.Set(0, NetworkLootItem.From(weapon));
+            items.Set(11, NetworkLootItem.From(ammo));
+            Assert.AreEqual(weapon, items.Get(0).ToItem());
+            Assert.AreEqual(ammo, items.Get(11).ToItem());
+            Assert.IsTrue(items.Get(5).ToItem().IsEmpty);
         }
     }
 }

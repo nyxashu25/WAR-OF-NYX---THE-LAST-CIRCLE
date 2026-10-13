@@ -13,6 +13,8 @@ namespace WarOfNyx.Core.Combat
         /// <summary>0 = none, 1..3 = select that slot.</summary>
         public int SelectSlot;
         public bool NextWeaponPressed;
+        /// <summary>Use a medkit (the server picks the best fitting one).</summary>
+        public bool MedkitPressed;
     }
 
     /// <summary>

@@ -33,10 +33,13 @@ namespace WarOfNyx.Characters
 
         private InputActionAsset _asset;
         private InputAction _move, _look, _sprint, _aim, _jump, _crouch, _slide;
-        private InputAction _fire, _reload, _melee, _slot1, _slot2, _slot3, _nextWeapon;
+        private InputAction _fire, _reload, _melee, _slot1, _slot2, _slot3, _nextWeapon, _medkit, _interact;
 
         private bool _jumpLatched, _crouchLatched, _slideLatched;
-        private bool _firePressedLatched, _reloadLatched, _meleeLatched, _nextWeaponLatched;
+        private bool _firePressedLatched, _reloadLatched, _meleeLatched, _nextWeaponLatched, _medkitLatched;
+
+        /// <summary>USE / E pressed (client-side: opens the loot panel near a capsule).</summary>
+        public event System.Action InteractPressed;
         private int _slotLatched;
         private bool _sprintToggled;
         private Vector2 _pendingTouchLook;
@@ -86,6 +89,12 @@ namespace WarOfNyx.Characters
             _slot2.performed += _ => _slotLatched = InputEnabled ? 2 : 0;
             _slot3.performed += _ => _slotLatched = InputEnabled ? 3 : 0;
             _nextWeapon.performed += _ => _nextWeaponLatched = InputEnabled;
+
+            _medkit = map.FindAction(GameInputActions.Medkit, true);
+            _interact = map.FindAction(GameInputActions.Interact, true);
+            _medkit.performed += _ => _medkitLatched = InputEnabled;
+            // Fires even while gameplay input is paused, so E also closes the loot panel.
+            _interact.performed += _ => InteractPressed?.Invoke();
 
             Yaw = transform.eulerAngles.y;
         }
@@ -176,8 +185,9 @@ namespace WarOfNyx.Characters
                 combat.MeleePressed = _meleeLatched;
                 combat.SelectSlot = _slotLatched;
                 combat.NextWeaponPressed = _nextWeaponLatched;
+                combat.MedkitPressed = _medkitLatched;
             }
-            _firePressedLatched = _reloadLatched = _meleeLatched = _nextWeaponLatched = false;
+            _firePressedLatched = _reloadLatched = _meleeLatched = _nextWeaponLatched = _medkitLatched = false;
             _slotLatched = 0;
 
             movement = BuildMovement();

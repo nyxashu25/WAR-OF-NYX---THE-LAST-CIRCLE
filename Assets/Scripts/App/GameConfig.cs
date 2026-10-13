@@ -53,6 +53,10 @@ namespace WarOfNyx.App
         [Tooltip("Lobby, loading, countdown and spawn rules. Dedicated servers can override min players / lobby fill on the command line.")]
         public MatchRules matchRules = new MatchRules();
 
+        [Header("Starting loadouts (Phase 6, server-side)")]
+        [Tooltip("Power budget every randomized starting loadout must fit (spec 7).")]
+        public WarOfNyx.Core.Items.LoadoutBudget loadoutBudget = new WarOfNyx.Core.Items.LoadoutBudget();
+
         public OfflineMatchSettings DefaultOfflineSettings =>
             new OfflineMatchSettings(defaultOfflineBotCount, defaultOfflineDifficulty);
 

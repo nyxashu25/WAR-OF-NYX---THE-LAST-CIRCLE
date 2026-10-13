@@ -138,6 +138,8 @@ namespace WarOfNyx.EditorTools
             report.AppendLine((prefab ? "OK    " : "FAIL  ") + "Network player prefab (Resources/WarOfNyx/NetworkPlayer)");
             bool controller = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/WarOfNyx/MatchController.prefab") != null;
             report.AppendLine((controller ? "OK    " : "FAIL  ") + "Match controller prefab (Resources/WarOfNyx/MatchController)");
+            bool crate = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/WarOfNyx/LootCrate.prefab") != null;
+            report.AppendLine((crate ? "OK    " : "FAIL  ") + "Loot capsule prefab (Resources/WarOfNyx/LootCrate)");
 
             report.AppendLine("INFO  Fusion App ID cannot be checked from here: open Fusion > Fusion Hub and confirm it is set.");
         }

@@ -8,10 +8,10 @@ An original anime-style third-person battle royale for **Android**, built with *
 |---|---|
 | Internal id | `WarOfNyx` |
 | Android package | `com.nyxgames.warofnyx` |
-| Current phase | **Phase 5 – Shooting & melee** (code written; combat rules tested under .NET; needs Fusion SDK + App ID + Unity to run) |
+| Current phase | **Phase 6 – Loadouts, inventory & loot** (code written; item rules tested under .NET; needs Fusion SDK + App ID + Unity to run) |
 | Offline default | Ghost Protocol, **NIGHTMARE**, **23 bots** (automatically lowered on devices that can't run 23) |
 
-> **Honest status:** the pure rules core (`WarOfNyx.Core`: flow, movement, networking, match start, spawns and combat) compiles and passes **191/191** tests under .NET (`dotnet test Tools/CoreTests`). No Unity-side or Fusion code has been compiled in Unity yet. Written so far: menu and settings; Practice Arena movement (PC + touch); online play with Quick Match, lobby, private rooms, dedicated server, synchronized start, validated random spawns and spawn protection; server-authoritative shooting (lag-compensated hitscan, 7 guns) and melee (4 blades), damage, headshots, eliminations and a kill feed. Loot, circle, camping, bots and results are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> **Honest status:** the pure rules core (`WarOfNyx.Core`: flow, movement, networking, match start, spawns, combat, items) compiles and passes **220/220** tests under .NET (`dotnet test Tools/CoreTests`). No Unity-side or Fusion code has been compiled in Unity yet. Written so far: menu and settings; Practice Arena movement (PC + touch); online play with Quick Match, lobby, private rooms, dedicated server, synchronized start, validated random spawns and spawn protection; server-authoritative shooting and melee with eliminations and kill feed; randomized power-budgeted loadouts, inventory, medkits, armor and loot capsules from eliminated players. Circle, camping, bots and results are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ---
 

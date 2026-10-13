@@ -34,7 +34,8 @@ namespace WarOfNyx.Core.Networking
             Slot2 = 1u << 10,
             Slot3 = 1u << 11,
             NextWeapon = 1u << 12,
-            // Reserved for later phases: Interact, Medkit.
+            Medkit = 1u << 13,
+            // Interact is client-side only (opens the loot panel); taking items is a validated RPC.
         }
 
         public static uint PackButtons(in MovementCommand movement, in CombatCommand combat)
@@ -48,6 +49,7 @@ namespace WarOfNyx.Core.Networking
             else if (combat.SelectSlot == 2) b |= Buttons.Slot2;
             else if (combat.SelectSlot == 3) b |= Buttons.Slot3;
             if (combat.NextWeaponPressed) b |= Buttons.NextWeapon;
+            if (combat.MedkitPressed) b |= Buttons.Medkit;
             return (uint)b;
         }
 
@@ -63,6 +65,7 @@ namespace WarOfNyx.Core.Networking
                 MeleePressed = (b & Buttons.Melee) != 0,
                 SelectSlot = (b & Buttons.Slot1) != 0 ? 1 : (b & Buttons.Slot2) != 0 ? 2 : (b & Buttons.Slot3) != 0 ? 3 : 0,
                 NextWeaponPressed = (b & Buttons.NextWeapon) != 0,
+                MedkitPressed = (b & Buttons.Medkit) != 0,
             };
         }
 

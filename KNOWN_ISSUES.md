@@ -45,3 +45,7 @@
 | 41 | Lag compensation relies on Fusion's default HitboxManager settings (enabled; history length from NetworkProjectConfig). | If disabled in the config, no hits register. | Check **Lag Compensation** is enabled in NetworkProjectConfig (TESTING.md Phase 5). |
 | 42 | On touch screens, holding FIRE doesn't steer the aim (mobile shooters usually allow drag-to-aim on the fire button). | Firing and aiming need two fingers. | Phase 11 touch polish. |
 | 43 | Weapon models, muzzle flashes, tracers and all combat sounds are **code-generated placeholders**. | Basic look and sound. | Phase 10 art and audio. |
+| 44 | Only **elimination capsules** carry loot. There are no world loot crates around the map, and no ammo or medkit spawns. | Survivors resupply only from kills. | Not in the spec MVP list; consider with the NYX ISLAND map (Phase 10) if playtests need it. |
+| 45 | The loot panel pauses local input while open (the match keeps running), and you can't move while looting. | Risky in fights, by design for now. | Revisit with the Phase 11 mobile HUD (quick-take without a modal). |
+| 46 | The loadout power band (58 ±10 %) and item power values are first-pass numbers. | Balance. | Tune in playtests (Phase 13). The 1,000-seed test keeps every loadout inside the band. |
+| 47 | Starting loadouts never include a secondary weapon (slot 2 starts empty). With the current power values any secondary would push packages out of the band. | Spec says secondary equipment is optional. | Revisit with balancing. |

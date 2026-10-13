@@ -22,6 +22,11 @@ namespace WarOfNyx.UI.Hud
         private Text _weaponText;
         private Text _ammoText;
         private Text _slotsText;
+        private Text _inventoryText;
+        private Text _healText;
+        private Text _promptText;
+        private Text _messageText;
+        private float _messageUntil;
         private RectTransform[] _crosshair;
         private RectTransform _crosshairRoot;
         private CanvasGroup _hitMarker;
@@ -117,6 +122,25 @@ namespace WarOfNyx.UI.Hud
             RefreshFeed();
         }
 
+        /// <summary>Armor, medkits and spare ammo line (spec 19: armor, medkit quantity).</summary>
+        public void SetInventory(string summary) => _inventoryText.text = summary;
+
+        /// <summary>Medkit channel progress; 0 hides it.</summary>
+        public void SetHealing(float progress, string medkitName)
+        {
+            _healText.text = progress > 0f ? $"HEALING {Mathf.RoundToInt(progress * 100f)}%  ({medkitName})" : string.Empty;
+        }
+
+        /// <summary>Contextual prompt above the HUD, e.g. "[E] OPEN LOOT". Empty hides it.</summary>
+        public void SetPrompt(string prompt) => _promptText.text = prompt;
+
+        /// <summary>Short notification (loot results, heal refusals).</summary>
+        public void ShowMessage(string message, float seconds = 2.5f)
+        {
+            _messageText.text = message;
+            _messageUntil = Time.unscaledTime + seconds;
+        }
+
         public void ShowEliminated(string killerName, string weaponName)
         {
             _eliminated.SetActive(true);
@@ -134,6 +158,8 @@ namespace WarOfNyx.UI.Hud
         {
             float dt = Time.unscaledDeltaTime;
             _hitMarker.alpha = Time.unscaledTime < _hitMarkerUntil ? 1f : 0f;
+            if (_messageText.text.Length > 0 && Time.unscaledTime > _messageUntil)
+                _messageText.text = string.Empty;
 
             _flashAlpha = Mathf.MoveTowards(_flashAlpha, 0f, dt * 0.9f);
             _damageFlash.color = NyxPalette.WithAlpha(NyxPalette.Crimson, _flashAlpha);
@@ -190,6 +216,13 @@ namespace WarOfNyx.UI.Hud
             _slotsText = Label(safe, new Vector2(0.5f, 0f), new Vector2(0f, 134f), 20, TextAnchor.MiddleCenter, FontStyle.Normal);
             _slotsText.supportRichText = true;
             _slotsText.color = NyxPalette.TextMuted;
+            _inventoryText = Label(safe, new Vector2(0.5f, 0f), new Vector2(0f, 160f), 20, TextAnchor.MiddleCenter, FontStyle.Normal);
+            _inventoryText.color = NyxPalette.ElectricCyan;
+            _healText = Label(safe, new Vector2(0.5f, 0.5f), new Vector2(0f, -150f), 30, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _healText.color = new Color(0.3f, 0.95f, 0.5f);
+            _promptText = Label(safe, new Vector2(0.5f, 0.5f), new Vector2(0f, -200f), 28, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _promptText.color = NyxPalette.VictoryGold;
+            _messageText = Label(safe, new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), 28, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             // Crosshair (centre of the full screen, matching the camera centre).
             _crosshairRoot = UiFactory.CreateRect("Crosshair", canvas.transform);

@@ -15,8 +15,8 @@ namespace WarOfNyx.UI.Mobile
     /// RIGHT: swipe-to-look zone behind FIRE, AIM, JUMP, RELOAD, MELEE, WEAPON, MEDKIT, USE.
     ///
     /// Buttons are Input System On-Screen Buttons bound to virtual gamepad controls, i.e. the same
-    /// actions as keyboard/mouse. FIRE, RELOAD, MELEE and WEAPON are live from Phase 5;
-    /// USE and MEDKIT stay dimmed until Phase 6 (loot, medkits).
+    /// actions as keyboard/mouse. All buttons are live from Phase 6 (combat: Phase 5;
+    /// USE opens loot capsules and MEDKIT uses the best-fitting medkit: Phase 6).
     /// Layout positions are in canvas units (1080 high reference) inside the device safe area.
     /// </summary>
     public sealed class MobileControlsUI : MonoBehaviour
@@ -85,8 +85,8 @@ namespace WarOfNyx.UI.Mobile
             AddButton(safe, "AIM", "<Gamepad>/leftTrigger", BottomRight, new Vector2(-450f, 300f), 120f, active: true);
             AddButton(safe, "MELEE", "<Gamepad>/rightShoulder", BottomRight, new Vector2(-300f, 110f), 110f, active: true);
             AddButton(safe, "WEAPON", "<Gamepad>/rightStickPress", BottomRight, new Vector2(-450f, 120f), 110f, active: true);
-            AddButton(safe, "USE", "<Gamepad>/buttonNorth", BottomRight, new Vector2(-270f, 480f), 110f, active: false);
-            AddButton(safe, "MEDKIT", "<Gamepad>/dpad/down", BottomRight, new Vector2(-110f, 500f), 100f, active: false);
+            AddButton(safe, "USE", "<Gamepad>/buttonNorth", BottomRight, new Vector2(-270f, 480f), 110f, active: true);
+            AddButton(safe, "MEDKIT", "<Gamepad>/dpad/down", BottomRight, new Vector2(-110f, 500f), 100f, active: true);
         }
 
         private static readonly Vector2 BottomLeft = new Vector2(0f, 0f);
