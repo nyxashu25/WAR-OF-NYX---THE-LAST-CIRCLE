@@ -26,7 +26,10 @@ namespace WarOfNyx.App
         public string practiceArenaScene = "PracticeArena";
         public string matchLobbyScene = "MatchLobby";
         public string battleArenaScene = "BattleArena";
+        [Tooltip("Offline training arena (120 m graybox, quick matches; also used by the automated tests).")]
         public string ghostProtocolScene = "GhostProtocol";
+        [Tooltip("Offline full map: NYX ISLAND (1.2 km, seven locations).")]
+        public string nyxIslandScene = "NyxIsland";
         public string matchResultsScene = "MatchResults";
 
         [Header("Offline Ghost Protocol defaults")]

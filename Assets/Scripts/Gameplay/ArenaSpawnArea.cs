@@ -30,6 +30,8 @@ namespace WarOfNyx.Gameplay
         [SerializeField] private float navMeshTolerance = 0.75f;
         [Tooltip("With a NavMesh, require a walkable path from the zone centre (rejects isolated rooftops and sealed rooms).")]
         [SerializeField] private bool requireReachable = true;
+        [Tooltip("Open ground the reachability check starts from. Empty = the zone centre (fine unless a structure stands there).")]
+        [SerializeField] private Transform reachabilityAnchor;
 
         private bool _navMeshChecked;
         private bool _hasNavMesh;
@@ -58,37 +60,42 @@ namespace WarOfNyx.Gameplay
             return plan;
         }
 
-        public bool TryValidate(float x, float z, out float groundY)
+        public bool TryValidate(float x, float z, out float groundY) => Check(x, z, out groundY) == null;
+
+        /// <summary>Null when (x, z) is a valid spawn, otherwise the first failed check (map debugging).</summary>
+        public string Check(float x, float z, out float groundY)
         {
             groundY = 0f;
             var top = new Vector3(x, transform.position.y + 200f, z);
             if (!Physics.Raycast(top, Vector3.down, out var hit, 400f, groundMask, QueryTriggerInteraction.Ignore))
-                return false; // nothing to stand on (off the map)
+                return "no ground"; // off the map
 
             int water = LayerMask.NameToLayer(waterLayer);
             if (water >= 0 && hit.collider.gameObject.layer == water)
-                return false;
+                return "water";
 
             if (Vector3.Angle(hit.normal, Vector3.up) > maxSlopeDegrees)
-                return false;
+                return "too steep";
 
             var feet = hit.point;
 
-            if (!OnNavMesh(feet) || !ReachableFromCentre(feet))
-                return false;
+            if (!OnNavMesh(feet))
+                return "off the NavMesh";
+            if (!ReachableFromCentre(feet))
+                return "not reachable from the centre";
 
             // Room for the capsule: no walls, props or other geometry overlapping it.
             var bottom = feet + Vector3.up * (capsuleRadius + 0.05f);
             var upper = feet + Vector3.up * (capsuleHeight - capsuleRadius);
             if (Physics.CheckCapsule(bottom, upper, capsuleRadius, blockingMask, QueryTriggerInteraction.Ignore))
-                return false;
+                return "capsule overlaps geometry";
 
             // Covered = inside a building / under a structure.
             if (rejectCovered && Physics.Raycast(feet + Vector3.up * capsuleHeight, Vector3.up, coverCheckHeight, blockingMask, QueryTriggerInteraction.Ignore))
-                return false;
+                return "covered";
 
             groundY = feet.y;
-            return true;
+            return null;
         }
 
         /// <summary>
@@ -153,7 +160,8 @@ namespace WarOfNyx.Gameplay
             if (!_centreResolved)
             {
                 _centreResolved = true;
-                _hasCentre = NavMesh.SamplePosition(transform.position, out var centreHit, 15f, NavMesh.AllAreas);
+                var anchor = reachabilityAnchor != null ? reachabilityAnchor.position : transform.position;
+                _hasCentre = NavMesh.SamplePosition(anchor, out var centreHit, 15f, NavMesh.AllAreas);
                 _navCentre = centreHit.position;
                 _path = new NavMeshPath();
                 if (!_hasCentre)

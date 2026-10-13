@@ -38,6 +38,8 @@ namespace WarOfNyx.Networking
 
         [Networked] public NetworkMovementState Movement { get; set; }
         [Networked] public NetworkString<_16> DisplayName { get; set; }
+        /// <summary>Cosmetic character (CharacterRoster id), chosen by the owner, validated by the server.</summary>
+        [Networked] public byte Look { get; set; }
 
         // Spawn protection (spec 6), server-authoritative.
         [Networked] private float ProtectionEndsAt { get; set; }
@@ -92,6 +94,7 @@ namespace WarOfNyx.Networking
         private SpawnShieldVisual _shield;
         private OutsideZoneVisual _outsideVisual;
         private HuntBeaconVisual _beacon;
+        private int _styledLook = -1;
 
         public string PlayerName => DisplayName.Value;
 
@@ -161,7 +164,8 @@ namespace WarOfNyx.Networking
                 }
 
                 string requested = AppServices.IsInitialized ? AppServices.UserSettings.Data.playerName : string.Empty;
-                RPC_RequestName(requested ?? string.Empty);
+                int look = AppServices.IsInitialized ? AppServices.UserSettings.Data.characterId : 0;
+                RPC_RequestProfile(requested ?? string.Empty, (byte)Mathf.Clamp(look, 0, 255));
             }
             else
             {
@@ -311,6 +315,11 @@ namespace WarOfNyx.Networking
                 _outsideVisual.SetActive(outsideVisible);
             if (_beacon != null)
                 _beacon.SetActive(IsAlive && Hunt.BeaconVisible);
+            if (_styledLook != Look && !Application.isBatchMode)
+            {
+                _styledLook = Look;
+                CharacterStyler.Apply(transform.Find("Visual (PLACEHOLDER)"), CharacterRoster.Get(Look));
+            }
             if (HasInputAuthority && OnlineArenaController.Instance != null)
             {
                 OnlineArenaController.Instance.ShowZone(BuildZoneView(), transform.position, Movement.Yaw);
@@ -379,11 +388,12 @@ namespace WarOfNyx.Networking
             };
         }
 
-        /// <summary>Owner → server. The server sanitizes; the client never sets its own networked name.</summary>
+        /// <summary>Owner → server. The server sanitizes; the client never sets its own networked name or look.</summary>
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-        public void RPC_RequestName(string requested)
+        public void RPC_RequestProfile(string requested, byte look)
         {
             DisplayName = PlayerNames.Sanitize(requested, Object.InputAuthority.PlayerId);
+            Look = (byte)Mathf.Clamp(look, 0, CharacterRoster.Count - 1); // cosmetic only
         }
 
         private void CreateNameTag()

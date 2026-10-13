@@ -35,7 +35,19 @@ namespace WarOfNyx.Settings
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = TargetFrameRate(tier);
             CurrentTier = tier;
+
+            // Phase 10 visuals: the cel-shader outline and post-processing are skipped on Low (mobile cost).
+            Shader.SetGlobalFloat(OutlineDisableId, tier == GraphicsQualityTier.Low ? 1f : 0f);
+            TierChanged?.Invoke(tier);
         }
+
+        private static readonly int OutlineDisableId = Shader.PropertyToID("_NyxOutlineDisable");
+
+        /// <summary>Raised after a tier is applied (post-processing volumes listen to it).</summary>
+        public static event Action<GraphicsQualityTier> TierChanged;
+
+        /// <summary>Post-processing (bloom, grading) runs on Medium and High only.</summary>
+        public static bool PostProcessingAllowed(GraphicsQualityTier tier) => tier != GraphicsQualityTier.Low;
 
         /// <summary>
         /// Index of the quality level named after the tier, or a positional fallback

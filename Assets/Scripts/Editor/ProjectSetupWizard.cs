@@ -97,6 +97,8 @@ namespace WarOfNyx.EditorTools
             Step(report, "Weapon definitions + database (Phase 5)", WeaponAssetBuilder.Build);
             foreach (var (name, action) in AdditionalSteps)
                 Step(report, name, action);
+            Step(report, "NYX ISLAND map (Phase 10, takes a minute: NavMesh bake)", () => NyxIslandBuilder.Build(overwrite: false));
+            Step(report, "Anime visual style: toon materials, post-processing, sky (Phase 10)", VisualStyleBuilder.Apply);
             Step(report, "Register WarOfNyx.Networking with the Fusion weaver", () => FusionIntegration.RegisterAssemblyWithWeaver(quiet: true));
             Step(report, "Input System backend", () => restart = EnableInputSystemBackend());
 

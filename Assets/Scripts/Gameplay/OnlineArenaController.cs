@@ -426,10 +426,28 @@ namespace WarOfNyx.Gameplay
         }
 
         /// <summary>Called every frame by the match controller once the server has declared the result.</summary>
-        public void ShowResults(IReadOnlyList<ResultRow> rows, int participants, float secondsToLobby, bool wonByTieBreak)
+        public void ShowResults(IReadOnlyList<ResultRow> rows, int participants, float secondsToLobby, bool wonByTieBreak,
+            Transform winner = null)
         {
             if (IsHeadless || _results == null)
                 return;
+
+            // Victory presentation (Phase 10): orbit the winner for a few seconds before the table.
+            if (_resultsRequestedAt < 0f)
+                _resultsRequestedAt = Time.unscaledTime;
+            float t = Time.unscaledTime - _resultsRequestedAt;
+            if (winner != null && t < VictoryCameraSeconds && Camera.main != null)
+            {
+                StopSpectating();
+                Hud?.SuppressEliminated(true);
+                if (_camera != null)
+                    _camera.enabled = false;
+                var cam = Camera.main.transform;
+                var focus = winner.position + Vector3.up * 1.3f;
+                cam.position = focus + Quaternion.Euler(0f, t * 40f, 0f) * new Vector3(0f, 1.2f, -5.5f);
+                cam.LookAt(focus);
+                return;
+            }
             if (!_results.Visible)
             {
                 StopSpectating();
@@ -462,8 +480,14 @@ namespace WarOfNyx.Gameplay
             }
         }
 
+        private const float VictoryCameraSeconds = 3.5f;
+        private float _resultsRequestedAt = -1f;
+
         public void HideResults()
         {
+            _resultsRequestedAt = -1f;
+            if (_camera != null && !_camera.enabled)
+                _camera.enabled = true;
             if (_results == null || !_results.Visible)
                 return;
             _results.Hide();

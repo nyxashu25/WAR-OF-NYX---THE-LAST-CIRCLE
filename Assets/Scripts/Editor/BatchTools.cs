@@ -39,6 +39,32 @@ namespace WarOfNyx.EditorTools
             }
         }
 
+        /// <summary>Rebuilds NYX ISLAND (overwrite) and re-applies the visual style. Batch / CI friendly.</summary>
+        [MenuItem("War of Nyx/Setup/Rebuild NYX ISLAND (overwrite)", priority = 22)]
+        public static void RebuildIsland()
+        {
+            NyxIslandBuilder.Build(overwrite: true);
+            VisualStyleBuilder.Apply();
+        }
+
+        /// <summary>Samples spawn points on NYX ISLAND and logs why candidates fail (map debugging).</summary>
+        public static void DiagnoseIslandSpawns()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(NyxIslandBuilder.ScenePath);
+            var area = UnityEngine.Object.FindAnyObjectByType<WarOfNyx.Gameplay.ArenaSpawnArea>();
+            var counts = new System.Collections.Generic.Dictionary<string, int>();
+            var random = new System.Random(1);
+            for (int i = 0; i < 400; i++)
+            {
+                double a = random.NextDouble() * System.Math.PI * 2, r = area.ZoneRadius * System.Math.Sqrt(random.NextDouble());
+                string reason = area.Check((float)(System.Math.Cos(a) * r), (float)(System.Math.Sin(a) * r), out _) ?? "VALID";
+                counts[reason] = counts.TryGetValue(reason, out int n) ? n + 1 : 1;
+            }
+            Debug.Log("[WarOfNyx][Diagnose] NYX ISLAND spawn checks over 400 samples: " +
+                      string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}")) +
+                      $" | NavMesh triangles: {UnityEngine.AI.NavMesh.CalculateTriangulation().indices.Length / 3}");
+        }
+
         [MenuItem("War of Nyx/Build/Windows Player (offline capable)", priority = 30)]
         public static void BuildWindowsPlayerMenu()
         {

@@ -53,6 +53,8 @@ namespace WarOfNyx.Gameplay.Offline
         private OfflineLootCrate _open;
         private OfflineCombatant _spectating;
         private int _spectateIndex = -1;
+        private float _endedAt = -1f;
+        private const float VictoryCameraSeconds = 3.5f;
 
         private static bool ReduceShake => AppServices.IsInitialized && AppServices.UserSettings.Data.reduceCameraShake;
 
@@ -175,7 +177,16 @@ namespace WarOfNyx.Gameplay.Offline
             UpdateSpectating();
 
             if (_match.Phase == OfflinePhase.Ended && resolver != null)
-                ShowResults(resolver);
+            {
+                if (_endedAt < 0f)
+                    _endedAt = Time.unscaledTime;
+                // Victory presentation: orbit the winner for a few seconds, then the results.
+                var winner = resolver.Winner != null ? _match.Find(resolver.Winner.PlayerId) : null;
+                if (winner != null && Time.unscaledTime - _endedAt < VictoryCameraSeconds)
+                    OrbitWinner(winner, Time.unscaledTime - _endedAt);
+                else
+                    ShowResults(resolver);
+            }
 
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.f2Key.wasPressedThisFrame && _mobile != null)
@@ -389,8 +400,27 @@ namespace WarOfNyx.Gameplay.Offline
                 SpectateNext();
         }
 
+        private void OrbitWinner(OfflineCombatant winner, float t)
+        {
+            var cam = Camera.main;
+            if (cam == null)
+                return;
+            if (_camera != null)
+                _camera.enabled = false;
+            _hud.SuppressEliminated(true);
+            _spectateBar.SetActive(false);
+            float angle = t * 40f + winner.Yaw + 180f;
+            var offset = Quaternion.Euler(0f, angle, 0f) * new Vector3(0f, 0f, 5.5f);
+            var focus = winner.Feet + Vector3.up * 1.3f;
+            cam.transform.position = focus + offset + Vector3.up * 1.2f;
+            cam.transform.LookAt(focus);
+            _banner.text = winner == _match.Human ? "VICTORY" : winner.DisplayName;
+            _banner.color = NyxPalette.VictoryGold;
+        }
+
         private void ShowResults(MatchResolver resolver)
         {
+            _banner.text = string.Empty;
             _rows.Clear();
             foreach (var r in resolver.Standings)
             {

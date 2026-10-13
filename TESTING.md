@@ -32,6 +32,10 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | **Unity 6000.6.5f1** | Compile + setup (adds the GhostProtocol scene + NavMesh) | **0 errors, 0 warnings** | |
 | 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | EditMode | **323 passed, 0 failed** | |
 | 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | PlayMode incl. `GhostProtocolPlayModeTests` | **11 passed, 0 failed** | Spec 38.17 acceptance test: 11 bots with no human finished in 93 simulated s, winner KAGE_46, 10 combat eliminations; 1 idle human + 11 bots: the idle human was exposed and eliminated by the Nyx Hunt (#4), a bot won with 5 kills. Simulated at 12× speed, about 8 real s each |
+| 2026-10-13 | **Unity 6000.6.5f1** | Setup incl. NYX ISLAND + visual style; shaders `NyxToon`, `NyxSky` | **0 errors, 0 warnings** | Fixed a Unity 6.6 deprecation warning (`FindObjectsByType` sort mode) with a version-neutral scene walk |
+| 2026-10-13 | **Unity 6000.6.5f1** with GPU (batch, no -nographics) | `ShowcaseCapture` (8 screenshots) | **Rendered and reviewed** | Found and fixed: procedural sky gave a yellow band (now a custom gradient sky); terrain looked like water because URP terrain reads diffuse alpha as smoothness (now matte) |
+| 2026-10-13 | **Unity 6000.6.5f1** | NYX ISLAND spawn diagnostic (400 samples) | **389 valid** after a fix | First run: 0 valid; the cylinder primitive's capsule collider made the island centre unreachable. Cylinders now use mesh colliders and the spawn area has a plaza anchor |
+| 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | EditMode / PlayMode | **325 / 12 passed, 0 failed** | New: bots-only match on NYX ISLAND (11 bots, winner after 2:16, 10 eliminations) |
 | — | Unity 6.3 LTS (the project's pinned version) | everything | **Not run** | The machine has Unity 6.6 installed. See KNOWN_ISSUES 57 |
 
 ## Running the Unity checks from the command line
@@ -251,3 +255,9 @@ Local dev server with the fast circle, 2–3 clients.
 7. Eliminate a bot and open its capsule (E / USE). Bots loot capsules too.
 8. Die: SPECTATE follows bots (NEXT [N]) until one wins. Results: placement, eliminations, damage, survival, bots eliminated, accuracy, difficulty; "OFFLINE (not ranked)". The Online record on the menu is unchanged.
 9. II / Esc pauses the offline match (time stops). LEAVE MATCH returns to the menu.
+
+## Phase 10 checks
+- `ShowcaseCapture` (menu **War of Nyx → Build → Capture Showcase Screenshots**, or batch with GPU): renders 8 views to `Builds/Screenshots` (island overview, the seven locations, character roster). Review them after visual changes.
+- `BatchTools.DiagnoseIslandSpawns`: logs why spawn candidates fail on NYX ISLAND.
+- `GhostProtocolPlayModeTests.BotsFinishAMatchOnNyxIsland`: full bots-only match on the island.
+- Manual: Settings → CHARACTER cycles KAI / AKIRA / YUNA / REN; Offline → MAP: NYX ISLAND / TRAINING ARENA; Graphics LOW turns off outlines and bloom; a win plays the orbit camera, spin and victory sting before the results.

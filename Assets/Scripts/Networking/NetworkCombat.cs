@@ -84,6 +84,8 @@ namespace WarOfNyx.Networking
         private int _renderedShots, _renderedSwings, _renderedReloads;
         private short _renderedWeapon = -2;
         private bool _renderedDead;
+        private float _renderedHealth = -1f;
+        private bool _celebrated;
 
         public bool IsAlive => Alive;
 
@@ -609,13 +611,28 @@ namespace WarOfNyx.Networking
                 }
 
                 if (!Alive && !_renderedDead)
+                {
                     _rig.PlayDefeat();
+                    EliminationEffect.Play(transform.position);
+                }
+                if (_renderedHealth >= 0f && Health < _renderedHealth - 0.01f && Alive)
+                    _rig.PlayHurt();
+                _rig.SetHealing(Alive && HealEndsAt > 0f);
+                _rig.SetAiming(Alive && HasInputAuthority && _player.LocalAimHeld);
+                var match = NetworkMatchController.Instance;
+                if (!_celebrated && match != null && match.Phase == MatchPhase.Ended && _player.IsWinner)
+                {
+                    _celebrated = true;
+                    _rig.PlayVictory();
+                    ProceduralAudio.PlayAt(ProceduralAudio.Victory, transform.position, HasInputAuthority ? 1f : 0.6f);
+                }
             }
 
             _renderedShots = ShotCount;
             _renderedSwings = MeleeSwingCount;
             _renderedReloads = ReloadCount;
             _renderedDead = !Alive;
+            _renderedHealth = Health;
 
             if (HasInputAuthority)
                 UpdateLocalHud(activeState, weapon);

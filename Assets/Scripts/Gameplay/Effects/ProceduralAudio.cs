@@ -119,6 +119,57 @@ namespace WarOfNyx.Gameplay.Effects
             }
         }
 
+        private static AudioClip _hurt, _heal, _victory, _elimination;
+
+        /// <summary>Short low "oof" thud when taking damage.</summary>
+        public static AudioClip Hurt => _hurt != null ? _hurt : (_hurt = Shot("Hurt", 0.16f, 95f, 0.5f, 31));
+
+        /// <summary>Rising shimmer when a medkit completes.</summary>
+        public static AudioClip Heal => _heal != null ? _heal : (_heal = Sweep("Heal", 0.45f, 520f, 1040f, 0.35f));
+
+        /// <summary>Three-note rising victory sting (spec 21 victory presentation).</summary>
+        public static AudioClip Victory
+        {
+            get
+            {
+                if (_victory != null)
+                    return _victory;
+                const float note = 0.22f;
+                float[] freqs = { 523.25f, 659.25f, 1046.5f };
+                int per = (int)(SampleRate * note);
+                var data = new float[per * freqs.Length + SampleRate / 2];
+                for (int k = 0; k < freqs.Length; k++)
+                {
+                    for (int i = 0; i < per + (k == freqs.Length - 1 ? SampleRate / 2 : 0); i++)
+                    {
+                        float t = i / (float)SampleRate;
+                        float env = Mathf.Exp(-t * (k == freqs.Length - 1 ? 3f : 9f));
+                        int idx = k * per + i;
+                        if (idx < data.Length)
+                            data[idx] += (Mathf.Sin(2f * Mathf.PI * freqs[k] * t) + 0.3f * Mathf.Sin(4f * Mathf.PI * freqs[k] * t)) * env * 0.35f;
+                    }
+                }
+                return _victory = Create("Victory", data);
+            }
+        }
+
+        /// <summary>Falling energy burst when someone is eliminated.</summary>
+        public static AudioClip Elimination => _elimination != null ? _elimination : (_elimination = Sweep("Elimination", 0.5f, 900f, 180f, 0.45f));
+
+        private static AudioClip Sweep(string name, float length, float fromHz, float toHz, float volume)
+        {
+            int n = (int)(SampleRate * length);
+            var data = new float[n];
+            float phase = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float p = i / (float)n;
+                phase += 2f * Mathf.PI * Mathf.Lerp(fromHz, toHz, p) / SampleRate;
+                data[i] = Mathf.Sin(phase) * Mathf.Sin(p * Mathf.PI) * volume;
+            }
+            return Create(name, data);
+        }
+
         private static AudioClip Shot(string name, float length, float thumpHz, float volume, int seed)
         {
             int n = (int)(SampleRate * length);

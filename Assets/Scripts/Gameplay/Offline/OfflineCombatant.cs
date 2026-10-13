@@ -86,8 +86,10 @@ namespace WarOfNyx.Gameplay.Offline
         /// <summary>Movement speed multiplier of the active weapon (authority-applied, like online).</summary>
         public float ActiveSpeedMultiplier => ActiveWeapon != null ? ActiveWeapon.moveSpeedMultiplier : 1f;
 
+        public CharacterLook Look { get; private set; }
+
         public void Initialize(OfflineMatch match, int id, string displayName, StartingLoadout loadout, Vector3 position, float yaw,
-            float protectionEndsAt, BotController bot)
+            float protectionEndsAt, BotController bot, CharacterLook look)
         {
             _match = match;
             Id = id;
@@ -121,6 +123,8 @@ namespace WarOfNyx.Gameplay.Offline
 
             if (!Application.isBatchMode)
             {
+                Look = look;
+                CharacterStyler.Apply(transform.Find("Visual (PLACEHOLDER)"), look);
                 _rig = WeaponVisualRig.Attach(transform, transform.Find("Visual (PLACEHOLDER)"));
                 _outsideVisual = OutsideZoneVisual.Attach(transform);
                 _beacon = HuntBeaconVisual.Attach(transform);
@@ -238,8 +242,12 @@ namespace WarOfNyx.Gameplay.Offline
                 if (reason != HealBlockReason.None && !IsBot)
                     _match.LocalMessage(reason == HealBlockReason.FullHealth ? "Health is already full." : "No medkits.");
             }
-            HealingRules.TryComplete(ref Heal, ref Inventory, ref Health, now);
+            if (HealingRules.TryComplete(ref Heal, ref Inventory, ref Health, now) > 0f && !IsBot)
+                ProceduralAudio.PlayAt(ProceduralAudio.Heal, transform.position, 0.7f);
         }
+
+        /// <summary>The winner celebrates (victory presentation, visual only).</summary>
+        public void Celebrate() => _rig?.PlayVictory();
 
         private void OnReloadStarted()
         {
@@ -384,6 +392,12 @@ namespace WarOfNyx.Gameplay.Offline
                 LastHurtAt = now;
                 LastHurtFrom = source;
             }
+            if (result.Applied > 0f)
+            {
+                _rig?.PlayHurt();
+                if (!IsBot)
+                    ProceduralAudio.PlayAt(ProceduralAudio.Hurt, transform.position, 0.6f);
+            }
             if (result.Killed)
             {
                 EliminationCause = kind;
@@ -393,6 +407,8 @@ namespace WarOfNyx.Gameplay.Offline
                 Heal = default;
                 Movement.Controller.enabled = false; // body stops colliding
                 _rig?.PlayDefeat();
+                if (!Application.isBatchMode)
+                    EliminationEffect.Play(transform.position);
             }
             return result;
         }
@@ -406,6 +422,11 @@ namespace WarOfNyx.Gameplay.Offline
             {
                 _shownWeapon = Slots[ActiveSlot].WeaponId;
                 _rig.ShowWeapon(ActiveWeapon);
+            }
+            if (_rig != null)
+            {
+                _rig.SetHealing(Alive && Heal.Active);
+                _rig.SetAiming(Alive && Router != null && Router.enabled && Router.AimHeld);
             }
             if (_outsideVisual != null)
                 _outsideVisual.SetActive(Alive && OutsideZone);

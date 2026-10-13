@@ -14,7 +14,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | **Code written; hunt rules 19 tests pass under .NET; Unity/Fusion side not yet run** |
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | **Code written; match-end rules 11 tests pass; non-Fusion code compiles in Unity 6.6, 299/299 EditMode tests pass in Unity; Fusion side not yet run** |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | **Code written and RUN in Unity: 2 full automated offline matches finish with one legitimate winner; bot rules 26 tests pass. Physical Android tests pending** |
-| 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | Not started |
+| 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | **Code-built visual identity done and checked in Unity (rendered screenshots, island match). Final art assets pending** |
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | Not started |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | Not started |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | Not started |
@@ -168,3 +168,16 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [~] 16 Optimize for Android: staggered perception/decisions, distance-based decision rate, no per-frame allocations in hot paths; **not yet measured on a device**
 - [x] 17 Test without internet: the offline path never touches the network (the automated matches run in batch mode with no connection)
 - [ ] 18 Test on physical devices ← needs an Android phone (Phase 12/13)
+
+## Phase 10 checklist
+- [x] 1 Environment: NYX ISLAND (1.2 km, coast, hills, plateaus) with the seven locations (Neon District, Crimson Temple, Shadow Forest, Iron Fortress, Phantom Docks, Eclipse Valley, NYX CORE), routes and cover, NavMesh. Environment stages 1–2 (graybox); stage 3+ art pending
+- [x] 2 Character presentation: KAI, AKIRA, YUNA, REN (original, cosmetic only, same hitboxes); choose in Settings; replicated online, random for bots
+- [x] 3 Cel-shaded materials: `WarOfNyx/NyxToon` (two-band light, shade colour, rim, emission, inverted-hull outline; outline off on Low)
+- [~] 4 Animations: procedural (idle bob, lean, squash, aim raise, reload dip, hurt flinch, healing pose + ring, defeat fall, victory spin/hop); rigged Animator clips still need models (the controller already drives Animator parameters when one exists)
+- [x] 5 Weapon models: a distinct cel-shaded silhouette per catalog weapon, rarity-coloured accents
+- [x] 6 Effects: elimination burst, healing ring, existing muzzle/tracers/impacts/slash, circle and hunt effects
+- [x] 7 Sounds: added hurt, heal, victory sting, elimination (procedural placeholders)
+- [x] 8 Lighting: dusk gradient sky, trilight ambient, warm key light, distance fog, bloom + grading + vignette (Medium/High)
+- [x] 9 Victory presentation: camera orbit around the winner + celebration, then results (online and offline)
+- [x] 10 Mobile: post-processing and outlines off on Low; static batching on the island; shared toon material with property blocks
+- [x] Showcase screenshots rendered headless (`ShowcaseCapture`) and reviewed: fixed a yellow sky band and mirror-like terrain found in them

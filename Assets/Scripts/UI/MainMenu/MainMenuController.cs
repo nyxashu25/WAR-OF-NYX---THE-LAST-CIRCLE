@@ -318,6 +318,14 @@ namespace WarOfNyx.UI.MainMenu
             var actions = UiFactory.CreateRow("Actions", root, 100f, 20f);
             UiFactory.CreateButton(actions, "BACK", () => Show(MenuScreen.Home), 100f, 34);
             UiFactory.CreateButton(actions, "START MATCH", OnStartOffline, 100f, 38);
+            MenuButton mapButton = null;
+            string MapLabel() => AppServices.UserSettings.Data.offlineMap == 1 ? "MAP: TRAINING ARENA (120 m)" : "MAP: NYX ISLAND (1.2 km)";
+            mapButton = UiFactory.CreateButton(actions, MapLabel(), () =>
+            {
+                AppServices.UserSettings.Data.offlineMap = AppServices.UserSettings.Data.offlineMap == 1 ? 0 : 1;
+                AppServices.UserSettings.Save();
+                mapButton.SetLabel(MapLabel());
+            }, 100f, 26);
 
             RefreshOffline();
             return root.gameObject;
@@ -374,9 +382,24 @@ namespace WarOfNyx.UI.MainMenu
             });
             AddToggle(toggleRow, "GYRO AIM", () => data.gyroAim, v => data.gyroAim = v);
 
+            // Cosmetic character (spec 17): same hitboxes, speed and health for everyone.
+            var characterRow = UiFactory.CreateRow("CharacterRow", root, 80f, 14f);
+            string CharacterLabel()
+            {
+                var look = WarOfNyx.Characters.CharacterRoster.Get(data.characterId);
+                return $"CHARACTER: {look.Name} - {look.Title.ToUpperInvariant()}  >";
+            }
+            MenuButton characterButton = null;
+            characterButton = UiFactory.CreateButton(characterRow, CharacterLabel(), () =>
+            {
+                data.characterId = (data.characterId + 1) % WarOfNyx.Characters.CharacterRoster.Count;
+                AppServices.UserSettings.Save();
+                characterButton.SetLabel(CharacterLabel());
+            }, 80f, 26);
+
             UiFactory.CreateText(root,
                 "Comfort options only change visuals; outside-circle and camping penalties still apply. " +
-                "Music/SFX/UI volume, sensitivity and gyro take effect once those systems exist (Phases 2, 10, 11).",
+                "Characters are cosmetic only. Gyro aim arrives with the Android controls phase.",
                 22, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 64f);
 
             var actions = UiFactory.CreateRow("Actions", root, 90f, 20f);
@@ -674,7 +697,7 @@ namespace WarOfNyx.UI.MainMenu
         private void OnStartOffline()
         {
             AppServices.UserSettings.SetOfflineSettings(_offline);
-            string scene = AppServices.Config.ghostProtocolScene;
+            string scene = AppServices.UserSettings.Data.offlineMap == 1 ? AppServices.Config.ghostProtocolScene : AppServices.Config.nyxIslandScene;
             if (!Application.CanStreamedLevelBeLoaded(scene))
             {
                 Notify($"Scene '{scene}' is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");

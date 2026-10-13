@@ -423,7 +423,7 @@ namespace WarOfNyx.Networking
                     winnerPlayer = p;
             }
             _rows.Sort((a, b) => (a.Placement == 0 ? int.MaxValue : a.Placement).CompareTo(b.Placement == 0 ? int.MaxValue : b.Placement));
-            arena.ShowResults(_rows, NetParticipants, SecondsRemaining, NetWinnerTieBreak);
+            arena.ShowResults(_rows, NetParticipants, SecondsRemaining, NetWinnerTieBreak, winnerPlayer != null ? winnerPlayer.transform : null);
 
             // PLACEHOLDER victory celebration at the winner (Phase 10 adds the real animation).
             if (!_victoryFxPlayed && winnerPlayer != null)

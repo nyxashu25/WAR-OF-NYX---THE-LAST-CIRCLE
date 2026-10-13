@@ -165,7 +165,10 @@ namespace WarOfNyx.Gameplay.Offline
                     bot = new BotController(this, BotPersonality.Random(_random), profile, unchecked(seed * 31 + i * 7919));
                 var loadout = LoadoutGenerator.Generate(unchecked(seed * 17 + i * 104729), budget, WeaponRegistry.Get);
                 string name = human ? PlayerName() : names[includeHuman ? i - 1 : i];
-                combatant.Initialize(this, i + 1, name, loadout, new Vector3(p.X, p.Y + rules.spawnDropHeight, p.Z), p.Yaw, protectionEnds, bot);
+                var look = human
+                    ? CharacterRoster.Get(AppServices.UserSettings.Data.characterId)
+                    : CharacterRoster.Get(_random.Next(CharacterRoster.Count)); // cosmetic only
+                combatant.Initialize(this, i + 1, name, loadout, new Vector3(p.X, p.Y + rules.spawnDropHeight, p.Z), p.Yaw, protectionEnds, bot, look);
                 bot?.Attach(combatant);
                 _combatants.Add(combatant);
                 _byId[combatant.Id] = combatant;
@@ -316,6 +319,13 @@ namespace WarOfNyx.Gameplay.Offline
                 ? $"[WarOfNyx][Offline] VICTORY: {winner.Name}{(winner.WonByTieBreak ? " (tie-break)" : string.Empty)} - {winner.Kills} kills. Match time {MatchResultText.Clock(Now - FightStartedAt)}."
                 : "[WarOfNyx][Offline] The match ended with no survivor.");
             AdvanceFlow(GameFlowState.MatchEnded);
+            if (winner != null)
+            {
+                var winnerCombatant = Find(winner.PlayerId);
+                winnerCombatant?.Celebrate();
+                if (!Application.isBatchMode && winnerCombatant != null)
+                    ProceduralAudio.PlayAt(ProceduralAudio.Victory, winnerCombatant.Feet, winnerCombatant == Human ? 1f : 0.6f);
+            }
             SaveHistory();
             Ended?.Invoke();
         }

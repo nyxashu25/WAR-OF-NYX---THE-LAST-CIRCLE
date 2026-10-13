@@ -29,10 +29,10 @@ namespace WarOfNyx.Tests.PlayMode
             Time.timeScale = 1f;
         }
 
-        private static IEnumerator RunMatch(bool includeHuman, int seed)
+        private static IEnumerator RunMatch(bool includeHuman, int seed, string scene = "GhostProtocol")
         {
-            if (!Application.CanStreamedLevelBeLoaded("GhostProtocol"))
-                Assert.Ignore("GhostProtocol is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
+            if (!Application.CanStreamedLevelBeLoaded(scene))
+                Assert.Ignore(scene + " is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
 
             LogAssert.ignoreFailingMessages = true;
             OfflineMatchRequest.Reset();
@@ -42,7 +42,7 @@ namespace WarOfNyx.Tests.PlayMode
             OfflineMatchRequest.ZoneStageSeconds = 20f; // whole circle in 3 simulated minutes
             OfflineMatchRequest.Seed = seed;
 
-            yield return SceneManager.LoadSceneAsync("GhostProtocol", LoadSceneMode.Single);
+            yield return SceneManager.LoadSceneAsync(scene, LoadSceneMode.Single);
             yield return null;
             var match = Object.FindAnyObjectByType<OfflineMatch>();
             Assert.IsNotNull(match, "the scene has a local match authority");
@@ -86,6 +86,16 @@ namespace WarOfNyx.Tests.PlayMode
             Assert.IsTrue(resolver.TryGet(match.Human.Id, out var human));
             Assert.Greater(human.Placement, 0, "the human got a placement");
             Assert.AreEqual(1, resolver.Records.Count(r => r.Winner));
+        }
+
+        [UnityTest, Timeout(900000)]
+        public IEnumerator BotsFinishAMatchOnNyxIsland()
+        {
+            // The full 1.2 km map: bots must navigate real terrain and still produce one winner.
+            yield return RunMatch(includeHuman: false, seed: 4242, scene: "NyxIsland");
+            var match = Object.FindAnyObjectByType<OfflineMatch>();
+            Assert.AreEqual(1, match.Resolver.Records.Count(r => r.Winner));
+            Assert.AreEqual(11, match.Resolver.ParticipantCount);
         }
     }
 }

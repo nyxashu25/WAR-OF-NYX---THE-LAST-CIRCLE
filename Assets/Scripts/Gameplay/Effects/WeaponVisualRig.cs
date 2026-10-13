@@ -4,8 +4,8 @@ using WarOfNyx.Core.Combat;
 namespace WarOfNyx.Gameplay.Effects
 {
     /// <summary>
-    /// PLACEHOLDER weapon presentation on a character (spec 9 feedback): a box "gun" or "blade" in
-    /// the right hand, muzzle flash, tracer, impact sparks, melee slash arc, firing/reload/swing
+    /// PLACEHOLDER weapon presentation on a character (spec 9 feedback): a per-weapon cel-shaded model
+    /// (<see cref="WeaponModelFactory"/>) in the right hand, muzzle flash, tracer, impact sparks, melee slash arc, firing/reload/swing
     /// motion and the defeat fall. Visual only, client-side; it never decides hits. Phase 10
     /// replaces the meshes and VFX but keeps these entry points.
     /// </summary>
@@ -16,9 +16,13 @@ namespace WarOfNyx.Gameplay.Effects
         private static readonly Color Purple = new Color(0.54f, 0.17f, 0.89f);
 
         private Transform _hand;
-        private Transform _gun;
-        private Transform _blade;
+        private Transform _model;
         private Transform _muzzle;
+        private LineRenderer _healRing;
+        private float _hurt;
+        private float _victoryT = -1f;
+        private bool _healing;
+        private bool _aiming;
         private Transform _visualRoot;
         private Light _flashLight;
         private Material _fx;
@@ -48,13 +52,30 @@ namespace WarOfNyx.Gameplay.Effects
             _hand.SetParent(visualRoot, false);
             _hand.localPosition = new Vector3(0.38f, 1.25f, 0.25f);
 
-            _gun = Box("Gun", _hand, new Vector3(0f, 0f, 0.25f), new Vector3(0.1f, 0.14f, 0.6f), new Color(0.2f, 0.22f, 0.3f));
             _muzzle = new GameObject("Muzzle").transform;
-            _muzzle.SetParent(_gun, false);
+            _muzzle.SetParent(_hand, false);
             _muzzle.localPosition = new Vector3(0f, 0.02f, 0.55f);
 
-            _blade = Box("Blade", _hand, new Vector3(0f, 0.45f, 0.1f), new Vector3(0.05f, 0.9f, 0.08f), Cyan);
-            _blade.gameObject.SetActive(false);
+            if (_fx != null)
+            {
+                // Medkit channel ring at the feet (Phase 10 healing presentation).
+                var ringGo = new GameObject("HealRing");
+                ringGo.transform.SetParent(transform, false);
+                ringGo.transform.localPosition = Vector3.up * 0.08f;
+                _healRing = ringGo.AddComponent<LineRenderer>();
+                _healRing.sharedMaterial = _fx;
+                _healRing.useWorldSpace = false;
+                _healRing.loop = true;
+                _healRing.positionCount = 32;
+                for (int i = 0; i < 32; i++)
+                {
+                    float a = i * Mathf.PI * 2f / 32f;
+                    _healRing.SetPosition(i, new Vector3(Mathf.Sin(a) * 0.7f, 0f, Mathf.Cos(a) * 0.7f));
+                }
+                _healRing.widthMultiplier = 0.06f;
+                _healRing.startColor = _healRing.endColor = new Color(0.3f, 1f, 0.55f, 0.8f);
+                _healRing.enabled = false;
+            }
 
             var lightGo = new GameObject("MuzzleLight");
             lightGo.transform.SetParent(_muzzle, false);
@@ -67,14 +88,27 @@ namespace WarOfNyx.Gameplay.Effects
 
         public void ShowWeapon(WeaponStats weapon)
         {
-            if (_gun == null)
+            if (_hand == null)
                 return;
-            bool melee = weapon != null && weapon.IsMelee;
-            _gun.gameObject.SetActive(weapon != null && !melee);
-            _blade.gameObject.SetActive(melee);
-            if (weapon != null && !melee)
-                _gun.localScale = new Vector3(0.1f, 0.14f, weapon.pellets > 1 ? 0.75f : weapon.maxRange > 200f ? 0.95f : 0.6f);
+            if (_model != null)
+                Destroy(_model.gameObject);
+            _model = WeaponModelFactory.Build(weapon, _hand, out var muzzle);
+            _muzzle.localPosition = muzzle;
         }
+
+        /// <summary>Short recoil of the whole body when hit (visual only).</summary>
+        public void PlayHurt() => _hurt = 1f;
+
+        /// <summary>Winner celebration: spin and hop until the scene changes.</summary>
+        public void PlayVictory()
+        {
+            if (_victoryT < 0f)
+                _victoryT = 0f;
+        }
+
+        public void SetHealing(bool healing) => _healing = healing;
+
+        public void SetAiming(bool aiming) => _aiming = aiming;
 
         /// <summary>Muzzle flash, tracer, impact and sound for one shot (pellet hit points are visual estimates).</summary>
         public void PlayShot(WeaponStats weapon, Vector3 origin, Vector3[] endPoints, int count, bool hitSomething)
@@ -133,8 +167,26 @@ namespace WarOfNyx.Gameplay.Effects
                 if (_swing >= 1f)
                     _swing = -1f;
             }
-            _hand.localRotation = Quaternion.Euler(-_kick + _reloadDip * 35f, 0f, -swingAngle);
+            _hand.localRotation = Quaternion.Euler(-_kick + _reloadDip * 35f + (_healing ? 50f : 0f) - (_aiming ? 8f : 0f), 0f, -swingAngle);
             _flashLight.intensity = Time.time < _flashUntil ? 4f : 0f;
+
+            if (_healRing != null)
+            {
+                _healRing.enabled = _healing && _deathT < 0f;
+                if (_healing)
+                    _healRing.transform.localRotation = Quaternion.Euler(0f, Time.time * 90f, 0f);
+            }
+
+            // Hurt flinch and victory are added on top of the animation controller's pose (this runs after it).
+            _hurt = Mathf.MoveTowards(_hurt, 0f, dt * 5f);
+            if (_hurt > 0f && _visualRoot != null && _deathT < 0f)
+                _visualRoot.localRotation *= Quaternion.Euler(-12f * Mathf.Sin(_hurt * Mathf.PI), 0f, 0f);
+            if (_victoryT >= 0f && _visualRoot != null && _deathT < 0f)
+            {
+                _victoryT += dt;
+                _visualRoot.localRotation *= Quaternion.Euler(0f, _victoryT * 220f, 0f);
+                _visualRoot.localPosition += Vector3.up * Mathf.Abs(Mathf.Sin(_victoryT * 5f)) * 0.35f;
+            }
 
             if (_deathT >= 0f && _visualRoot != null)
             {
@@ -209,22 +261,6 @@ namespace WarOfNyx.Gameplay.Effects
             line.startColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.8f);
             line.endColor = new Color(Purple.r, Purple.g, Purple.b, 0f);
             Destroy(go, 0.15f);
-        }
-
-        private static Transform Box(string name, Transform parent, Vector3 position, Vector3 scale, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            DestroyImmediate(go.GetComponent<Collider>()); // visual only: never blocks shots or movement
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = position;
-            go.transform.localScale = scale;
-            var renderer = go.GetComponent<Renderer>();
-            renderer.material.color = color;
-            if (renderer.material.HasProperty("_BaseColor"))
-                renderer.material.SetColor("_BaseColor", color);
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            return go.transform;
         }
     }
 }

@@ -34,8 +34,14 @@ namespace WarOfNyx.Settings
         public bool reduceCameraShake;
         public bool reduceFlashing;
 
+        /// <summary>Cosmetic character (CharacterRoster id). No gameplay effect.</summary>
+        public int characterId;
+
         /// <summary>Display name sent to servers (sanitized again server-side).</summary>
         public string playerName = string.Empty;
+
+        /// <summary>Offline map: 0 = NYX ISLAND (default), 1 = training arena.</summary>
+        public int offlineMap;
 
         /// <summary>-1 = use GameConfig default.</summary>
         public int offlineBotCount = -1;

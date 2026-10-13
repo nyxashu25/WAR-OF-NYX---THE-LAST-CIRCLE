@@ -1,13 +1,13 @@
 # Development state (handoff record)
 
-_Last updated: 2026-10-13 — end of Phase 9G_
+_Last updated: 2026-10-13 — end of Phase 10_
 
 ## Phase map
 15 phases in total: 1–14 from the master prompt, plus **9G Offline Ghost Protocol** (Section 38).
-Code written: **1–9 and 9G**. Remaining: 10, 11, 12, 13, 14.
+Code written: **1–10 and 9G**. Remaining: 11, 12, 13, 14.
 
 ## Current phase
-**Phase 9G – Offline Ghost Protocol.** Done and RUN in Unity 6000.6.5f1 (scratch copy): 2 automated full offline matches end with one legitimate winner (bots fight each other, loot, obey circle and anti-camping). The online (Fusion) parts of Phases 3–9 are still uncompiled until the Photon SDK + App ID are installed.
+**Phase 10 – Anime visual upgrade (code-built).** Cel shader, sky, post-processing, 4 characters, weapon models, effects, sounds, victory presentation, NYX ISLAND. Verified in Unity 6000.6.5f1 on the scratch copy: rendered screenshots reviewed, EditMode 325/325, PlayMode 12/12 (incl. a bots-only match on the island). Final art assets are placeholders. Online (Fusion) parts are still uncompiled until the Photon SDK + App ID exist.
 
 ## Configuration requested by the project owner
 - Offline Ghost Protocol defaults: **Difficulty = NIGHTMARE, Bots = 23** (in `GameConfig`, clamped by `OfflineCapacityPolicy`; difficulty never lowered).
@@ -23,6 +23,7 @@ Code written: **1–9 and 9G**. Remaining: 10, 11, 12, 13, 14.
 | **Match-end rules (Phase 9)** | `Core/Match/MatchResults.cs`: `MatchResolver` (placements, last survivor, tie-break), `KillNotices`, `MatchResultText`, `MatchHistory` (+entries, totals); `MatchLifecycle.EndMatch` + results timer; `GameStateMachine` new-round wrap | Yes (.NET + Unity EditMode) |
 | **Bot rules (Phase 9G)** | `Core/Bots`: `BotPersonality` (+`BotNames`), `BotPerception` (+`BotMemory`, `SoundEvent`), `BotBrain` (19 states, utility, hysteresis) + `BotAim`, `BotLootPlanner`; `Core/Items/LootClaims` (shared by online + offline) | Yes (.NET + Unity) |
 | Offline Ghost Protocol (9G) | `Gameplay/Offline`: `OfflineMatch` (local authority, 60 Hz ticks, circle, hunt, resolver, damage, loot, history) + `OfflineMatchRequest`, `OfflineCombatant`, `BotController` (perception, decisions, NavMesh, combat), `OfflineLootCrate`, `OfflineMatchHud`; `Gameplay/Effects/LootCapsuleVisual` (shared); `UI/Hud/LootViews` (shared); GhostProtocol scene builder; menu START | **Yes: compiled, 2 full matches run in Unity PlayMode** |
+| Phase 10 visuals | `Assets/Art/Shaders/NyxToon.shader`, `NyxSky.shader`; `Gameplay/Effects`: `StyleKit`, `CharacterStyler`, `WeaponModelFactory`, `EliminationEffect`, `QualityAwareVolume`, `WeaponVisualRig` (+models, hurt, heal, aim, victory), `ProceduralAudio` (+hurt, heal, victory, elimination); `Characters/CharacterRoster`; `Editor`: `VisualStyleBuilder`, `NyxIslandBuilder`, `ShowcaseCapture`, `BatchTools.RebuildIsland/DiagnoseIslandSpawns`; settings CHARACTER + offline MAP; victory camera online/offline; `NetworkPlayer.Look` (protocol 10) | Yes in Unity (compile, render, tests) |
 | Phase 9 Unity/Fusion | `NetworkMatchController` (resolver, notices, end, freeze, results JSON, results view), `NetworkPlayer` (placement/survival/winner, spectate targets), `NetworkCombat` (elimination details), `NetworkNyxCircle.ServerFreeze`, session cleanup (capsules), `UI/Hud/MatchResultsPanel`, `CombatHud` (SPECTATE / RETURN TO LOBBY), `OnlineArenaController` (alive counter, spectating, results, history), `Settings/MatchHistoryStore`, main menu record line | Game/UI side compiles in Unity; Fusion side not compiled |
 | Phase 8 Unity/Fusion | `NetworkPlayer` (+hunt fields, `ServerEnvironmentPass`, `All` registry, local hunt view), `NetworkCombat` (`StepZoneExposure`, `ApplyEnvironmentDamage`), `NetworkMatchController` (`Hunt`, `RPC_HuntAlert`, `OnPlayerLeftMatch`), `NetworkSessionManager` (leave hook), `Gameplay/Effects/HuntBeaconVisual`, `UI/Hud/HuntHud` (+`HuntTarget`), `Minimap.SetHuntMarkers`, `OnlineArenaController.ShowHunt` | No |
 | Phase 7 Unity/Fusion | `Networking/NetworkNyxCircle` (+`NetworkZoneCircle`), `NetworkPlayer` (+`OutsideZone`, wobble, sway, zone pass), `NetworkCombat` (+`firearmsAllowed`, `ApplyZoneExposure`, `EliminationCause`), `NetworkMatchController` (feed cause), `NetworkSessionManager` (plans the circle at the countdown, stops it on reset), `ArenaSpawnArea` (+`PlayableFraction`), `Gameplay/Effects/NyxCircleVisual`, `OutsideZoneVisual`, `UI/Hud/ZoneHud`, `Minimap`, `UI/Common/UiShapes`, `OnlineArenaController.ShowZone`, camera shake, FIRE button disabled state, crosshair tint, prefab builder (+`NetworkNyxCircle`, auto-rebuild), fast-circle server menu item | No |
@@ -52,15 +53,16 @@ Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Te
 8. **Phase 8:** camping is judged only from server-simulated positions sampled at 1 Hz; a reset needs both net displacement and path inside a sliding window; trackers live in a server registry keyed by player (not on the avatar) so disconnects can't reset them; zone + camping are applied in one environmental pass per tick through the single damage entry point.
 9. **Phase 9:** the server decides placements per completed tick (same-tick deaths ranked kills → damage → id; a match always has one winner when it started with 2+ players); results are server records (JSON) plus replicated per-player fields; clients only display them. Spectating is local camera work over already-replicated data. Unity checks run on a scratch copy at C:\Temp\wonchk because the repo is pinned to 6.3 and the machine has 6.6.
 10. **Phase 9G:** one simulation path for human and bots (`OfflineCombatant`), commands only from controllers, the local match as authority with the same Core rules as the server; characters on Ignore Raycast with explicit hit shapes equal to the online hitboxes; bots get information only from their senses (LOS, hearing with error, memory) and the HUD-visible circle; no bot name tags (they render through walls).
+11. **Phase 10:** one shared toon material coloured per renderer (property blocks) keeps batching cheap; visuals never touch hit shapes; the outline and post-processing follow the quality tier; NYX ISLAND is generated by an editor builder (reproducible, reviewable in screenshots) rather than hand-placed, until real art replaces it. Cylinders use mesh colliders (Unity's capsule collider broke NavMesh reachability).
 
 ## Verified tests
 - `dotnet test Tools/CoreTests` → **305/305 passed** (2026-10-13).
-- **Unity 6000.6.5f1:** non-Fusion project compiles (0 errors, 0 warnings); batch setup OK; EditMode **323/323**; PlayMode **11/11** incl. two complete offline matches; Windows player builds and starts.
+- **Unity 6000.6.5f1:** non-Fusion project compiles (0 errors, 0 warnings); setup OK incl. NYX ISLAND; EditMode **325/325**; PlayMode **12/12** incl. three complete offline matches; showcase screenshots rendered; Windows player builds and starts.
 - 115/115 scripts parse as C# 9 (syntax only).
 
 ## External dependencies still required (project owner)
 - Unity 6.3 LTS (Android, Windows/Linux Dedicated Server modules); Photon account + Fusion 2 App ID + Fusion SDK 2.1.3; 2+ clients for multiplayer tests.
 
 ## Next tasks
-1. Owner: choose Unity 6.3 LTS (recommended) or 6.6; install Fusion 2.1.3 + App ID; run setup; play offline and run the online manual tests (TESTING.md).
-2. **Phase 10 – Anime visual upgrade:** cel-shaded look, character presentation, VFX/audio polish, NYX ISLAND map with the seven POIs (art assets are placeholders until created or purchased).
+1. Owner: Unity 6.3 LTS (recommended) or 6.6; Fusion 2.1.3 + App ID; Android Build Support module; then the online manual tests.
+2. **Phase 11 – Android controls and builds:** adjustable touch layout (size, opacity, positions), drag-to-aim on FIRE, gyro aim, resolution handling, Android build pipeline (APK/AAB batch methods), device test plan.
