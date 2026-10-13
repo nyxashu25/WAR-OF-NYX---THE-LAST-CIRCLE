@@ -1,6 +1,6 @@
 # Android build guide
 
-Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. **No Android build has been produced yet.**
+Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. Batch build methods exist (Phase 11). **No Android build has been produced yet**: this PC's Unity (6000.6.5f1) has no Android Build Support module (checked 2026-10-13; the build method stops with an explanation).
 
 ## Toolchain
 - Unity 6.3 LTS with **Android Build Support**, **OpenJDK** and **Android SDK & NDK Tools** (install all three from Unity Hub → Installs → ⚙ → Add modules).
@@ -24,7 +24,16 @@ Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. 
 - `bundleVersion` uses semantic versioning `MAJOR.MINOR.PATCH` (shown in the menu).
 - `bundleVersionCode` is an integer that **must go up for every Play upload**. Raise it in Player Settings, or later with a CI script.
 
-## Build an APK for local testing
+## One-click / command-line builds (Phase 11)
+- **War of Nyx → Build → Android APK (development)** → `Builds/Android/WarOfNyx-dev.apk` (ARM64, IL2CPP, development build).
+- **War of Nyx → Build → Android App Bundle (release, signed)** → `Builds/Android/WarOfNyx.aab`. The upload key comes ONLY from environment variables, and the passwords are cleared from Player Settings right after the build:
+  ```bash
+  setx WON_KEYSTORE_PATH "%USERPROFILE%\keys\warofnyx-upload.keystore"
+  ```
+  plus `WON_KEYSTORE_PASS`, `WON_KEY_ALIAS`, `WON_KEY_PASS` (set them in your own terminal; never write them into the project).
+- Batch: `Unity.exe -batchmode -projectPath . -executeMethod WarOfNyx.EditorTools.BatchTools.BuildAndroidApk -quit` (exit code 1 with a clear message if the module is missing).
+
+## Build an APK for local testing (manual route)
 1. **File → Build Profiles** → select **Android** → **Switch Platform**.
 2. Check that the scene list is `Bootstrap` (0), `MainMenu` (1).
 3. Turn on **Development Build** for profiling and logs.
@@ -54,3 +63,15 @@ No location, contacts, microphone or storage permissions are requested.
 - [ ] App survives background → foreground. Settings persist after restart.
 - [ ] Low/Medium/High switch takes effect immediately.
 - [ ] No errors in `adb logcat -s Unity`.
+
+## Physical device test plan (Phase 11, needs two Android phones)
+Record device model, Android version, RAM, chipset and the graphics tier chosen automatically.
+1. Install the development APK on both phones (`adb install -r Builds/Android/WarOfNyx-dev.apk`).
+2. Landscape only; notch / punch-hole phones: nothing important under the cutout (safe area).
+3. Touch controls: joystick, swipe-to-look, every button; hold FIRE and drag to aim with one finger; gyro aim (Settings → GYRO AIM) in both landscape orientations (if a direction is inverted, report which orientation).
+4. In a match: II → EDIT TOUCH CONTROLS → drag buttons, SIZE / OPACITY, RESET, DONE; restart the app: the layout is kept.
+5. Graphics LOW / MEDIUM / HIGH: outlines and bloom off on LOW; note FPS (F3 stats on desktop; on device use the Unity Profiler over USB).
+6. Offline Ghost Protocol in airplane mode: 11 bots on NYX ISLAND, full match; note FPS and battery temperature after 10 minutes.
+7. Online: both phones join the same dedicated server (Phase 12 / local dev server via LAN or Photon Cloud), play a complete match (Phase 11 acceptance).
+8. Background/foreground mid-match (home button, phone call), screen lock, low-battery mode.
+9. `adb logcat -s Unity` without errors; write device-specific problems into KNOWN_ISSUES.md.

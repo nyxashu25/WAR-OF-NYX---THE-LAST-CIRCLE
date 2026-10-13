@@ -141,6 +141,23 @@ namespace WarOfNyx.Characters
             }
 
             degrees *= sensitivity;
+
+            // Optional gyro aim (spec 18): adds to touch/stick aim, never replaces it.
+            if (AppServices.IsInitialized && AppServices.UserSettings.Data.gyroAim)
+            {
+                var gyro = UnityEngine.InputSystem.Gyroscope.current;
+                if (gyro != null)
+                {
+                    if (!gyro.enabled)
+                        UnityEngine.InputSystem.InputSystem.EnableDevice(gyro);
+                    var rate = gyro.angularVelocity.ReadValue();
+                    WarOfNyx.Core.Controls.GyroAim.Delta(rate.x, rate.y, Screen.orientation == ScreenOrientation.LandscapeLeft,
+                        sensitivity, Time.unscaledDeltaTime, out float gyroYaw, out float gyroPitch);
+                    degrees.x += gyroYaw;
+                    degrees.y -= gyroPitch;
+                }
+            }
+
             Yaw = Mathf.Repeat(Yaw + degrees.x, 360f);
             Pitch = Mathf.Clamp(Pitch - degrees.y, minPitch, maxPitch);
         }

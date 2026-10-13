@@ -34,6 +34,9 @@ namespace WarOfNyx.Settings
         public bool reduceCameraShake;
         public bool reduceFlashing;
 
+        /// <summary>Touch control layout: size, opacity, moved buttons (Phase 11).</summary>
+        public WarOfNyx.Core.Controls.TouchLayout touchLayout = new WarOfNyx.Core.Controls.TouchLayout();
+
         /// <summary>Cosmetic character (CharacterRoster id). No gameplay effect.</summary>
         public int characterId;
 
@@ -117,6 +120,8 @@ namespace WarOfNyx.Settings
             d.aimSensitivity = Mathf.Clamp(d.aimSensitivity, MinSensitivity, MaxSensitivity);
             if (d.graphicsTier < -1 || d.graphicsTier > (int)GraphicsQualityTier.High)
                 d.graphicsTier = -1;
+            d.touchLayout ??= new WarOfNyx.Core.Controls.TouchLayout();
+            d.touchLayout.Sanitize();
         }
     }
 }

@@ -71,3 +71,7 @@
 | 68 | The island terrain uses URP's Terrain Lit shader (not cel-shaded) with flat-colour layers. | Ground is smooth-shaded while objects are toon. | A custom toon terrain shader later. |
 | 69 | Island buildings are solid blocks (rooftops reachable by ramps, no interiors except the fortress bunker). | No indoor fighting in the Neon District. | Modular building kit (stage 3). |
 | 70 | The victory camera disables the third-person camera for 3.5 s; on very slow networks the online results may arrive during the orbit. | Cosmetic. | — |
+| 42 (update) | **Fixed in Phase 11:** holding FIRE now also steers the aim with the same finger. | — | — |
+| 71 | Gyro axes are mapped from the Android sensor convention but untested on a real phone. | Possible inverted direction in one landscape orientation. | Device test (ANDROID_BUILD.md step 3), then flip the sign in `GyroAim`. |
+| 72 | No Android build exists yet: Unity on this PC lacks the Android Build Support module (and the project targets 6.3 while 6.6 is installed). | Phase 11 device tests blocked. | Install Unity 6.3 LTS with Android Build Support + OpenJDK + SDK/NDK in Unity Hub. |
+| 73 | The touch layout editor moves whole buttons; the joystick zone and swipe area are fixed. | Less customization on the left side. | Add joystick-zone editing if players ask. |

@@ -65,6 +65,99 @@ namespace WarOfNyx.EditorTools
                       $" | NavMesh triangles: {UnityEngine.AI.NavMesh.CalculateTriangulation().indices.Length / 3}");
         }
 
+        public const string AndroidApkPath = "Builds/Android/WarOfNyx-dev.apk";
+        public const string AndroidAabPath = "Builds/Android/WarOfNyx.aab";
+
+        /// <summary>Development APK (ARM64, IL2CPP) for side-loading on test phones (Phase 11).</summary>
+        [MenuItem("War of Nyx/Build/Android APK (development)", priority = 31)]
+        public static void BuildAndroidApk()
+        {
+            if (!AndroidReady(out string why))
+            {
+                Fail(why);
+                return;
+            }
+            EditorUserBuildSettings.buildAppBundle = false;
+            BuildAndroid(AndroidApkPath, BuildOptions.Development);
+        }
+
+        /// <summary>
+        /// Release App Bundle for the Play internal testing track (Phase 14). The upload key is read ONLY from
+        /// environment variables (WON_KEYSTORE_PATH, WON_KEYSTORE_PASS, WON_KEY_ALIAS, WON_KEY_PASS); it is
+        /// never stored in the project or committed (spec 25).
+        /// </summary>
+        [MenuItem("War of Nyx/Build/Android App Bundle (release, signed)", priority = 32)]
+        public static void BuildAndroidAab()
+        {
+            if (!AndroidReady(out string why))
+            {
+                Fail(why);
+                return;
+            }
+            string keystore = Environment.GetEnvironmentVariable("WON_KEYSTORE_PATH");
+            if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
+            {
+                Fail("Release signing needs WON_KEYSTORE_PATH (+ WON_KEYSTORE_PASS, WON_KEY_ALIAS, WON_KEY_PASS) set in the environment. See ANDROID_BUILD.md.");
+                return;
+            }
+            PlayerSettings.Android.useCustomKeystore = true;
+            PlayerSettings.Android.keystoreName = keystore;
+            PlayerSettings.Android.keystorePass = Environment.GetEnvironmentVariable("WON_KEYSTORE_PASS") ?? string.Empty;
+            PlayerSettings.Android.keyaliasName = Environment.GetEnvironmentVariable("WON_KEY_ALIAS") ?? string.Empty;
+            PlayerSettings.Android.keyaliasPass = Environment.GetEnvironmentVariable("WON_KEY_PASS") ?? string.Empty;
+            EditorUserBuildSettings.buildAppBundle = true;
+            try
+            {
+                BuildAndroid(AndroidAabPath, BuildOptions.None);
+            }
+            finally
+            {
+                // Don't leave secrets in ProjectSettings (they would be saved to disk and could be committed).
+                PlayerSettings.Android.keystorePass = string.Empty;
+                PlayerSettings.Android.keyaliasPass = string.Empty;
+                PlayerSettings.Android.useCustomKeystore = false;
+                EditorUserBuildSettings.buildAppBundle = false;
+            }
+        }
+
+        private static bool AndroidReady(out string why)
+        {
+            why = null;
+            if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android))
+                why = "Android Build Support is not installed for this Unity version. Unity Hub > Installs > (version) > Add modules > " +
+                      "Android Build Support (+ OpenJDK, Android SDK & NDK Tools).";
+            else if (EditorBuildSettings.scenes.Length == 0)
+                why = "No scenes in Build Settings. Run War of Nyx > Setup > Run Project Setup first.";
+            return why == null;
+        }
+
+        private static void BuildAndroid(string path, BuildOptions options)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? "Builds");
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray(),
+                locationPathName = path,
+                target = BuildTarget.Android,
+                options = options,
+            });
+            bool ok = report.summary.result == BuildResult.Succeeded;
+            Debug.Log(ok
+                ? $"[WarOfNyx][Batch] Android build succeeded: {Path.GetFullPath(path)} ({report.summary.totalSize / (1024 * 1024)} MB)"
+                : $"[WarOfNyx][Batch] Android build {report.summary.result}: {report.summary.totalErrors} error(s).");
+            if (!ok && Application.isBatchMode)
+                EditorApplication.Exit(1);
+        }
+
+        private static void Fail(string message)
+        {
+            Debug.LogError("[WarOfNyx][Batch] " + message);
+            if (Application.isBatchMode)
+                EditorApplication.Exit(1);
+            else
+                EditorUtility.DisplayDialog("War of Nyx build", message, "OK");
+        }
+
         [MenuItem("War of Nyx/Build/Windows Player (offline capable)", priority = 30)]
         public static void BuildWindowsPlayerMenu()
         {

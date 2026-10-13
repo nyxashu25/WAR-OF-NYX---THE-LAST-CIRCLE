@@ -462,6 +462,26 @@ namespace WarOfNyx.Gameplay.Offline
             UpdateCursor();
         }
 
+        /// <summary>Touch layout editor from the pause menu (time stays stopped while editing).</summary>
+        private void EditControls()
+        {
+            if (_mobile == null)
+                return;
+            _pausePanel.SetActive(false);
+            _mobile.SetVisible(true);
+            _mobile.EditFinished -= OnEditFinished;
+            _mobile.EditFinished += OnEditFinished;
+            _mobile.SetEditMode(true);
+            UpdateCursor();
+        }
+
+        private void OnEditFinished()
+        {
+            _mobile.SetVisible(Application.isMobilePlatform || Touchscreen.current != null);
+            _pausePanel.SetActive(_paused);
+            UpdateCursor();
+        }
+
         private void Leave()
         {
             Time.timeScale = 1f;
@@ -472,7 +492,7 @@ namespace WarOfNyx.Gameplay.Offline
         private void UpdateCursor()
         {
             var human = _match.Human;
-            bool capture = human != null && human.Alive && !_paused && _open == null && !(_results != null && _results.Visible)
+            bool capture = human != null && human.Alive && !_paused && !(_mobile != null && _mobile.Editing) && _open == null && !(_results != null && _results.Visible)
                            && _spectating == null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
             var wanted = capture ? CursorLockMode.Locked : CursorLockMode.None;
             if (Cursor.lockState != wanted)
@@ -531,6 +551,7 @@ namespace WarOfNyx.Gameplay.Offline
             UiFactory.CreateText(column, "PAUSED", 56, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold, 80f);
             UiFactory.CreateText(column, "Offline match: time is stopped.", 22, NyxPalette.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, 40f);
             UiFactory.CreateButton(column, "RESUME", TogglePause, 100f, 36);
+            UiFactory.CreateButton(column, "EDIT TOUCH CONTROLS", EditControls, 100f, 30);
             UiFactory.CreateButton(column, "LEAVE MATCH", Leave, 100f, 36);
             _pausePanel = panel.gameObject;
             _pausePanel.SetActive(false);

@@ -520,6 +520,29 @@ namespace WarOfNyx.Gameplay
             UpdateCursor();
         }
 
+        /// <summary>Opens the touch layout editor (Phase 11). Local input stays off until DONE; the match keeps running.</summary>
+        private void EditControls()
+        {
+            if (_mobile == null || _localRouter == null)
+                return;
+            if (_menuOpen)
+                ToggleMenu();
+            _localRouter.InputEnabled = false;
+            _mobile.SetVisible(true);
+            _mobile.EditFinished -= OnEditFinished;
+            _mobile.EditFinished += OnEditFinished;
+            _mobile.SetEditMode(true);
+            UpdateCursor();
+        }
+
+        private void OnEditFinished()
+        {
+            if (_localRouter != null)
+                _localRouter.InputEnabled = !_menuOpen && !_modalOpen;
+            _mobile.SetVisible(Application.isMobilePlatform || Touchscreen.current != null);
+            UpdateCursor();
+        }
+
         private async void LeaveMatch()
         {
             _menuPanel.SetActive(false);
@@ -536,7 +559,7 @@ namespace WarOfNyx.Gameplay
 
         private void UpdateCursor()
         {
-            bool capture = !_menuOpen && !_modalOpen && !(_results != null && _results.Visible) && !IsLocalEliminatedPanelUp()
+            bool capture = !_menuOpen && !_modalOpen && !(_mobile != null && _mobile.Editing) && !(_results != null && _results.Visible) && !IsLocalEliminatedPanelUp()
                            && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
             Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !capture;
@@ -607,6 +630,7 @@ namespace WarOfNyx.Gameplay
             UiFactory.CreateText(column, "The match keeps running while this menu is open.", 22, NyxPalette.TextMuted,
                 TextAnchor.MiddleCenter, FontStyle.Normal, 40f);
             UiFactory.CreateButton(column, "RESUME", ToggleMenu, 100f, 36);
+            UiFactory.CreateButton(column, "EDIT TOUCH CONTROLS", EditControls, 100f, 30);
             UiFactory.CreateButton(column, "LEAVE MATCH", LeaveMatch, 100f, 36);
             _menuPanel.SetActive(false);
         }

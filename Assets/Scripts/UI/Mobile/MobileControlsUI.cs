@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.OnScreen;
 using UnityEngine.UI;
 using WarOfNyx.App;
@@ -31,6 +33,27 @@ namespace WarOfNyx.UI.Mobile
         private Image _fireImage;
         private Text _fireLabel;
         private bool _fireBlocked;
+        private RectTransform _safe;
+        private GameObject _editBar;
+        private Text _editStatus;
+        private bool _editing;
+
+        private sealed class ControlEntry
+        {
+            public string Id;
+            public RectTransform Rect;
+            public Image Image;
+            public Vector2 DefaultPosition;
+            public float DefaultSize;
+            public Behaviour Input; // OnScreenButton or tap handler: off while editing
+        }
+
+        private readonly List<ControlEntry> _controls = new List<ControlEntry>();
+
+        public bool Editing => _editing;
+
+        private static WarOfNyx.Core.Controls.TouchLayout Layout =>
+            AppServices.IsInitialized ? AppServices.UserSettings.Data.touchLayout : new WarOfNyx.Core.Controls.TouchLayout();
 
         public bool Visible => _canvas != null && _canvas.gameObject.activeSelf;
 
@@ -60,6 +83,107 @@ namespace WarOfNyx.UI.Mobile
             }
         }
 
+        /// <summary>
+        /// Layout editor (spec 18 "adjustable touch controls"): drag buttons to move them, change size and
+        /// opacity, RESET or DONE. Buttons send no input while editing. Saved with the user settings.
+        /// </summary>
+        public void SetEditMode(bool editing)
+        {
+            _editing = editing;
+            foreach (var c in _controls)
+            {
+                if (c.Input != null)
+                    c.Input.enabled = !editing;
+                var drag = c.Rect.GetComponent<DraggableControl>();
+                if (drag != null)
+                    drag.enabled = editing;
+            }
+            if (_editBar != null)
+                _editBar.SetActive(editing);
+            if (_lookArea != null)
+                _lookArea.enabled = !editing;
+            if (_joystick != null)
+                _joystick.enabled = !editing;
+            if (!editing && AppServices.IsInitialized)
+                AppServices.UserSettings.Save();
+            RefreshEditStatus();
+        }
+
+        public void ApplyLayout()
+        {
+            var layout = Layout;
+            foreach (var c in _controls)
+            {
+                layout.Offset(c.Id, out float x, out float y);
+                c.Rect.anchoredPosition = c.DefaultPosition + new Vector2(x, y);
+                c.Rect.sizeDelta = Vector2.one * (c.DefaultSize * layout.scale);
+                var color = c.Image.color;
+                color.a = (c.Id == "SPRINT" && _router != null && _router.SprintToggled ? 0.85f : 0.75f) * layout.opacity;
+                c.Image.color = color;
+            }
+        }
+
+        private void OnControlMoved(ControlEntry c)
+        {
+            var offset = c.Rect.anchoredPosition - c.DefaultPosition;
+            Layout.SetOffset(c.Id, offset.x, offset.y);
+            ApplyLayout(); // shows the clamped position
+        }
+
+        private void ChangeScale(float delta)
+        {
+            var layout = Layout;
+            layout.scale = Mathf.Clamp(layout.scale + delta, WarOfNyx.Core.Controls.TouchLayout.MinScale, WarOfNyx.Core.Controls.TouchLayout.MaxScale);
+            ApplyLayout();
+            RefreshEditStatus();
+        }
+
+        private void ChangeOpacity(float delta)
+        {
+            var layout = Layout;
+            layout.opacity = Mathf.Clamp(layout.opacity + delta, WarOfNyx.Core.Controls.TouchLayout.MinOpacity, WarOfNyx.Core.Controls.TouchLayout.MaxOpacity);
+            ApplyLayout();
+            RefreshEditStatus();
+        }
+
+        private void ResetLayout()
+        {
+            Layout.Reset();
+            ApplyLayout();
+            RefreshEditStatus();
+        }
+
+        private void RefreshEditStatus()
+        {
+            if (_editStatus != null)
+                _editStatus.text = $"DRAG BUTTONS TO MOVE  ·  SIZE {Mathf.RoundToInt(Layout.scale * 100f)}%  ·  OPACITY {Mathf.RoundToInt(Layout.opacity * 100f)}%";
+        }
+
+        private void BuildEditBar(RectTransform parent)
+        {
+            var bar = UiFactory.CreatePanel("LayoutEditor", parent, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.85f), raycastTarget: true);
+            UiFactory.Anchor(bar.rectTransform, new Vector2(0.18f, 0.84f), new Vector2(0.82f, 0.99f));
+            var column = bar.rectTransform;
+            UiFactory.AddVerticalLayout(column.gameObject, 6f, new RectOffset(12, 12, 8, 8), TextAnchor.MiddleCenter);
+            _editStatus = UiFactory.CreateText(column, string.Empty, 22, NyxPalette.ElectricCyan, TextAnchor.MiddleCenter, FontStyle.Bold, 30f);
+            var row = UiFactory.CreateRow("Buttons", column, 64f, 10f);
+            UiFactory.CreateButton(row, "SIZE -", () => ChangeScale(-0.1f), 60f, 22);
+            UiFactory.CreateButton(row, "SIZE +", () => ChangeScale(0.1f), 60f, 22);
+            UiFactory.CreateButton(row, "OPACITY -", () => ChangeOpacity(-0.1f), 60f, 22);
+            UiFactory.CreateButton(row, "OPACITY +", () => ChangeOpacity(0.1f), 60f, 22);
+            UiFactory.CreateButton(row, "RESET", ResetLayout, 60f, 22);
+            UiFactory.CreateButton(row, "DONE", () =>
+            {
+                SetEditMode(false);
+                EditFinished?.Invoke();
+            }, 60f, 22);
+            _editBar = bar.gameObject;
+            _editBar.SetActive(false);
+        }
+
+        /// <summary>Raised when the player presses DONE in the layout editor.</summary>
+        public event System.Action EditFinished;
+
         public void SetVisible(bool visible)
         {
             if (_canvas != null)
@@ -71,7 +195,11 @@ namespace WarOfNyx.UI.Mobile
             if (_joystick != null && AppServices.IsInitialized)
                 _joystick.Sensitivity = AppServices.UserSettings.Data.joystickSensitivity;
             if (_sprintImage != null && _router != null)
-                _sprintImage.color = _router.SprintToggled ? NyxPalette.WithAlpha(NyxPalette.VictoryGold, 0.85f) : ButtonColor(true);
+            {
+                var c = _router.SprintToggled ? NyxPalette.VictoryGold : ButtonColor(true);
+                c.a = (_router.SprintToggled ? 0.85f : 0.75f) * Layout.opacity;
+                _sprintImage.color = c;
+            }
         }
 
         private void Build(PlayerInputRouter router)
@@ -85,6 +213,7 @@ namespace WarOfNyx.UI.Mobile
             var safe = UiFactory.CreateRect("SafeArea", _canvas.transform);
             UiFactory.Stretch(safe);
             safe.gameObject.AddComponent<SafeAreaFitter>();
+            _safe = safe;
 
             // Look zone first so it renders (and raycasts) behind every button.
             var look = UiFactory.CreatePanel("TouchLookArea", safe, new Color(0f, 0f, 0f, 0f), raycastTarget: true);
@@ -102,6 +231,8 @@ namespace WarOfNyx.UI.Mobile
             // Right cluster (offsets from the bottom-right corner).
             _fireImage = AddButton(safe, "FIRE", "<Gamepad>/rightTrigger", BottomRight, new Vector2(-270f, 300f), 180f, active: true);
             _fireLabel = _fireImage.GetComponentInChildren<Text>();
+            // Drag-to-aim while holding FIRE (fixes KNOWN_ISSUES 42): one finger shoots and steers.
+            _fireImage.gameObject.AddComponent<TouchDragLook>().Bind(router);
             AddButton(safe, "JUMP", "<Gamepad>/buttonSouth", BottomRight, new Vector2(-110f, 140f), 140f, active: true);
             AddButton(safe, "RELOAD", "<Gamepad>/buttonWest", BottomRight, new Vector2(-110f, 330f), 110f, active: true);
             AddButton(safe, "AIM", "<Gamepad>/leftTrigger", BottomRight, new Vector2(-450f, 300f), 120f, active: true);
@@ -109,6 +240,33 @@ namespace WarOfNyx.UI.Mobile
             AddButton(safe, "WEAPON", "<Gamepad>/rightStickPress", BottomRight, new Vector2(-450f, 120f), 110f, active: true);
             AddButton(safe, "USE", "<Gamepad>/buttonNorth", BottomRight, new Vector2(-270f, 480f), 110f, active: true);
             AddButton(safe, "MEDKIT", "<Gamepad>/dpad/down", BottomRight, new Vector2(-110f, 500f), 100f, active: true);
+
+            // Register every button for the layout (position, size, opacity) and the editor.
+            foreach (Transform child in safe)
+            {
+                var image = child.GetComponent<Image>();
+                if (image == null || !child.name.StartsWith("Btn_"))
+                    continue;
+                var rect = (RectTransform)child;
+                Behaviour input = child.GetComponent<OnScreenButton>();
+                if (input == null) // explicit check: never ?? on Unity objects
+                    input = child.GetComponent<TouchTapButton>();
+                var entry = new ControlEntry
+                {
+                    Id = child.name.Substring(4),
+                    Rect = rect,
+                    Image = image,
+                    DefaultPosition = rect.anchoredPosition,
+                    DefaultSize = rect.sizeDelta.x,
+                    Input = input,
+                };
+                var drag = child.gameObject.AddComponent<DraggableControl>();
+                drag.Moved += () => OnControlMoved(entry);
+                drag.enabled = false;
+                _controls.Add(entry);
+            }
+            BuildEditBar(safe);
+            ApplyLayout();
         }
 
         private static readonly Vector2 BottomLeft = new Vector2(0f, 0f);

@@ -15,7 +15,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | **Code written; match-end rules 11 tests pass; non-Fusion code compiles in Unity 6.6, 299/299 EditMode tests pass in Unity; Fusion side not yet run** |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | **Code written and RUN in Unity: 2 full automated offline matches finish with one legitimate winner; bot rules 26 tests pass. Physical Android tests pending** |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | **Code-built visual identity done and checked in Unity (rendered screenshots, island match). Final art assets pending** |
-| 11 | Android controls finalization, quality presets, physical devices | 9 | M | Not started |
+| 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); APK not built (Android module missing); device tests pending** |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | Not started |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | Not started |
 | 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | Not started |
@@ -181,3 +181,16 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] 9 Victory presentation: camera orbit around the winner + celebration, then results (online and offline)
 - [x] 10 Mobile: post-processing and outlines off on Low; static batching on the island; shared toon material with property blocks
 - [x] Showcase screenshots rendered headless (`ShowcaseCapture`) and reviewed: fixed a yellow sky band and mirror-like terrain found in them
+
+## Phase 11 checklist
+- [x] 1 Mobile HUD: all actions on touch; FIRE shows disabled outside the circle; drag-to-aim on FIRE (one finger fires and steers)
+- [x] 2 Landscape orientation (left + right only)
+- [x] 3 Adjustable touch controls: in-match editor (drag buttons, SIZE, OPACITY, RESET, DONE), saved per device, clamped on screen (`TouchLayout`, tested)
+- [x] 4 Resolution handling: canvases scale by height (any width), safe area on every HUD canvas
+- [x] 5 Quality settings: LOW / MEDIUM / HIGH (frame-rate cap, render scale, shadows, outlines, post-processing)
+- [x] 6 Android build targets: IL2CPP, ARM64, min API 26, target API auto (≥ 36 required for release; checked in Phase 14)
+- [x] 7 APK build path: `BatchTools.BuildAndroidApk` / signed `BuildAndroidAab` (key from environment only)
+- [ ] 8 Test on physical Android devices ← needs the owner's phones + Unity Android Build Support
+- [ ] 9 Test the mobile-to-server connection ← needs Fusion App ID (+ Phase 12 server)
+- [ ] 10 Record and fix device-specific problems ← after 8/9
+- [x] Gyro aim (optional setting): mapping unit-tested; real axes need a device check
