@@ -46,7 +46,7 @@ namespace WarOfNyx.EditorTools
 
         // ------------------------------------------------------------------ Menu items
 
-        [MenuItem(MenuRoot + "Run Phase 1 Project Setup", priority = 0)]
+        [MenuItem(MenuRoot + "Run Project Setup", priority = 0)]
         public static void RunAll()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
@@ -61,13 +61,17 @@ namespace WarOfNyx.EditorTools
             Step(report, "Android player settings", ConfigurePlayerSettings);
             Step(report, "URP + Low/Medium/High quality presets", ConfigureRendering);
             Step(report, "Bootstrap + MainMenu scenes, Build Settings", () => CreateScenes(config, overwrite: false));
+            Step(report, "Practice Arena: player prefab, graybox scene (Phase 2)", () => PracticeArenaBuilder.Build(overwrite: false));
             Step(report, "Input System backend", () => restartNeeded = EnableInputSystemBackend());
+
+            if (File.Exists(BootstrapScenePath))
+                EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Single);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log("[WarOfNyx] Phase 1 setup finished:\n" + report);
-            EditorUtility.DisplayDialog("War of Nyx - Phase 1 setup", report.ToString(), "OK");
+            Debug.Log("[WarOfNyx] Project setup finished:\n" + report);
+            EditorUtility.DisplayDialog("War of Nyx - Project setup", report.ToString(), "OK");
 
             if (restartNeeded && EditorUtility.DisplayDialog("Restart required",
                     "The Input System backend was enabled. Unity must restart for it to take effect.",
@@ -98,6 +102,9 @@ namespace WarOfNyx.EditorTools
             Check(report, "Bootstrap is build scene 0",
                 EditorBuildSettings.scenes.Length > 0 && EditorBuildSettings.scenes[0].path == BootstrapScenePath);
             Check(report, "MainMenu in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == MainMenuScenePath && s.enabled));
+            Check(report, "PracticeArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.ScenePath && s.enabled));
+            Check(report, "Player placeholder prefab exists", AssetDatabase.LoadAssetAtPath<GameObject>(PracticeArenaBuilder.PrefabPath) != null);
+            Check(report, "MovementConfig asset exists", AssetDatabase.LoadAssetAtPath<WarOfNyx.Characters.MovementConfig>(PracticeArenaBuilder.MovementConfigPath) != null);
             Check(report, "URP is the default render pipeline", GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset);
             Check(report, $"Android package id = {AndroidPackageId}",
                 PlayerSettings.GetApplicationIdentifier(NamedBuildTarget.Android) == AndroidPackageId);
@@ -385,7 +392,7 @@ namespace WarOfNyx.EditorTools
             }
         }
 
-        private static void EnsureFolder(string path)
+        public static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path))
                 return;

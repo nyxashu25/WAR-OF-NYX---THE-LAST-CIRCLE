@@ -23,6 +23,7 @@ namespace WarOfNyx.App
         [Header("Scenes (must be in Build Settings)")]
         public string bootstrapScene = "Bootstrap";
         public string mainMenuScene = "MainMenu";
+        public string practiceArenaScene = "PracticeArena";
         public string matchLobbyScene = "MatchLobby";
         public string battleArenaScene = "BattleArena";
         public string matchResultsScene = "MatchResults";
@@ -53,7 +54,7 @@ namespace WarOfNyx.App
                 return config;
 
             Debug.LogWarning($"[WarOfNyx] No GameConfig at Resources/{ResourcesPath}. Using built-in defaults. " +
-                             "Run 'War of Nyx > Setup > Run Phase 1 Project Setup' to create it.");
+                             "Run 'War of Nyx > Setup > Run Project Setup' to create it.");
             config = CreateInstance<GameConfig>();
             config.name = "GameConfig (runtime default)";
             return config;

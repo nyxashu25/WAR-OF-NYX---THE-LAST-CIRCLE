@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Core.Events;
+using WarOfNyx.Core.Flow;
 using WarOfNyx.Core.Offline;
 using WarOfNyx.Platform;
 using WarOfNyx.Settings;
@@ -137,7 +139,7 @@ namespace WarOfNyx.UI.MainMenu
             UiFactory.CreateText(brand, cfg.secondaryTagline, 28, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Italic, 44f);
             UiFactory.CreateRect("Spacer", brand).gameObject.AddComponent<LayoutElement>().preferredHeight = 40f;
             _connectionText = UiFactory.CreateText(brand, "Checking connection...", 28, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal, 90f);
-            UiFactory.CreateText(brand, $"v{Application.version}  |  Phase 1 build - gameplay not implemented yet",
+            UiFactory.CreateText(brand, $"v{Application.version}  |  Phase 2 build - Practice Arena movement only",
                 22, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal, 34f);
 
             // Right: mode buttons and secondary menu.
@@ -147,8 +149,7 @@ namespace WarOfNyx.UI.MainMenu
 
             _onlineButton = UiFactory.CreateButton(menu, "ONLINE BATTLE ROYALE", OnOnlinePressed, 110f, 38);
             UiFactory.CreateButton(menu, "OFFLINE BATTLE ROYALE", () => Show(MenuScreen.OfflineSetup), 110f, 38);
-            UiFactory.CreateButton(menu, "PRACTICE ARENA", () =>
-                Notify("Practice Arena arrives with the Phase 2 movement test arena."), 96f, 34);
+            UiFactory.CreateButton(menu, "PRACTICE ARENA", OnPracticePressed, 96f, 34);
 
             var row = UiFactory.CreateRow("SecondaryRow", menu, 80f, 14f);
             UiFactory.CreateButton(row, "CHARACTERS", null, 80f, 26).Interactable = false;
@@ -367,6 +368,19 @@ namespace WarOfNyx.UI.MainMenu
         private void OnOnlinePressed()
         {
             Notify("Online matchmaking (Photon Fusion 2 + dedicated servers) is built in Phases 3-4. Not available yet.");
+        }
+
+        private void OnPracticePressed()
+        {
+            string scene = AppServices.Config.practiceArenaScene;
+            if (!Application.CanStreamedLevelBeLoaded(scene))
+            {
+                Notify("Practice Arena scene missing. Run War of Nyx > Setup > Run Project Setup in the Unity Editor.");
+                return;
+            }
+
+            if (AppServices.Flow.TryStartSession(GameMode.PracticeArena))
+                SceneManager.LoadScene(scene);
         }
 
         private void SelectBots(int count)

@@ -18,6 +18,42 @@ namespace WarOfNyx.UI.Common
         public static readonly Vector2 ReferenceResolution = new Vector2(1920f, 1080f);
 
         private static Font _font;
+        private static Sprite _circle;
+
+        /// <summary>Anti-aliased white circle generated at runtime (no texture asset needed). Tint via Image.color.</summary>
+        public static Sprite CircleSprite
+        {
+            get
+            {
+                if (_circle != null)
+                    return _circle;
+
+                const int size = 128;
+                var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+                {
+                    name = "NyxCircle",
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear,
+                };
+                var pixels = new Color32[size * size];
+                float radius = size * 0.5f - 1f;
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float dx = x + 0.5f - size * 0.5f;
+                        float dy = y + 0.5f - size * 0.5f;
+                        float alpha = Mathf.Clamp01(radius - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
+                        pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+                    }
+                }
+                texture.SetPixels32(pixels);
+                texture.Apply(false, true);
+                _circle = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+                _circle.name = "NyxCircle";
+                return _circle;
+            }
+        }
 
         public static Font DefaultFont
         {

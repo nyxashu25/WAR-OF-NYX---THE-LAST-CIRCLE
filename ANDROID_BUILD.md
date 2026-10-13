@@ -1,6 +1,6 @@
 # Android build guide
 
-Status: settings are applied by **War of Nyx → Setup → Run Phase 1 Project Setup**. **No Android build has been produced yet.**
+Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. **No Android build has been produced yet.**
 
 ## Toolchain
 - Unity 6.3 LTS with **Android Build Support**, **OpenJDK** and **Android SDK & NDK Tools** (install all three from Unity Hub → Installs → ⚙ → Add modules).

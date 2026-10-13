@@ -67,6 +67,24 @@ MainMenu scene
 
 `AppServices` is a deliberately small service locator for **app-lifetime** services only. Match systems (Phase 3+) receive their dependencies from a per-match context, so tests can build a match without global state.
 
+## 4b. Character & movement (Phase 2)
+
+```
+PlayerInputRouter ──(MovementCommand: move, yaw/pitch, sprint, aim, jump/crouch/slide edges)──► PlayerController
+   ▲  keyboard/mouse, gamepad, On-Screen joystick/buttons (virtual gamepad), TouchLookArea, sprint toggle
+PlayerController ──► PlayerMovement.Simulate(cmd, dt)
+                        ├─ GroundInfo (CharacterController.isGrounded, headroom OverlapCapsule)
+                        ├─ MovementModel.Step  (Core, pure: Standing/Crouching/Sliding/Airborne)
+                        ├─ CharacterController.Move  (collision, slopes ≤45°, steps ≤0.35 m)
+                        └─ MovementModel.ApplyCollisionResult  (walls/ceilings feed back)
+                     └─► Stepped event ──► PlayerAnimationController (Animator or placeholder procedural)
+ThirdPersonCamera ◄── reads router yaw/pitch + movement stance (visual only)
+```
+
+- **Authority mapping for Phase 3:** `MovementCommand` becomes the Fusion input struct. `Simulate` runs in `FixedUpdateNetwork` on the server (authoritative) and on the owning client (prediction plus re-simulation). `MovementState` is a plain struct, so it can be stored in networked state and rolled back.
+- **Bots** (Ghost Protocol) produce the same `MovementCommand`, so they move under identical rules.
+- The capsule's feet sit at the transform origin. Height switches between 1.8 m (standing) and 1.15 m (crouch/slide). Standing up requires the headroom check to pass.
+
 ## 5. Match architecture *(planned)*
 
 | Concern | Online (Phase 3–9) | Offline (Ghost Protocol) |

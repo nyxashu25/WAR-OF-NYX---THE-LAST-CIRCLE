@@ -23,7 +23,7 @@ namespace WarOfNyx.App
             if (!Application.CanStreamedLevelBeLoaded(menu))
             {
                 Debug.LogError($"[WarOfNyx] Scene '{menu}' is not in Build Settings. " +
-                               "Run 'War of Nyx > Setup > Run Phase 1 Project Setup'.");
+                               "Run 'War of Nyx > Setup > Run Project Setup'.");
                 yield break;
             }
 

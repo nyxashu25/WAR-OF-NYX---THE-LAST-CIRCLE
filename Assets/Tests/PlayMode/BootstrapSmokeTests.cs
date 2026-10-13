@@ -21,7 +21,7 @@ namespace WarOfNyx.Tests.PlayMode
         public IEnumerator BootstrapLoadsMainMenu()
         {
             if (!Application.CanStreamedLevelBeLoaded("Bootstrap"))
-                Assert.Ignore("Bootstrap scene is not in Build Settings. Run War of Nyx > Setup > Run Phase 1 Project Setup.");
+                Assert.Ignore("Bootstrap scene is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
 
             yield return SceneManager.LoadSceneAsync("Bootstrap", LoadSceneMode.Single);
 

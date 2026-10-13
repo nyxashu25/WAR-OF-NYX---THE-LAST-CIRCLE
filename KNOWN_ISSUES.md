@@ -13,6 +13,12 @@
 | 9 | Offline capacity thresholds (RAM/cores → 5/11/15/23 bots) and the graphics tier mapping are **provisional guesses**. | 23 bots may be allowed on a phone that can't run them, or blocked on one that can. | Replace with measured data in 9G/13. |
 | 10 | Bot difficulty numbers are provisional. | Balance. | Tune in 9G with playtests. |
 | 11 | Connectivity probe uses `https://www.gstatic.com/generate_204` by default. | It makes an external request every 5 s while the menu is open. | Configurable in GameConfig. Leave empty to use OS reachability only. Revisit for the privacy policy. |
-| 12 | Volume (except master), sensitivity, gyro, reduce-shake are **saved but not used** yet. | Changing them has no effect in Phase 1. | Wired up in Phases 2, 10 and 11. |
-| 13 | Online, Offline START and Practice buttons only show notices. | Not playable. | Phases 2, 3–4 and 9G. |
+| 12 | Music/SFX/UI volume, gyro and reduce-shake are **saved but not used** yet. Master volume, aim sensitivity and joystick sensitivity are used from Phase 2. | Those settings have no effect yet. | Wired up in Phases 10 and 11. |
+| 13 | The Online and Offline START buttons only show notices. Practice Arena is playable from Phase 2. | Not playable. | Phases 3–4 and 9G. |
 | 14 | No Git LFS. | The repo will grow quickly once art and audio land. | Set up LFS before Phase 10 assets (`.gitattributes` lists the binary types). |
+| 15 | Phase 2 movement runs in `Update` with a variable, clamped time step. The model itself is fixed-tick ready. | Fine for local play. Online needs a fixed tick. | Phase 3 moves `Simulate` into Fusion's fixed-tick `FixedUpdateNetwork`. |
+| 16 | The character is a **placeholder capsule** with procedural squash/lean. There are no rigged animations. | Looks basic. | Real anime rigs + Animator (parameters already defined) in Phase 10. |
+| 17 | Touch layout is fixed. There is no drag-to-customize, per-button scaling or gyro aim yet. Combat buttons are placed but dimmed. | Spec 18 customization is incomplete. | Phase 11 (customization, gyro). Combat buttons go live in Phases 5–6. |
+| 18 | The UI EventSystem's default actions share the virtual gamepad with the touch buttons (e.g. UI Submit = JUMP). The sprint toggle avoids `Button` for this reason, and pause clears UI selection. | A selected uGUI Button could react to JUMP. | Phase 11: give in-match UI its own action map without gamepad submit/navigate. |
+| 19 | `Physics.OverlapCapsuleNonAlloc` / `SphereCastNonAlloc` may show deprecation warnings in newer Unity 6 releases. | Warnings only. | Switch to the newer overloads if Unity flags them. |
+| 20 | Practice Arena geometry is **generated graybox** (spec 16 stage 1), not the real map. | — | NYX ISLAND graybox starts with Phase 4 spawning. |

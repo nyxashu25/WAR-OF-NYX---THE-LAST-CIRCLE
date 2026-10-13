@@ -8,10 +8,10 @@ An original anime-style third-person battle royale for **Android**, built with *
 |---|---|
 | Internal id | `WarOfNyx` |
 | Android package | `com.nyxgames.warofnyx` |
-| Current phase | **Phase 1 – Architecture & project initialization** (code written, not yet opened in Unity) |
+| Current phase | **Phase 2 – Character, camera & controls** (code written; core movement tested under .NET; not yet opened in Unity) |
 | Offline default | Ghost Protocol, **NIGHTMARE**, **23 bots** (automatically lowered on devices that can't run 23) |
 
-> **Honest status:** the pure rules core (`WarOfNyx.Core`) compiles and passes 39/39 tests under .NET (`dotnet test Tools/CoreTests`). The Unity-side code has **not** been compiled in Unity yet. Gameplay (movement, combat, circle, bots, multiplayer) is **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> **Honest status:** the pure rules core (`WarOfNyx.Core`, including the movement state machine) compiles and passes **69/69** tests under .NET (`dotnet test Tools/CoreTests`). The Unity-side code has **not** been compiled in Unity yet. Implemented so far: menu, settings, and Practice Arena movement (walk/sprint/crouch/slide/jump, third-person camera, PC + touch controls). Combat, circle, bots and multiplayer are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ---
 
@@ -24,7 +24,7 @@ An original anime-style third-person battle royale for **Android**, built with *
 2. In Unity Hub choose **Add → Add project from disk** and select this folder. If Hub asks which editor version to use, pick your installed 6000.3.x.
 3. On first open, Unity imports the packages in `Packages/manifest.json`. If it says it **updated package versions** to match your editor, accept that.
    - If Unity asks *"enable the new Input System backends?"*, answer **Yes**. Unity will restart.
-4. Menu **War of Nyx → Setup → Run Phase 1 Project Setup**. This:
+4. Menu **War of Nyx → Setup → Run Project Setup**. This:
    - applies the Android player settings (package id, landscape, IL2CPP, ARM64, min API 26),
    - creates URP **Low / Medium / High** quality presets,
    - creates `Assets/Resources/WarOfNyx/GameConfig.asset`,
@@ -34,7 +34,7 @@ An original anime-style third-person battle royale for **Android**, built with *
 6. Open `Assets/Scenes/Bootstrap.unity` and press **Play**. You should see the main menu:
    - **ONLINE BATTLE ROYALE** – enabled only when internet is detected. Pressing it says online play arrives in Phases 3–4.
    - **OFFLINE BATTLE ROYALE** – Ghost Protocol setup: bot count 5/11/15/23 and difficulty Rookie/Warrior/Elite/NIGHTMARE. Your choice is saved. Starting a match is **not available yet**.
-   - **PRACTICE ARENA** – arrives in Phase 2.
+   - **PRACTICE ARENA** – the Phase 2 movement test map: a placeholder capsule character, third-person camera, keyboard/mouse and touch controls. Esc or the II button pauses. F2 shows the touch controls on PC; F3 shows the stats overlay.
    - **SETTINGS** – graphics preset, volumes, sensitivity and comfort options (saved on the device).
 7. Run the tests: **Window → General → Test Runner**, then run **EditMode** and **PlayMode**.
 8. **Commit the generated `.meta` files and settings.** Unity creates `.meta` files, `ProjectSettings/*` and the scenes on first open. Commit them so every machine shares the same asset GUIDs:
