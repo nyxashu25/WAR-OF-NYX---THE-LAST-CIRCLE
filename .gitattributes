@@ -30,3 +30,9 @@
 *.dll   binary
 *.so    binary
 *.a     binary
+
+# Container / shell files must keep Unix line endings (Phase 12)
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
+.dockerignore text eol=lf
