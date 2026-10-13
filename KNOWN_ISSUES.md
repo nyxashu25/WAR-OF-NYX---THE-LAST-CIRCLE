@@ -80,3 +80,5 @@
 | 76 | The Edgegap template's field names are from documentation known at the time of writing and are unverified against a live account. | Upload may need small edits. | Check the current Edgegap docs. |
 | 77 | The offline benchmark measures CPU for AI + rules only (batch mode, no rendering), on a desktop CPU. | Phone FPS unknown. | Device sessions with the CSV recorder (PERFORMANCE.md §2). |
 | 78 | The settings screen now has 9 rows; on very short landscape screens the bottom text may be tight. | Possible overlap on small phones. | Check on devices; make the settings list scrollable if needed. |
+| 79 | The desktop build (`Builds/WindowsPlayer`, shortcut "WAR OF NYX") was made with Unity 6.6 from a scratch copy and **without Fusion**: online buttons explain that the SDK is missing. | Online play isn't in this build. | After installing Fusion + App ID, rebuild with War of Nyx → Build → Windows Player. |
+| 80 | The app icon and feature graphic are generated placeholders (emblem without lettering). | Store look. | Commission final branding. |

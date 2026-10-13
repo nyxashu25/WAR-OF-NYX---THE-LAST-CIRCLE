@@ -18,7 +18,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); APK not built (Android module missing); device tests pending** |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | **Files and server code done (health endpoint verified in Unity); deployment pending Fusion + Docker + Edgegap account** |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | **Tools, benchmarks and fuzz tests done (PERFORMANCE.md); device + network measurements pending** |
-| 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | Not started |
+| 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | **Prepared: validator, icon/splash, privacy + store drafts, release checklist. Blocked for submission: Fusion, Android module, API 36 SDK, device tests, final art** |
 | post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
 
 ## Why 9G sits there
@@ -219,3 +219,15 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [ ] 10 Android lifecycle ← device checklist in PERFORMANCE.md
 - [ ] 11 Crashes and desync ← found none in the automated runs; real sessions pending
 - [x] 12 Document performance measurements: PERFORMANCE.md (only measured values)
+
+## Phase 14 checklist
+- [x] 1 Release configuration: version 0.1.0 / code 1, release validator (`ReleaseTools.ValidateRelease` → `Builds/release-check.txt`)
+- [x] 2 App icon and splash (generated placeholder emblem; feature graphic 1024×500)
+- [x] 3 Privacy documentation: PRIVACY.md draft (owner completes contact / retention / engine settings and hosts it)
+- [x] 4 Permissions: INTERNET (+ network state) only; validator checks for sensitive permissions
+- [x] 5 Signing: environment-only upload key, passwords cleared after the build, validator checks
+- [ ] 6 Build an Android App Bundle ← Android Build Support module
+- [ ] 7 Validate target SDK 36 ← install SDK Platform 36; validator warns while the target is "Auto"
+- [x] 8 Data-safety disclosures: draft in STORE_LISTING.md
+- [~] 9 Store screenshots and descriptions: description drafted; rendered screenshots are drafts, real phone captures needed
+- [~] 10 Final test checklist: RELEASE_CHECKLIST.md maps spec 36 / 38 / 25; the networked two-phone run is still open

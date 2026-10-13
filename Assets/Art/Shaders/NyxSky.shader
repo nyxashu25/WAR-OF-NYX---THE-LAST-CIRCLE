@@ -57,7 +57,7 @@ Shader "WarOfNyx/NyxSky"
 
                 // Glow band near the horizon; colour drifts from magenta to cyan around the compass.
                 float band = exp(-pow((y - _GlowHeight) / _GlowWidth, 2.0));
-                float around = 0.5 + 0.5 * sin(atan2(d.z, d.x) * 1.5);
+                float around = 0.5 + 0.5 * sin(atan2(d.z, d.x) * 2.0); // integer frequency: no seam where the angle wraps
                 color += lerp(_GlowColor.rgb, _GlowColor2.rgb, around) * band * 0.55;
                 return half4(color, 1.0);
             }

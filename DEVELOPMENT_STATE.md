@@ -1,13 +1,13 @@
 # Development state (handoff record)
 
-_Last updated: 2026-10-13 — end of Phase 13_
+_Last updated: 2026-10-13 — end of Phase 14 (all phases have code)_
 
 ## Phase map
 15 phases in total: 1–14 from the master prompt, plus **9G Offline Ghost Protocol** (Section 38).
-Code written: **1–13 and 9G**. Remaining: 14.
+Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: Photon Fusion + App ID, Unity 6.3 LTS with Android Build Support, phones, hosting accounts, final art.
 
 ## Current phase
-**Phase 13 – Optimization and testing.** PERFORMANCE.md holds only measured values: offline AI + rules on NYX ISLAND cost 0.06 / 0.14 / 0.25 ms per tick for 5 / 11 / 23 NIGHTMARE bots (desktop, Unity 6.6). Fuzz/abuse tests pass. FPS overlay (F4 / Settings) and CSV recorder are in place for device sessions. Device, GPU and network measurements need phones and Fusion.
+**Phase 14 – Release preparation, done as far as possible without accounts.** Release validator (2 blocked: Android module, Fusion; 1 warning: target API Auto), generated icon / splash / feature graphic, PRIVACY.md, STORE_LISTING.md, RELEASE_CHECKLIST.md. A Windows offline build is on the owner's desktop (shortcut "WAR OF NYX").
 
 ## Configuration requested by the project owner
 - Offline Ghost Protocol defaults: **Difficulty = NIGHTMARE, Bots = 23** (in `GameConfig`, clamped by `OfflineCapacityPolicy`; difficulty never lowered).
@@ -23,6 +23,7 @@ Code written: **1–13 and 9G**. Remaining: 14.
 | **Match-end rules (Phase 9)** | `Core/Match/MatchResults.cs`: `MatchResolver` (placements, last survivor, tie-break), `KillNotices`, `MatchResultText`, `MatchHistory` (+entries, totals); `MatchLifecycle.EndMatch` + results timer; `GameStateMachine` new-round wrap | Yes (.NET + Unity EditMode) |
 | **Bot rules (Phase 9G)** | `Core/Bots`: `BotPersonality` (+`BotNames`), `BotPerception` (+`BotMemory`, `SoundEvent`), `BotBrain` (19 states, utility, hysteresis) + `BotAim`, `BotLootPlanner`; `Core/Items/LootClaims` (shared by online + offline) | Yes (.NET + Unity) |
 | Offline Ghost Protocol (9G) | `Gameplay/Offline`: `OfflineMatch` (local authority, 60 Hz ticks, circle, hunt, resolver, damage, loot, history) + `OfflineMatchRequest`, `OfflineCombatant`, `BotController` (perception, decisions, NavMesh, combat), `OfflineLootCrate`, `OfflineMatchHud`; `Gameplay/Effects/LootCapsuleVisual` (shared); `UI/Hud/LootViews` (shared); GhostProtocol scene builder; menu START | **Yes: compiled, 2 full matches run in Unity PlayMode** |
+| Phase 14 release | `Editor/ReleaseTools` (branding generator, release validator), setup step for icon/splash, PRIVACY.md, STORE_LISTING.md, RELEASE_CHECKLIST.md | Validator + branding run in Unity |
 | Phase 13 testing | `Tests/EditMode/RobustnessTests`, `Tests/PlayMode/OfflinePerformanceTests`, `UI/Hud/PerformanceOverlay` (+settings SHOW FPS / RECORD PERFORMANCE), PERFORMANCE.md | Yes (Unity + .NET) |
 | Phase 12 infrastructure | `Core/Networking/ServerOperations` (`ServerLifetimePolicy`, `ServerJson`), `ServerLaunchOptions` (+env, healthPort, maxMatches, idleShutdown), `App/ServerRuntime` (health endpoint, telemetry, exit), `GameBootstrap` wiring; `Server/Docker/*`, `.dockerignore`, `Server/Edgegap/app-version.template.json` | Core + Unity tests; not deployed |
 | Phase 11 controls/builds | `Core/Controls/TouchLayout` (+`GyroAim`), `UI/Mobile`: `MobileControlsUI` (layout, editor), `DraggableControl`, `TouchDragLook`; `PlayerInputRouter` gyro; `UserSettings.touchLayout`; EDIT TOUCH CONTROLS in the online menu and offline pause; `BatchTools.BuildAndroidApk/BuildAndroidAab` | Unity compile + EditMode; device tests pending |
@@ -66,6 +67,8 @@ Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Te
 ## External dependencies still required (project owner)
 - Unity 6.3 LTS (Android, Windows/Linux Dedicated Server modules); Photon account + Fusion 2 App ID + Fusion SDK 2.1.3; 2+ clients for multiplayer tests.
 
-## Next tasks
-1. Owner: devices + Fusion for the pending Phase 11–13 measurements.
-2. **Phase 14 – Release preparation:** release configuration and version checks, app icon + splash, privacy policy and data-safety draft, permissions review, signing (environment-only), AAB path, target-SDK validation, store listing draft and screenshots, final checklist. Never claim store approval.
+## Next tasks (owner, in this order)
+1. Decide the editor: install **Unity 6.3 LTS** with **Android Build Support (+ OpenJDK, SDK & NDK)** (recommended; the repo is pinned to 6.3), or move the project to 6.6 after checking Fusion's support.
+2. Create a Photon account + **Fusion 2 App ID**, import **Fusion 2.1.3**, set the App ID, run **War of Nyx → Setup → Run Project Setup**, fix compile errors in the networking module (never compiled yet).
+3. Two-PC test (TESTING.md Phases 3–9), then two phones (ANDROID_BUILD.md), then Docker/Edgegap (SERVER_DEPLOYMENT.md).
+4. Final art (characters, buildings, audio), then the store steps in RELEASE_CHECKLIST.md.
