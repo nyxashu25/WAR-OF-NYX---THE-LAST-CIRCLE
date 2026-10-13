@@ -16,6 +16,9 @@ namespace WarOfNyx.Tests.PlayMode
     {
         private readonly List<GameObject> _objects = new List<GameObject>();
 
+        [UnitySetUp]
+        public IEnumerator EmptyWorld() => TestWorld.Fresh();
+
         [TearDown]
         public void TearDown()
         {

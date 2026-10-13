@@ -65,9 +65,28 @@ namespace WarOfNyx.EditorTools
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 return;
 
+            string report = RunSteps(out bool restartNeeded);
+
+            if (File.Exists(BootstrapScenePath))
+                EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Single);
+
+            Debug.Log("[WarOfNyx] Project setup finished:\n" + report);
+            EditorUtility.DisplayDialog("War of Nyx - Project setup", report, "OK");
+
+            if (restartNeeded && EditorUtility.DisplayDialog("Restart required",
+                    "The Input System backend was enabled. Unity must restart for it to take effect.",
+                    "Restart now", "Later"))
+            {
+                EditorApplication.OpenProject(Directory.GetCurrentDirectory());
+            }
+        }
+
+        /// <summary>Every setup step without dialogs (also used by <see cref="BatchTools.Setup"/>). Returns the report.</summary>
+        public static string RunSteps(out bool restartNeeded)
+        {
             var report = new StringBuilder();
             GameConfig config = null;
-            bool restartNeeded = false;
+            bool restart = false;
 
             Step(report, "Folders", EnsureProjectFolders);
             Step(report, "GameConfig asset", () => config = CreateOrLoadConfig());
@@ -79,23 +98,12 @@ namespace WarOfNyx.EditorTools
             foreach (var (name, action) in AdditionalSteps)
                 Step(report, name, action);
             Step(report, "Register WarOfNyx.Networking with the Fusion weaver", () => FusionIntegration.RegisterAssemblyWithWeaver(quiet: true));
-            Step(report, "Input System backend", () => restartNeeded = EnableInputSystemBackend());
-
-            if (File.Exists(BootstrapScenePath))
-                EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Single);
+            Step(report, "Input System backend", () => restart = EnableInputSystemBackend());
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-
-            Debug.Log("[WarOfNyx] Project setup finished:\n" + report);
-            EditorUtility.DisplayDialog("War of Nyx - Project setup", report.ToString(), "OK");
-
-            if (restartNeeded && EditorUtility.DisplayDialog("Restart required",
-                    "The Input System backend was enabled. Unity must restart for it to take effect.",
-                    "Restart now", "Later"))
-            {
-                EditorApplication.OpenProject(Directory.GetCurrentDirectory());
-            }
+            restartNeeded = restart;
+            return report.ToString();
         }
 
         [MenuItem(MenuRoot + "Rebuild Phase 1 Scenes (overwrite)", priority = 20)]

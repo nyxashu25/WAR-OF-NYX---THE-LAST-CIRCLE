@@ -68,7 +68,9 @@ namespace WarOfNyx.EditorTools
                 prefab = CreatePlayerPrefab(config, palette);
 
             if (overwrite || !File.Exists(ScenePath))
-                CreateScene(prefab.GetComponent<PlayerController>(), palette);
+                CreateScene(palette);
+            else
+                RepairSceneReference();
 
             CreateFxMaterial();
 
@@ -159,17 +161,57 @@ namespace WarOfNyx.EditorTools
 
         // ------------------------------------------------------------------ Scene
 
-        private static void CreateScene(PlayerController playerPrefab, Palette p)
+        private static void CreateScene(Palette p)
         {
             var scene = CreateArenaBase(p, out var spawn);
 
             var arena = new GameObject("PracticeArena").AddComponent<PracticeArenaController>();
             var so = new SerializedObject(arena);
-            so.FindProperty("playerPrefab").objectReferenceValue = playerPrefab;
+            // Load the prefab AFTER creating the scene: opening a new scene can unload assets created
+            // earlier in the same call, which silently stored a null reference (found by the first
+            // Unity PlayMode run).
+            so.FindProperty("playerPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<PlayerController>(PrefabPath);
             so.FindProperty("spawnPoint").objectReferenceValue = spawn;
             so.ApplyModifiedPropertiesWithoutUndo();
+            if (so.FindProperty("playerPrefab").objectReferenceValue == null)
+                Debug.LogError($"[WarOfNyx] Practice Arena: could not reference {PrefabPath}.");
 
             EditorSceneManager.SaveScene(scene, ScenePath);
+        }
+
+        /// <summary>Re-links the player prefab in an existing Practice Arena scene whose reference is missing.</summary>
+        private static void RepairSceneReference()
+        {
+            if (!File.Exists(ScenePath))
+                return;
+            var prefab = AssetDatabase.LoadAssetAtPath<PlayerController>(PrefabPath);
+            if (prefab == null)
+                return;
+
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            try
+            {
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    var arena = root.GetComponentInChildren<PracticeArenaController>(true);
+                    if (arena == null)
+                        continue;
+                    var so = new SerializedObject(arena);
+                    var property = so.FindProperty("playerPrefab");
+                    if (property.objectReferenceValue != null)
+                        return;
+                    property.objectReferenceValue = prefab;
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    EditorSceneManager.SaveScene(scene);
+                    Debug.Log("[WarOfNyx] Practice Arena: re-linked the missing player prefab.");
+                    return;
+                }
+            }
+            finally
+            {
+                if (EditorSceneManager.sceneCount > 1)
+                    EditorSceneManager.CloseScene(scene, true);
+            }
         }
 
         /// <summary>

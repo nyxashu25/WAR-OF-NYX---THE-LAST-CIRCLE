@@ -20,6 +20,9 @@ namespace WarOfNyx.Tests.PlayMode
         private const float Dt = 1f / 60f;
         private readonly List<GameObject> _spawned = new List<GameObject>();
 
+        [UnitySetUp]
+        public IEnumerator EmptyWorld() => TestWorld.Fresh();
+
         [TearDown]
         public void TearDown()
         {

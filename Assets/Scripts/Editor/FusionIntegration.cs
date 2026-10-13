@@ -43,8 +43,9 @@ namespace WarOfNyx.EditorTools
             EditorApplication.delayCall += SyncDefine;
         }
 
+        /// <summary>True when the Photon Fusion SDK (Fusion.Runtime) is part of the project.</summary>
         public static bool FusionInstalled =>
-            AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "Fusion.Runtime");
+            Type.GetType("Fusion.NetworkRunner, Fusion.Runtime", throwOnError: false) != null;
 
         // ------------------------------------------------------------------ Define sync
 
