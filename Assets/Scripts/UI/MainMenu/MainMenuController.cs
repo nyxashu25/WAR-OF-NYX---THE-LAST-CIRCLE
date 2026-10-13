@@ -674,7 +674,19 @@ namespace WarOfNyx.UI.MainMenu
         private void OnStartOffline()
         {
             AppServices.UserSettings.SetOfflineSettings(_offline);
-            Notify($"Saved: {_offline}. Offline matches are built in the Ghost Protocol phase, after core combat - not playable yet.");
+            string scene = AppServices.Config.ghostProtocolScene;
+            if (!Application.CanStreamedLevelBeLoaded(scene))
+            {
+                Notify($"Scene '{scene}' is not in Build Settings. Run War of Nyx > Setup > Run Project Setup.");
+                return;
+            }
+
+            // Spec 38: no internet, server or Photon session involved. The local match is the authority.
+            CancelQuickMatch();
+            Gameplay.Offline.OfflineMatchRequest.Reset();
+            Gameplay.Offline.OfflineMatchRequest.Bots = _offline.BotCount;
+            Gameplay.Offline.OfflineMatchRequest.Difficulty = _offline.Difficulty;
+            SceneManager.LoadScene(scene);
         }
 
         private void RefreshSettings()

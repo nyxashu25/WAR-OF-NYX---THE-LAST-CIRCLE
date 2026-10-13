@@ -26,6 +26,7 @@ namespace WarOfNyx.App
         public string practiceArenaScene = "PracticeArena";
         public string matchLobbyScene = "MatchLobby";
         public string battleArenaScene = "BattleArena";
+        public string ghostProtocolScene = "GhostProtocol";
         public string matchResultsScene = "MatchResults";
 
         [Header("Offline Ghost Protocol defaults")]

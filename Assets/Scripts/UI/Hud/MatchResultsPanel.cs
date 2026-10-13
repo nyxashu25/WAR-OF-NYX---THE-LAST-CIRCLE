@@ -35,6 +35,7 @@ namespace WarOfNyx.UI.Hud
         private Text _subtitle;
         private Text _headline;
         private Text _stats;
+        private Text _extra;
         private Text _table;
         private Text _footer;
 
@@ -103,6 +104,12 @@ namespace WarOfNyx.UI.Hud
             _footer.text = $"RETURNING TO THE LOBBY IN {Mathf.CeilToInt(Mathf.Max(0f, secondsToLobby))} s";
         }
 
+        /// <summary>An extra line under the stats (offline: bots eliminated, accuracy, difficulty).</summary>
+        public void SetExtraLine(string text) => _extra.text = text ?? string.Empty;
+
+        /// <summary>Replaces the "returning to the lobby" footer (offline matches have no lobby).</summary>
+        public void SetFooter(string text) => _footer.text = text ?? string.Empty;
+
         public void Hide()
         {
             if (_panel != null)
@@ -133,6 +140,7 @@ namespace WarOfNyx.UI.Hud
             _subtitle = UiFactory.CreateText(column, string.Empty, 44, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold, 56f);
             _headline = UiFactory.CreateText(column, string.Empty, 36, NyxPalette.VictoryGold, TextAnchor.MiddleCenter, FontStyle.Bold, 48f);
             _stats = UiFactory.CreateText(column, string.Empty, 24, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Normal, 40f);
+            _extra = UiFactory.CreateText(column, string.Empty, 22, NyxPalette.ElectricCyan, TextAnchor.MiddleCenter, FontStyle.Normal, 32f);
 
             _table = UiFactory.CreateText(column, string.Empty, 22, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 420f);
             _table.supportRichText = true;

@@ -5,7 +5,6 @@ using WarOfNyx.Combat;
 using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Items;
 using WarOfNyx.Gameplay.Effects;
-using WarOfNyx.UI.Common;
 
 namespace WarOfNyx.Networking
 {
@@ -84,11 +83,7 @@ namespace WarOfNyx.Networking
         [Networked] private byte HighestRarity { get; set; }
         [Networked] public NetworkString<_16> OwnerName { get; set; }
 
-        private Transform _visual;
-        private Renderer _capsule;
-        private LineRenderer _beam;
-        private Light _light;
-        private byte _renderedRarity = 255;
+        private LootCapsuleVisual _visual;
 
         public float SecondsLeft => Runner != null ? Mathf.Max(0f, ExpiresAt - Runner.SimulationTime) : 0f;
 
@@ -144,8 +139,7 @@ namespace WarOfNyx.Networking
         public override void Spawned()
         {
             Active.Add(this);
-            if (!Application.isBatchMode)
-                BuildVisual();
+            _visual = LootCapsuleVisual.Attach(transform); // null on the dedicated server
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState) => Active.Remove(this);
@@ -160,62 +154,8 @@ namespace WarOfNyx.Networking
 
         public override void Render()
         {
-            if (_visual == null)
-                return;
-
-            if (_renderedRarity != HighestRarity)
-            {
-                _renderedRarity = HighestRarity;
-                var color = RarityColors.For((Rarity)HighestRarity);
-                var block = new MaterialPropertyBlock();
-                block.SetColor("_BaseColor", new Color(color.r, color.g, color.b, 0.55f));
-                block.SetColor("_Color", new Color(color.r, color.g, color.b, 0.55f));
-                _capsule.SetPropertyBlock(block);
-                _beam.startColor = new Color(color.r, color.g, color.b, 0.6f);
-                _beam.endColor = new Color(color.r, color.g, color.b, 0f);
-                _light.color = color;
-            }
-
-            // Hover, spin and blink faster in the last 10 seconds.
-            float t = Time.time;
-            _visual.localPosition = new Vector3(0f, Mathf.Sin(t * 2f) * 0.12f, 0f);
-            _visual.localRotation = Quaternion.Euler(0f, t * 60f, 0f);
-            bool expiring = SecondsLeft < 10f;
-            _light.intensity = expiring ? (Mathf.Sin(t * 12f) > 0f ? 2f : 0.3f) : 1.5f;
-        }
-
-        /// <summary>PLACEHOLDER holographic capsule (spec 14): glowing, rarity-coloured, with a light beam.</summary>
-        private void BuildVisual()
-        {
-            var material = Resources.Load<Material>(SpawnEffect.MaterialResource);
-            _visual = new GameObject("Hologram (PLACEHOLDER)").transform;
-            _visual.SetParent(transform, false);
-
-            var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            DestroyImmediate(capsule.GetComponent<Collider>()); // looting is by distance; never blocks shots or movement
-            capsule.transform.SetParent(_visual, false);
-            capsule.transform.localScale = new Vector3(0.6f, 0.45f, 0.6f);
-            _capsule = capsule.GetComponent<Renderer>();
-            if (material != null)
-                _capsule.sharedMaterial = material;
-            _capsule.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-            var beamGo = new GameObject("Beam");
-            beamGo.transform.SetParent(transform, false);
-            _beam = beamGo.AddComponent<LineRenderer>();
-            if (material != null)
-                _beam.sharedMaterial = material;
-            _beam.useWorldSpace = false;
-            _beam.positionCount = 2;
-            _beam.SetPosition(0, Vector3.zero);
-            _beam.SetPosition(1, Vector3.up * 8f);
-            _beam.widthMultiplier = 0.12f;
-
-            var lightGo = new GameObject("Glow");
-            lightGo.transform.SetParent(transform, false);
-            _light = lightGo.AddComponent<Light>();
-            _light.type = LightType.Point;
-            _light.range = 5f;
+            if (_visual != null)
+                _visual.Show((Rarity)HighestRarity, SecondsLeft);
         }
     }
 }

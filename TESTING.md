@@ -28,6 +28,10 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | **Unity 6000.6.5f1**, batch mode | `BatchTools.Setup` (= Run Project Setup without dialogs) | **all 9 steps OK** | First real setup run: Android settings, URP presets, GameConfig, all 5 scenes + NavMesh, prefabs, weapons, Input System |
 | 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | PlayMode after setup | **9 passed, 0 failed** | Found and fixed 2 real bugs: the Practice Arena scene lost its player-prefab reference when generated (asset unloaded by the new scene), and PlayMode tests leaked a loaded arena into later tests (now each test starts in an empty world) |
 | 2026-10-13 | **Unity 6000.6.5f1** | `BatchTools.BuildWindowsPlayer` (Windows x64, without Fusion) | **Build succeeded** (101 MB, 101 s) | Started headless for 15 s: no crash, services start (`Max offline bots: 23` on this PC) |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 9G (adds `BotTests`) | **305 passed, 0 failed** | 26 new: vision/LOS/FOV/hearing/memory, 19-state reachability (caught 2 unreachable states, fixed), decisions, aim, loot choice, names, shared loot claims |
+| 2026-10-13 | **Unity 6000.6.5f1** | Compile + setup (adds the GhostProtocol scene + NavMesh) | **0 errors, 0 warnings** | |
+| 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | EditMode | **323 passed, 0 failed** | |
+| 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | PlayMode incl. `GhostProtocolPlayModeTests` | **11 passed, 0 failed** | Spec 38.17 acceptance test: 11 bots with no human finished in 93 simulated s, winner KAGE_46, 10 combat eliminations; 1 idle human + 11 bots: the idle human was exposed and eliminated by the Nyx Hunt (#4), a bot won with 5 kills. Simulated at 12× speed, about 8 real s each |
 | — | Unity 6.3 LTS (the project's pinned version) | everything | **Not run** | The machine has Unity 6.6 installed. See KNOWN_ISSUES 57 |
 
 ## Running the Unity checks from the command line
@@ -230,3 +234,20 @@ Local dev server with the fast circle, 2–3 clients.
 7. After 15 s everyone is back in the lobby, still connected. The next match starts automatically once enough players are there. No capsules, beacons or circle remain.
 8. The Online screen in the main menu shows `YOUR ONLINE RECORD: 1 MATCHES · …`.
 9. Tie-break: let the last two players sit outside the closed circle with equal health. They die in the same tick, and the player with more kills (then damage, then lower id) wins with `(TIE-BREAK)`.
+
+## Phase 9G test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/BotTests.cs` | No vision through walls; FOV, range, crouch/still; proximity sense; hearing radius and approximate source; memory decay and last known position; reaction clock restarts; calm bots explore; top layer (eliminated, spawning, escape circle); engage; heal/retreat; investigate gunfire; proactive zone moves; camping avoidance; looting only when safe; final circle; **all 19 states reachable**; hysteresis; personalities; human reaction floor and imperfect aim; limited turning; loot choice (medkits when hurt, rifle over a starved shotgun, useless items ignored, strategies); bot names; shared loot claims (take-all never swaps, single take moves once) | **26/26 pass** (.NET and Unity) |
+| `Tests/PlayMode/GhostProtocolPlayModeTests.cs` | Full offline matches in the real scene: bots only → one winner, distinct placements, bot-vs-bot eliminations, weapons used; idle human + 11 bots → human placed, match ends | **2/2 pass** (Unity) |
+
+## Manual test: offline Ghost Protocol (Phase 9G, no internet)
+1. Turn off Wi-Fi / unplug the network. Start the game: the menu says INTERNET: NOT AVAILABLE, and OFFLINE BATTLE ROYALE is available.
+2. OFFLINE BATTLE ROYALE → 11 bots, ELITE → START MATCH. Countdown, then `PLAYERS ALIVE: 12/12`.
+3. Bots are not visible through walls and have no name tags; you find them by exploring, listening for gunfire, and watching the feed (`GHOST_07 eliminated SHADOW_12 with Shadow SMG`).
+4. Fire a shot and hide: a nearby bot comes to investigate the approximate spot, not your exact position.
+5. Stand still: after 30 s you are exposed (beacon), and bots camping get beacons on your minimap with a feed alert.
+6. Leave the circle: guns are disabled for you and for bots (they switch to melee or run back in).
+7. Eliminate a bot and open its capsule (E / USE). Bots loot capsules too.
+8. Die: SPECTATE follows bots (NEXT [N]) until one wins. Results: placement, eliminations, damage, survival, bots eliminated, accuracy, difficulty; "OFFLINE (not ranked)". The Online record on the menu is unchanged.
+9. II / Esc pauses the offline match (time stops). LEAVE MATCH returns to the menu.

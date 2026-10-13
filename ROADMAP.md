@@ -13,7 +13,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | **Code written; circle rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | **Code written; hunt rules 19 tests pass under .NET; Unity/Fusion side not yet run** |
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | **Code written; match-end rules 11 tests pass; non-Fusion code compiles in Unity 6.6, 299/299 EditMode tests pass in Unity; Fusion side not yet run** |
-| **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | Not started (defaults already configured: NIGHTMARE, 23 bots) |
+| **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | **Code written and RUN in Unity: 2 full automated offline matches finish with one legitimate winner; bot rules 26 tests pass. Physical Android tests pending** |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | Not started |
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | Not started |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | Not started |
@@ -148,3 +148,23 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] Automatic return to the lobby after 15 s; connected players stay for the next match; flow state machine supports new rounds
 - [x] Server cleanup on reset: avatars, loot capsules, hunt trackers, results, circle
 - [ ] **Run the full-match test in TESTING.md** ← needs Fusion + App ID + 2 clients
+
+## Phase 9G checklist (spec 38.18)
+- [x] 1 Local authoritative match simulation (`OfflineMatch`): fixed 60 Hz ticks, no internet, server or Photon; same Core rules as online
+- [x] 2 Offline match selection: START MATCH on the Offline screen (5/11/15/23 bots, ROOKIE–NIGHTMARE; default NIGHTMARE / 23, lowered on weaker devices)
+- [x] 3 Bot character controllers: bots and the human are the same `OfflineCombatant` fed by the same commands
+- [x] 4 Navigation: shared baked NavMesh, cached paths, stuck detection (hop + new goal)
+- [x] 5 Perception: vision (range, FOV, crouch/still/firing, physics line of sight), hearing with approximate sources, decaying memory
+- [x] 6 Utility decisions: 19-state brain with hysteresis and difficulty-based mistakes (every state reachable, tested)
+- [x] 7 Personalities: Hunter, Phantom, Strategist, Berserker, Survivor, Scavenger (random per bot per match)
+- [x] 8 Combat intelligence: reaction delay, distance-based aim error, limited turn speed, burst discipline, strafing, flanking, preferred ranges, weapon choice, melee, tactical reloads
+- [x] 9 Looting: context-aware item choice through the same claim rules as humans
+- [x] 10 Healing decisions (threshold × personality caution)
+- [x] 11 Safe-zone awareness: proactive moves before the shrink (lead time by difficulty), escape when outside, firearm lock and instability apply to bots
+- [x] 12 Anti-camping: same Nyx Hunt Protocol; bots react to warnings
+- [x] 13 Bot-vs-bot combat (verified: a bots-only match ends with 10 combat eliminations)
+- [x] 14 Offline victory conditions (same `MatchResolver`), results with bots eliminated / accuracy / difficulty, local offline history kept separate
+- [x] 15 Difficulty settings (catalog profiles)
+- [~] 16 Optimize for Android: staggered perception/decisions, distance-based decision rate, no per-frame allocations in hot paths; **not yet measured on a device**
+- [x] 17 Test without internet: the offline path never touches the network (the automated matches run in batch mode with no connection)
+- [ ] 18 Test on physical devices ← needs an Android phone (Phase 12/13)

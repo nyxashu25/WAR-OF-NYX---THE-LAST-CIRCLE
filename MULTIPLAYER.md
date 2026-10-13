@@ -136,3 +136,8 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Spectating:** purely local. The camera follows a living player's replicated transform. The spectator receives exactly the same replicated data as before, so nothing privileged is revealed.
 - **Cleanup on reset:** avatars and loot capsules despawned, hunt trackers and results dropped, circle stopped, then the lobby scene reloads.
 - `NetworkProtocol.Version` = **9**.
+
+## Phase 9G: offline Ghost Protocol (no networking)
+- Offline matches never create a Photon session, never contact a server and never need the internet (spec 38.14). `OfflineMatch` is the local authority; the same Core rules (movement, weapons, melee, health, healing, inventory and loot claims, circle, Nyx Hunt, match resolver) run there as on the dedicated server.
+- Shared code between modes: everything in `WarOfNyx.Core`, plus `LootClaims` (now used by both `NetworkCombat.RPC_TakeLoot` and the offline match), `LootViews` (loot panel rows) and `LootCapsuleVisual`.
+- Online matches are never filled with bots (spec 38.2). Bots exist only in the offline scene.

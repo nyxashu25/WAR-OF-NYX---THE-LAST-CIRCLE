@@ -28,6 +28,8 @@ namespace WarOfNyx.EditorTools
         public const string BattleArenaScenePath = ProjectSetupWizard.ScenesFolder + "/BattleArena.unity";
         public const string BattleArenaNavMeshPath = ProjectSetupWizard.ScenesFolder + "/BattleArena_NavMesh.asset";
         public const string MatchLobbyScenePath = ProjectSetupWizard.ScenesFolder + "/MatchLobby.unity";
+        public const string GhostProtocolScenePath = ProjectSetupWizard.ScenesFolder + "/GhostProtocol.unity";
+        public const string GhostProtocolNavMeshPath = ProjectSetupWizard.ScenesFolder + "/GhostProtocol_NavMesh.asset";
         public const string FxMaterialPath = "Assets/Resources/WarOfNyx/FX_Additive.mat";
         public const string PrefabFolder = "Assets/Prefabs/Characters";
         public const string PrefabPath = PrefabFolder + "/PlayerPlaceholder.prefab";
@@ -79,6 +81,9 @@ namespace WarOfNyx.EditorTools
 
             if (overwrite || !File.Exists(BattleArenaScenePath))
                 CreateBattleArenaScene(palette);
+
+            if (overwrite || !File.Exists(GhostProtocolScenePath))
+                CreateGhostProtocolScene(palette);
 
             AddToBuildSettings();
             AssetDatabase.SaveAssets();
@@ -233,6 +238,31 @@ namespace WarOfNyx.EditorTools
 
             BakeNavMesh(BattleArenaNavMeshPath);
             EditorSceneManager.SaveScene(scene, BattleArenaScenePath);
+        }
+
+        /// <summary>
+        /// Phase 9G offline Ghost Protocol arena: the same graybox (replaced by NYX ISLAND later) with a
+        /// spawn area / first circle, the local match authority and its HUD, and a baked NavMesh for bots.
+        /// </summary>
+        private static void CreateGhostProtocolScene(Palette p)
+        {
+            var scene = CreateArenaBase(p, out var spawn);
+            var area = new GameObject("SpawnArea").AddComponent<ArenaSpawnArea>();
+            area.transform.position = Vector3.zero;
+            Object.DestroyImmediate(spawn.gameObject);
+
+            var go = new GameObject("GhostProtocol");
+            var match = go.AddComponent<WarOfNyx.Gameplay.Offline.OfflineMatch>();
+            go.AddComponent<WarOfNyx.Gameplay.Offline.OfflineMatchHud>();
+            var so = new SerializedObject(match);
+            // Loaded after creating the scene (see CreateScene: earlier references can be unloaded).
+            so.FindProperty("characterPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<PlayerController>(PrefabPath);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            if (so.FindProperty("characterPrefab").objectReferenceValue == null)
+                Debug.LogError($"[WarOfNyx] Ghost Protocol: could not reference {PrefabPath}.");
+
+            BakeNavMesh(GhostProtocolNavMeshPath);
+            EditorSceneManager.SaveScene(scene, GhostProtocolScenePath);
         }
 
         /// <summary>Waiting lobby scene: the server gathers players here before loading the arena.</summary>
@@ -430,7 +460,7 @@ namespace WarOfNyx.EditorTools
         private static void AddToBuildSettings()
         {
             var scenes = EditorBuildSettings.scenes.ToList();
-            foreach (var path in new[] { ScenePath, MatchLobbyScenePath, BattleArenaScenePath })
+            foreach (var path in new[] { ScenePath, MatchLobbyScenePath, BattleArenaScenePath, GhostProtocolScenePath })
             {
                 if (!scenes.Any(s => s.path == path))
                     scenes.Add(new EditorBuildSettingsScene(path, true));

@@ -488,53 +488,17 @@ namespace WarOfNyx.Networking
             var container = crate.ToContainer();
             var slots = new[] { Slot0.ToState(), Slot1.ToState(), Slot2.ToState() };
             var inventory = Inv.ToInventory();
-            string message = null;
-            int taken = 0;
-
-            int first = index >= 0 ? index : 0;
-            int last = index >= 0 ? index : LootContainer.Capacity - 1;
-            for (int i = first; i <= last; i++)
-            {
-                if (!container.TryTake(i, out var item))
-                {
-                    if (index >= 0)
-                        message = "Already taken.";
-                    continue;
-                }
-
-                // TAKE ALL never swaps weapons away; it only fills empty weapon slots.
-                if (index < 0 && item.Kind == LootKind.Weapon)
-                {
-                    int target = InventoryRules.TargetSlot(slots, ActiveSlot, WeaponRegistry.Get(item.WeaponId));
-                    if (target < 0 || !slots[target].IsEmptySlot)
-                    {
-                        container.Put(i, item);
-                        continue;
-                    }
-                }
-
-                var outcome = InventoryRules.ApplyPickup(ref inventory, slots, ActiveSlot, item, WeaponRegistry.Get);
-                if (!outcome.ReturnToContainer.IsEmpty)
-                    container.Put(i, outcome.ReturnToContainer);
-                if (outcome.Result != PickupResult.Refused)
-                {
-                    taken++;
-                    if (outcome.IsCombatItem)
-                        _player.OnAggressiveAction(AggressiveAction.PickedUpCombatItem); // spec 6: ends spawn protection
-                }
-                message = outcome.Message;
-            }
+            int active = ActiveSlot;
+            var result = LootClaims.Take(container, slots, ref active, ref inventory, index, WeaponRegistry.Get);
+            if (result.TookCombatItem)
+                _player.OnAggressiveAction(AggressiveAction.PickedUpCombatItem); // spec 6: ends spawn protection
 
             for (int i = 0; i < CombatLoadout.SlotCount; i++)
                 SetSlot(i, slots[i]);
-            if (GetSlot(ActiveSlot).ToState().IsEmptySlot)
-                ActiveSlot = (byte)(slots[0].IsEmptySlot ? CombatLoadout.MeleeSlot : 0);
+            ActiveSlot = (byte)active;
             Inv = NetworkInventory.From(inventory);
             crate.Store(container);
-
-            if (index < 0)
-                message = taken > 0 ? $"Took {taken} item{(taken == 1 ? string.Empty : "s")}." : "Nothing you can carry.";
-            RPC_LootResult(message ?? string.Empty);
+            RPC_LootResult(result.Message);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -803,66 +767,11 @@ namespace WarOfNyx.Networking
         {
             var slots = new[] { Slot0.ToState(), Slot1.ToState(), Slot2.ToState() };
             var inventory = Inv.ToInventory();
-            _lootEntries.Clear();
-
-            for (int i = 0; i < LootContainer.Capacity; i++)
-            {
-                var item = _openCrate.Get(i);
-                var view = new LootEntryView { Enabled = true, Action = "TAKE" };
-                switch (item.Kind)
-                {
-                    case LootKind.Weapon:
-                    {
-                        var stats = WeaponRegistry.Get(item.WeaponId);
-                        if (stats == null)
-                            break;
-                        view.Name = stats.displayName;
-                        view.Color = RarityColors.For(stats.rarity);
-                        int target = InventoryRules.TargetSlot(slots, ActiveSlot, stats);
-                        var current = target >= 0 ? WeaponRegistry.Get(slots[target].WeaponId) : null;
-                        string ammo = stats.IsRanged
-                            ? $"{item.Magazine}/{stats.magazineSize} loaded, {AmmoInfo.DisplayName(stats.ammoType)}"
-                            : "Melee";
-                        view.Detail = current != null
-                            ? $"{ammo}  |  replaces {current.displayName} ({current.damage:0} -> {stats.damage:0} dmg)"
-                            : $"{ammo}  |  {stats.damage:0} dmg";
-                        view.Action = current != null ? $"SWAP [{target + 1}]" : "TAKE";
-                        break;
-                    }
-                    case LootKind.Ammo:
-                        view.Name = AmmoInfo.DisplayName(item.Ammo);
-                        view.Color = RarityColors.For(Rarity.Common);
-                        view.Detail = $"x{item.Count}  (you carry {inventory.GetAmmo(item.Ammo)}/{AmmoInfo.Cap(item.Ammo)})";
-                        view.Enabled = inventory.GetAmmo(item.Ammo) < AmmoInfo.Cap(item.Ammo);
-                        view.Action = view.Enabled ? "TAKE" : "FULL";
-                        break;
-                    case LootKind.Medkit:
-                        view.Name = Medkits.DisplayName(item.Medkit);
-                        view.Color = RarityColors.For(Medkits.RarityOf(item.Medkit));
-                        view.Detail = $"x{item.Count}  (+{Medkits.HealAmount(item.Medkit):0} HP, {Medkits.UseSeconds(item.Medkit):0}s)";
-                        view.Enabled = inventory.GetMedkits(item.Medkit) < Medkits.MaxPerType;
-                        view.Action = view.Enabled ? "TAKE" : "FULL";
-                        break;
-                    case LootKind.Armor:
-                        view.Name = ArmorInfo.DisplayName(item.ArmorLevel);
-                        view.Color = RarityColors.For(ArmorInfo.RarityOf(item.ArmorLevel));
-                        view.Detail = $"you wear Level {inventory.ArmorLevel}";
-                        view.Enabled = item.ArmorLevel > inventory.ArmorLevel;
-                        view.Action = view.Enabled ? (inventory.ArmorLevel > 0 ? "SWAP" : "EQUIP") : "OWNED";
-                        break;
-                }
-                _lootEntries.Add(view);
-            }
-
+            var crate = _openCrate;
+            LootViews.Build(crate.Get, slots, ActiveSlot, inventory, _lootEntries);
             panel.SetEntries(_lootEntries);
-            panel.SetInventorySummary(
-                $"YOU: [1] {Display(slots[0])}  [2] {Display(slots[1])}  [3] {Display(slots[2])}\n" +
-                $"Armor L{inventory.ArmorLevel}   Medkits S{inventory.SmallMedkits} M{inventory.StandardMedkits} L{inventory.AdvancedMedkits}   " +
-                $"Ammo L{inventory.LightAmmo} R{inventory.RifleAmmo} S{inventory.ShellAmmo} M{inventory.MarksmanAmmo}   " +
-                $"Capsule closes in {Mathf.CeilToInt(_openCrate.SecondsLeft)}s");
+            panel.SetInventorySummary(LootViews.Summary(slots, inventory, crate.SecondsLeft));
         }
-
-        private static string Display(in WeaponState s) => s.IsEmptySlot ? "-" : WeaponRegistry.DisplayName(s.WeaponId);
 
         private string NameOf(PlayerRef player)
         {
