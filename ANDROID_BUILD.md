@@ -1,10 +1,10 @@
 # Android build guide
 
-Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. Batch build methods exist (Phase 11). **No Android build has been produced yet**: this PC's Unity (6000.6.5f1) has no Android Build Support module (checked 2026-10-13; the build method stops with an explanation).
+Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. Batch build methods exist (Phase 11). **A development APK was built on 2026-10-13** with Unity **6000.3.26f1** + Android Build Support: `Builds/Android/WarOfNyx-dev.apk` (46 MB, ARM64, IL2CPP, min API 26, target API 36, debug-signed, permissions INTERNET + ACCESS_NETWORK_STATE only). It is **offline-only** (no Fusion SDK yet) and **has not been run on a phone yet**.
 
 ## Toolchain
-- Unity 6.3 LTS with **Android Build Support**, **OpenJDK** and **Android SDK & NDK Tools** (install all three from Unity Hub → Installs → ⚙ → Add modules).
-- Before release builds: open **Android SDK Manager** (or Android Studio) and install **Android SDK Platform 36**, so target API "Auto" resolves to 36.
+- Unity **6000.3.26f1** (6.3 LTS) with **Android Build Support**, **OpenJDK** and **Android SDK & NDK Tools** (Unity Hub → Installs → ⚙ → Add modules). The Hub module installs SDK Platforms 34–37, Build Tools 36 and the NDK.
+- Command-line install used on the dev PC: `"Unity Hub.exe" -- --headless install --version 6000.3.26f1 --module android android-sdk-ndk-tools android-open-jdk --childModules`
 
 ## Settings applied by the setup tool
 | Setting | Value |
@@ -16,7 +16,7 @@ Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. 
 | Scripting backend | IL2CPP |
 | Architectures | ARM64 |
 | Minimum API | 26 (Android 8.0) |
-| Target API | Auto (highest installed). **Must be ≥ 36 for new Google Play submissions in 2026.** Re-check Google's policy before release. |
+| Target API | **36** (pinned; Google Play 2026 rule). Re-check Google's policy before release. |
 | Internet permission | Forced (online play and the connectivity probe) |
 | Graphics | Unity default (Vulkan + OpenGL ES 3 fallback) |
 
@@ -25,7 +25,8 @@ Status: settings are applied by **War of Nyx → Setup → Run Project Setup**. 
 - `bundleVersionCode` is an integer that **must go up for every Play upload**. Raise it in Player Settings, or later with a CI script.
 
 ## One-click / command-line builds (Phase 11)
-- **War of Nyx → Build → Android APK (development)** → `Builds/Android/WarOfNyx-dev.apk` (ARM64, IL2CPP, development build).
+- **War of Nyx → Build → Android APK (development)** → `Builds/Android/WarOfNyx-dev.apk` (ARM64, IL2CPP, development build). First build ≈ 10 minutes (IL2CPP + Gradle), later builds ≈ 1–2 minutes.
+- Install on a phone (USB debugging on): `adb install -r Builds/Android/WarOfNyx-dev.apk` (adb is in the Unity Android module: `.../AndroidPlayer/SDK/platform-tools`). Or copy the file to the phone and open it (allow "install unknown apps" for your file manager).
 - **War of Nyx → Build → Android App Bundle (release, signed)** → `Builds/Android/WarOfNyx.aab`. The upload key comes ONLY from environment variables, and the passwords are cleared from Player Settings right after the build:
   ```bash
   setx WON_KEYSTORE_PATH "%USERPROFILE%\keys\warofnyx-upload.keystore"

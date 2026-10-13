@@ -197,10 +197,11 @@ namespace WarOfNyx.EditorTools
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
 
-            // Android 8.0 minimum (spec 25). Target "Auto" = highest SDK installed; install API 36
-            // via the Android SDK manager before release builds (see ANDROID_BUILD.md).
+            // Android 8.0 minimum (spec 25). Target pinned to API 36 (Google Play 2026 rule) so the
+            // result doesn't depend on which SDK platforms happen to be installed. The Unity 6.3
+            // Hub Android module installs Platform 36 (see ANDROID_BUILD.md).
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
+            PlayerSettings.Android.targetSdkVersion = (AndroidSdkVersions)36;
 
             // Online play and the connectivity probe need network access.
             PlayerSettings.Android.forceInternetPermission = true;

@@ -43,7 +43,11 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | .NET + **Unity 6000.6.5f1** | Core / EditMode / PlayMode after Phase 13 (adds `RobustnessTests`, `OfflinePerformanceTests`) | **319 / 339 / 16 passed** | Fuzz: 20 000 hostile commands through the sanitizer and movement model, 5 000 button masks, 5 000 damage values. Benchmark: 23 NIGHTMARE bots on NYX ISLAND = 0.252 ms average tick (PERFORMANCE.md) |
 | 2026-10-13 | **Unity 6000.6.5f1** | `ReleaseTools.GenerateBranding` + `ValidateRelease` | **2 blocked, 1 warning** | Blocked: Android Build Support, Fusion SDK. Warning: target API 'Auto'. Everything else passes (package, version, IL2CPP, ARM64, min API, landscape, permissions, no keys, icon, scenes, privacy text) |
 | 2026-10-13 | **Unity 6000.6.5f1** | Windows player (final) | **Built (110 MB) and started** | Copied to `Builds/WindowsPlayer`, desktop shortcut created |
-| — | Unity 6.3 LTS (the project's pinned version) | everything | **Not run** | The machine has Unity 6.6 installed. See KNOWN_ISSUES 57 |
+| 2026-10-13 | **Unity 6000.3.26f1** (6.3 LTS, the pinned version) | `BatchTools.Setup` + compile | **No errors, no warnings** | Fresh copy of the repo; all setup steps OK (scenes, NYX ISLAND, visual style, branding) |
+| 2026-10-13 | **Unity 6000.3.26f1** | EditMode / PlayMode | **339 / 16 passed, 0 failed** | Same results as on 6.6, including the three complete offline matches |
+| 2026-10-13 | **Unity 6000.3.26f1** + Android Build Support | `BatchTools.BuildAndroidApk` | **Built: 46 MB APK** | `aapt`: package com.nyxgames.warofnyx 0.1.0 (1), min API 26, target API 36, arm64-v8a only, permissions INTERNET + ACCESS_NETWORK_STATE; `apksigner`: debug certificate. Offline-only (no Fusion). **Not yet installed on a phone** |
+| 2026-10-13 | **Unity 6000.3.26f1** | `ReleaseTools.ValidateRelease` | **1 blocked, 0 warnings** | Blocked: Fusion SDK. Android module and target API 36 now pass |
+| — | Android phone | install + play the APK | **Not run** | Needs the owner's phone (ANDROID_BUILD.md) |
 
 ## Running the Unity checks from the command line
 - Setup without dialogs: `Unity.exe -batchmode -nographics -projectPath <project> -executeMethod WarOfNyx.EditorTools.BatchTools.Setup -quit`
@@ -63,10 +67,10 @@ dotnet test Tools/CoreTests
 
 **From the command line (CI):**
 ```bash
-"C:/Program Files/Unity/Hub/Editor/<6000.3.x>/Editor/Unity.exe" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults TestResults/editmode.xml -logFile -
+"C:/Program Files/Unity/Hub/Editor/6000.3.26f1/Editor/Unity.exe" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults TestResults/editmode.xml -logFile -
 ```
 ```bash
-"C:/Program Files/Unity/Hub/Editor/<6000.3.x>/Editor/Unity.exe" -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/playmode.xml -logFile -
+"C:/Program Files/Unity/Hub/Editor/6000.3.26f1/Editor/Unity.exe" -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/playmode.xml -logFile -
 ```
 The PlayMode smoke test is skipped (Ignored) until **War of Nyx → Setup** has created the scenes.
 

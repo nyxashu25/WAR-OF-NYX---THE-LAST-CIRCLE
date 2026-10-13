@@ -9,7 +9,7 @@ The spec requires these 32 steps on the **actual networked project with two Andr
 
 | # | Step | Status | Evidence so far |
 |---|---|---|---|
-| 1–2 | Both players open the game on Android | ✖ blocked | No Android build yet (module missing); Windows build starts (TESTING.md) |
+| 1–2 | Both players open the game on Android | ◐ | Offline-only development APK built (no Fusion); not yet run on a phone |
 | 3–4 | Both press PLAY and are allocated to the same match | ◐ | Quick Match + session properties (Phase 4); needs Fusion |
 | 5 | Waiting lobby shows both | ◐ | Lobby UI (Phase 4) |
 | 6 | Synchronized countdown | ◐ | `MatchLifecycle` tests; shared start tick (Phase 4) |
@@ -30,7 +30,7 @@ The spec requires these 32 steps on the **actual networked project with two Andr
 ## Spec 38 — Offline acceptance
 | Requirement | Status |
 |---|---|
-| Phone offline, select Offline Battle Royale, 11 bots, complete match | ✔ in Unity (automated, desktop) · ✖ on a phone (no Android build) |
+| Phone offline, select Offline Battle Royale, 11 bots, complete match | ✔ in Unity (automated, desktop, 6.3 + 6.6) · ◐ APK built, not yet played on a phone |
 | Bots move, hide, search, fight each other, loot, heal, escape the circle, produce a legitimate winner | ✔ automated full matches on the training arena and NYX ISLAND |
 | Bots obey circle, firearm lock, camping rules | ✔ tests + offline matches |
 | Offline results separate from online | ✔ test |
@@ -38,10 +38,10 @@ The spec requires these 32 steps on the **actual networked project with two Andr
 ## Spec 25 — Android release requirements
 | Item | Status |
 |---|---|
-| Native Android output, landscape, ARM64, IL2CPP | ✔ settings (release validator) · ✖ build (module) |
-| Target API 36 for 2026 submissions | ✖ target is "Auto": install SDK Platform 36 and confirm in the built AAB |
+| Native Android output, landscape, ARM64, IL2CPP | ✔ settings + development APK built (checked with `aapt`) |
+| Target API 36 for 2026 submissions | ✔ pinned to 36; confirmed in the built APK (`aapt`). Confirm again in the release AAB |
 | Signed AAB procedure, keystore guidance, never commit keys | ✔ `BuildAndroidAab` (environment-only key), ANDROID_BUILD.md, validator checks |
-| APK for local testing | ◐ `BuildAndroidApk` |
+| APK for local testing | ✔ built (46 MB, debug-signed) · not yet installed on a phone |
 | Linux dedicated-server build | ◐ menu + Dockerfile; needs Fusion + Linux module |
 | Permissions explained | ✔ ANDROID_BUILD.md, PRIVACY.md; validator: no sensitive permissions |
 | Quality presets LOW / MEDIUM / HIGH | ✔ |

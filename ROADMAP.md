@@ -15,10 +15,10 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | **Code written; match-end rules 11 tests pass; non-Fusion code compiles in Unity 6.6, 299/299 EditMode tests pass in Unity; Fusion side not yet run** |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | **Code written and RUN in Unity: 2 full automated offline matches finish with one legitimate winner; bot rules 26 tests pass. Physical Android tests pending** |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | **Code-built visual identity done and checked in Unity (rendered screenshots, island match). Final art assets pending** |
-| 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); APK not built (Android module missing); device tests pending** |
+| 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); development APK built with Unity 6000.3.26f1 (offline-only); device tests pending** |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | **Files and server code done (health endpoint verified in Unity); deployment pending Fusion + Docker + Edgegap account** |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | **Tools, benchmarks and fuzz tests done (PERFORMANCE.md); device + network measurements pending** |
-| 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | **Prepared: validator, icon/splash, privacy + store drafts, release checklist. Blocked for submission: Fusion, Android module, API 36 SDK, device tests, final art** |
+| 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | **Prepared: validator, icon/splash, privacy + store drafts, release checklist. APK builds with target API 36. Blocked for submission: Fusion, device tests, signed AAB (owner's upload key), final art** |
 | post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
 
 ## Why 9G sits there
@@ -41,7 +41,7 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] Main menu with Online / Offline (Ghost Protocol setup) / Practice / Settings
 - [x] Editor setup tool (player settings, URP presets, scenes, input backend)
 - [x] EditMode and PlayMode tests written
-- [ ] **Open in Unity 6.3, fix any compile errors, run setup, run tests** ← next action
+- [x] **Open in Unity 6.3, fix any compile errors, run setup, run tests** (6000.3.26f1, 2026-10-13: no errors, 339 / 16 tests pass)
 - [ ] Commit the generated `.meta` files, ProjectSettings and scenes
 
 ## Phase 2 checklist
@@ -226,8 +226,8 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] 3 Privacy documentation: PRIVACY.md draft (owner completes contact / retention / engine settings and hosts it)
 - [x] 4 Permissions: INTERNET (+ network state) only; validator checks for sensitive permissions
 - [x] 5 Signing: environment-only upload key, passwords cleared after the build, validator checks
-- [ ] 6 Build an Android App Bundle ← Android Build Support module
-- [ ] 7 Validate target SDK 36 ← install SDK Platform 36; validator warns while the target is "Auto"
+- [~] 6 Build an Android App Bundle ← APK builds; the signed AAB needs the owner's upload key (environment variables)
+- [x] 7 Validate target SDK 36 (pinned; confirmed in the APK with `aapt`)
 - [x] 8 Data-safety disclosures: draft in STORE_LISTING.md
 - [~] 9 Store screenshots and descriptions: description drafted; rendered screenshots are drafts, real phone captures needed
 - [~] 10 Final test checklist: RELEASE_CHECKLIST.md maps spec 36 / 38 / 25; the networked two-phone run is still open

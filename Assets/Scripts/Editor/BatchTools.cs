@@ -143,7 +143,7 @@ namespace WarOfNyx.EditorTools
             });
             bool ok = report.summary.result == BuildResult.Succeeded;
             Debug.Log(ok
-                ? $"[WarOfNyx][Batch] Android build succeeded: {Path.GetFullPath(path)} ({report.summary.totalSize / (1024 * 1024)} MB)"
+                ? $"[WarOfNyx][Batch] Android build succeeded: {Path.GetFullPath(path)} ({new FileInfo(path).Length / (1024 * 1024)} MB file)"
                 : $"[WarOfNyx][Batch] Android build {report.summary.result}: {report.summary.totalErrors} error(s).");
             if (!ok && Application.isBatchMode)
                 EditorApplication.Exit(1);

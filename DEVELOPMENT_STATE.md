@@ -4,10 +4,10 @@ _Last updated: 2026-10-13 — end of Phase 14 (all phases have code)_
 
 ## Phase map
 15 phases in total: 1–14 from the master prompt, plus **9G Offline Ghost Protocol** (Section 38).
-Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: Photon Fusion + App ID, Unity 6.3 LTS with Android Build Support, phones, hosting accounts, final art.
+Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: Photon Fusion + App ID, phones, hosting accounts, upload key, final art.
 
 ## Current phase
-**Phase 14 – Release preparation, done as far as possible without accounts.** Release validator (2 blocked: Android module, Fusion; 1 warning: target API Auto), generated icon / splash / feature graphic, PRIVACY.md, STORE_LISTING.md, RELEASE_CHECKLIST.md. A Windows offline build is on the owner's desktop (shortcut "WAR OF NYX").
+**Phase 14 – Release preparation, done as far as possible without accounts.** Release validator (1 blocked: Fusion; 0 warnings), offline-only development APK built with Unity 6000.3.26f1 (target API 36, not yet run on a phone), generated icon / splash / feature graphic, PRIVACY.md, STORE_LISTING.md, RELEASE_CHECKLIST.md. A Windows offline build is on the owner's desktop (shortcut "WAR OF NYX").
 
 ## Configuration requested by the project owner
 - Offline Ghost Protocol defaults: **Difficulty = NIGHTMARE, Bots = 23** (in `GameConfig`, clamped by `OfflineCapacityPolicy`; difficulty never lowered).
@@ -43,7 +43,7 @@ Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: P
 Scenes `Bootstrap`, `MainMenu`, `PracticeArena`, `MatchLobby`, `BattleArena` (+NavMesh). Prefabs `PlayerPlaceholder`; Fusion-only `Resources/WarOfNyx/NetworkPlayer` (with hitboxes), `MatchController`, `LootCrate`. Assets `MovementConfig`, `GameConfig`, `FX_Additive.mat`, **`ScriptableObjects/Weapons/*.asset` + `Resources/WarOfNyx/WeaponDatabase.asset`**, URP assets, graybox materials.
 
 ## Versions
-Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Test Framework 1.5.1 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **9**.
+Unity 6000.3.26f1 · URP 17.3.0 · Input System 1.20.0 · AI Navigation 2.0.15 · Test Framework 1.6.0 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **10**.
 
 ## Key decisions (cumulative, newest last)
 1. Unity 6.3 LTS + Fusion 2.1.3. Rules in pure C# shared by server, prediction, offline simulation and bots. Online isolated behind `WON_FUSION`.
@@ -68,7 +68,7 @@ Unity 6000.3.x · URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Te
 - Unity 6.3 LTS (Android, Windows/Linux Dedicated Server modules); Photon account + Fusion 2 App ID + Fusion SDK 2.1.3; 2+ clients for multiplayer tests.
 
 ## Next tasks (owner, in this order)
-1. Decide the editor: install **Unity 6.3 LTS** with **Android Build Support (+ OpenJDK, SDK & NDK)** (recommended; the repo is pinned to 6.3), or move the project to 6.6 after checking Fusion's support.
+1. Install `Builds/Android/WarOfNyx-dev.apk` on a phone and play an offline match (controls, FPS, heat). Unity 6000.3.26f1 + Android is already installed on the dev PC.
 2. Create a Photon account + **Fusion 2 App ID**, import **Fusion 2.1.3**, set the App ID, run **War of Nyx → Setup → Run Project Setup**, fix compile errors in the networking module (never compiled yet).
 3. Two-PC test (TESTING.md Phases 3–9), then two phones (ANDROID_BUILD.md), then Docker/Edgegap (SERVER_DEPLOYMENT.md).
 4. Final art (characters, buildings, audio), then the store steps in RELEASE_CHECKLIST.md.
