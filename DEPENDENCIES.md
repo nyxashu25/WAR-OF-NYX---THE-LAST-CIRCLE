@@ -31,23 +31,29 @@ Checked on **2026-10-13** from public sources. Re-verify exact patch numbers in 
 
 > These package versions were chosen from published registry data. They have **not** been resolved by an actual Unity 6.3 install yet. If the Package Manager reports a missing version, select the version it recommends for 6000.3 and update this table.
 
-## Networking — Photon Fusion 2 (required from Phase 3, **not installed**)
+## Networking — Photon Fusion 2 (required for online play, **not installed yet**)
 
 | Item | Status |
 |---|---|
-| SDK | **Fusion 2.0.x Stable** (latest seen: **2.0.9**, Dec 2025). The 2.1 line is release-candidate/preview, and Photon says not to ship it. |
+| SDK | **Fusion 2.1.3 Stable** (Sep 17, 2026), the latest stable line. A new project starts directly on 2.1 (the "upgrade to latest 2.0.x first" rule only applies to existing 2.0 projects). Fusion 2.1 uses Photon Realtime 5. |
 | Distribution | `.unitypackage` from Photon's "SDK & Download" page (Fusion 2 docs). It is **not** on the Unity Package Manager. Import it into `Assets/Photon/`. |
 | Account | **Required:** a free Photon account and a **Fusion 2 App ID** from the Photon Dashboard. Enter it in `PhotonAppSettings` after import. |
-| Unity compatibility | Fusion 2.0.x documentation lists Unity 2021.3 / 2022.3 / **6.0**. **Unity 6.3 support was not confirmed** (Photon's docs blocked automated reading). First Phase 3 task: check the release notes. If 6.3 isn't supported, use the newest Fusion 2.0.x that is, or document the 6000.0 fallback. |
+| Unity compatibility | **Confirmed:** Photon lists Unity 2021.3.45, 2022.3.45, **6.0.x and 6.3.x** as supported (SDK & Download page, updated 22/09/2026). |
 | Project setting | Asset Serialization = **Force Text** (the setup tool sets it). |
 | Reference sample | **BR200** (Fusion 2 battle royale sample). We study its patterns only. Its art and code are **not** copied or rebranded. |
 
 ### Manual install steps (Phase 3)
 1. Create a Photon account → Dashboard → **Create a new app** → type **Fusion**, SDK **Fusion 2** → copy the App ID.
-2. Download the Fusion 2 SDK `.unitypackage` (2.0.x Stable) from the Photon docs "SDK & Download" page.
+2. Download **Fusion SDK 2.1.3 Stable** (`.unitypackage`) from the Photon docs "SDK & Download" page.
 3. Unity: **Assets → Import Package → Custom Package…** → import everything.
 4. Paste the App ID into the Fusion Hub window (opens after import) or into `PhotonAppSettings`.
-5. Run **War of Nyx → Setup → Validate Project**. The Fusion line should now say "detected".
+5. Unity recompiles. The editor detects Fusion and adds the `WON_FUSION` define automatically (Console: "Fusion detected..."), which switches on the `WarOfNyx.Networking` module.
+6. Run **War of Nyx → Setup → Run Project Setup** again. It builds `Resources/WarOfNyx/NetworkPlayer.prefab` and registers the module with the Fusion weaver.
+7. Optional, to match the spec (~30 Hz): open the `NetworkProjectConfig` asset (Fusion Hub → Project Config) and set the simulation tick rate to 30. The movement code uses `Runner.DeltaTime`, so it works at any tick rate.
+8. Run **War of Nyx → Setup → Validate Project**. Every Fusion line should say OK.
+
+### How the project behaves without Fusion
+`WarOfNyx.Networking` compiles only when `WON_FUSION` is defined, and that define is only set when the editor finds `Fusion.Runtime`. Without the SDK the game still compiles and runs. The ONLINE button explains that the online module is missing.
 
 ## Later / optional
 

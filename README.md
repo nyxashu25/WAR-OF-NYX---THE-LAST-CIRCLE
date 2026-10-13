@@ -8,10 +8,10 @@ An original anime-style third-person battle royale for **Android**, built with *
 |---|---|
 | Internal id | `WarOfNyx` |
 | Android package | `com.nyxgames.warofnyx` |
-| Current phase | **Phase 2 – Character, camera & controls** (code written; core movement tested under .NET; not yet opened in Unity) |
+| Current phase | **Phase 3 – Online multiplayer (Photon Fusion 2.1)** (code written; core networking tested under .NET; needs Fusion SDK + App ID + Unity to run) |
 | Offline default | Ghost Protocol, **NIGHTMARE**, **23 bots** (automatically lowered on devices that can't run 23) |
 
-> **Honest status:** the pure rules core (`WarOfNyx.Core`, including the movement state machine) compiles and passes **69/69** tests under .NET (`dotnet test Tools/CoreTests`). The Unity-side code has **not** been compiled in Unity yet. Implemented so far: menu, settings, and Practice Arena movement (walk/sprint/crouch/slide/jump, third-person camera, PC + touch controls). Combat, circle, bots and multiplayer are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> **Honest status:** the pure rules core (`WarOfNyx.Core`: flow, movement, networking rules) compiles and passes **104/104** tests under .NET (`dotnet test Tools/CoreTests`). No Unity-side or Fusion code has been compiled in Unity yet. Written so far: menu, settings, Practice Arena movement (PC + touch), and online test sessions (dedicated server, private rooms, server-authoritative predicted movement). Combat, circle, bots and matchmaking are **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ---
 
@@ -32,7 +32,7 @@ An original anime-style third-person battle royale for **Android**, built with *
    - switches Active Input Handling to the Input System. If Unity asks to restart, click **Restart now**.
 5. Menu **War of Nyx → Setup → Validate Project**. Every line should say OK. The Fusion line will say "not installed", which is expected until Phase 3.
 6. Open `Assets/Scenes/Bootstrap.unity` and press **Play**. You should see the main menu:
-   - **ONLINE BATTLE ROYALE** – enabled only when internet is detected. Pressing it says online play arrives in Phases 3–4.
+   - **ONLINE BATTLE ROYALE** – enabled only when internet is detected. With Fusion installed it opens the online test screen: your name, a room code, **HOST PRIVATE ROOM**, **JOIN ROOM** and **JOIN DEV SERVER**. Without Fusion it explains what is missing. Public matchmaking arrives in Phase 4.
    - **OFFLINE BATTLE ROYALE** – Ghost Protocol setup: bot count 5/11/15/23 and difficulty Rookie/Warrior/Elite/NIGHTMARE. Your choice is saved. Starting a match is **not available yet**.
    - **PRACTICE ARENA** – the Phase 2 movement test map: a placeholder capsule character, third-person camera, keyboard/mouse and touch controls. Esc or the II button pauses. F2 shows the touch controls on PC; F3 shows the stats overlay.
    - **SETTINGS** – graphics preset, volumes, sensitivity and comfort options (saved on the device).

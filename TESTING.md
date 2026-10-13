@@ -9,6 +9,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 29 `.cs` files under `Assets/` | **0 syntax errors** | Parse only. Unity API usage (types, members) is **not** checked |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 2 (adds `MovementModelTests`) | **69 passed, 0 failed** | 30 new movement tests |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 46 `.cs` files under `Assets/` (Phase 2) | **0 syntax errors** | Parse only |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 3 (adds `NetworkingCoreTests`) | **104 passed, 0 failed** | 35 new: launch args, room codes, names, input codec, spawn ring |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 60 `.cs` files under `Assets/` (Phase 3, incl. Fusion module) | **0 syntax errors** | Parse only. Fusion API names were checked against the official Fusion 2.1.3 API reference, but never compiled against the SDK |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -72,3 +74,29 @@ Network: multi-client connect, late-join rejection, reconnect, simultaneous pick
 Mobile: aspect ratios, multitouch, background/foreground, offline interruption, presets, long sessions.
 Conditions: 30/100/200 ms latency, 2 % loss, short drops, client kill.
 Ghost Protocol: the 25 cases from spec 38.17, plus the hands-off "bots finish the match alone" acceptance run.
+
+## Phase 3 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/NetworkingCoreTests.cs` | Server launch arguments (valid, invalid, missing values), room code sanitizing and generation (no look-alike characters), display-name sanitizing and fallback, input packing round trip, forged input (oversized stick, NaN, wild angles, unknown bits), neutral input, spawn ring spacing and facing | **35/35 pass** (.NET) |
+| `Tests/Multiplayer/NetworkStateTests.cs` | Networked movement state and input survive the round trip. Forged network input is sanitized. | Not run (needs Unity + Fusion) |
+
+## Manual test: two real clients (Phase 3 acceptance)
+Prerequisites: Fusion 2.1.3 imported, App ID set, **Run Project Setup** done, both machines online.
+
+**A. Private room (quickest)**
+1. Build a Windows client (**War of Nyx → Multiplayer → Build Windows Test Client**), or use a second Unity editor or a phone build.
+2. Instance 1: ONLINE → name "KAI" → **HOST PRIVATE ROOM**. Note the room code shown in the HUD.
+3. Instance 2: ONLINE → name "AKIRA" → type the code → **JOIN ROOM**.
+4. Expected: both are in BattleArena, the HUD shows `PLAYERS 2/12`, each sees the other capsule with a name tag. Movement (walk, sprint, crouch, slide, jump) appears smoothly on the other screen. Players can't walk through each other.
+5. Instance 2 → II → **LEAVE MATCH** → back at the menu. Instance 1's HUD shows `PLAYERS 1/12`, and the other capsule disappears.
+
+**B. Dedicated server (spec target)**
+1. **Build Windows Dedicated Server**, then **Launch Local Windows Server (WON-DEV)**. Check `Builds/WindowsServer/server.log` for "running in session 'WON-DEV'".
+2. Two clients → ONLINE → **JOIN DEV SERVER (WON-DEV)**.
+3. Same expectations as A.4. Neither client is the authority (role CLIENT in the HUD). Closing one client doesn't affect the other.
+
+**C. Robustness**
+- Enter a non-existent room code → a clear error appears on the ONLINE screen and you stay in the menu.
+- Stop the server while clients are connected → clients return to the menu with "Session ended / Disconnected".
+- Unity's network simulation (NetworkProjectConfig → Network Conditions) at 100 ms / 2 % loss → the local player still moves smoothly (prediction), and remote players stay smooth (interpolation).

@@ -27,8 +27,15 @@ namespace WarOfNyx.Characters
         private CharacterController _controller;
         private MovementSettings _settings;
         private MovementState _state;
+        private bool _grounded;
 
         public MovementState State => _state;
+
+        /// <summary>
+        /// Grounded result of the last simulated move. Stored (not read live from the
+        /// CharacterController) so it can be networked and restored for re-simulation.
+        /// </summary>
+        public bool IsGrounded => _grounded;
         public MovementSettings Settings => _settings;
         public CharacterController Controller => _controller;
         public float CurrentHeight => _controller != null ? _controller.height : 0f;
@@ -67,7 +74,36 @@ namespace WarOfNyx.Characters
             transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             _controller.enabled = true;
             _state = MovementState.Initial(yaw);
+            _grounded = false;
             SetCapsuleHeight(_settings.standingHeight);
+        }
+
+        /// <summary>
+        /// Rolls the character back to a stored simulation state (networked prediction:
+        /// called at the start of every tick, including re-simulated ticks, before <see cref="Simulate"/>).
+        /// </summary>
+        public void RestoreState(in MovementState state, bool grounded, Vector3 position)
+        {
+            _state = state;
+            _grounded = grounded;
+            SetCapsuleHeight(MovementModel.CapsuleHeight(_state, _settings));
+            if ((transform.position - position).sqrMagnitude > 1e-10f)
+            {
+                transform.position = position;
+                Physics.SyncTransforms(); // CharacterController must see the restored position
+            }
+            transform.rotation = Quaternion.Euler(0f, state.Yaw, 0f);
+        }
+
+        /// <summary>
+        /// Shows a replicated state without simulating it (remote players on a client).
+        /// Updates the capsule height and notifies animation.
+        /// </summary>
+        public void ApplyVisualState(in MovementState state)
+        {
+            _state = state;
+            SetCapsuleHeight(MovementModel.CapsuleHeight(_state, _settings));
+            Stepped?.Invoke(_state);
         }
 
         public void Simulate(in MovementCommand command, float deltaTime)
@@ -75,7 +111,7 @@ namespace WarOfNyx.Characters
             if (deltaTime <= 0f || !_controller.enabled)
                 return;
 
-            var ground = new GroundInfo(_controller.isGrounded, !_state.IsLowStance || HasStandingHeadroom());
+            var ground = new GroundInfo(_grounded, !_state.IsLowStance || HasStandingHeadroom());
             _state = MovementModel.Step(_state, command, ground, _settings, deltaTime);
 
             SetCapsuleHeight(MovementModel.CapsuleHeight(_state, _settings));
@@ -83,6 +119,7 @@ namespace WarOfNyx.Characters
             var start = transform.position;
             var velocity = new Vector3(_state.VelocityX, _state.VelocityY, _state.VelocityZ);
             var flags = _controller.Move(velocity * deltaTime);
+            _grounded = _controller.isGrounded;
             var actual = (transform.position - start) / deltaTime;
             MovementModel.ApplyCollisionResult(ref _state, actual.x, actual.z, (flags & CollisionFlags.Above) != 0);
 

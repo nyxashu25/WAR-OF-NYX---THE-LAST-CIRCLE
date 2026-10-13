@@ -1,0 +1,26 @@
+{
+    "name": "WarOfNyx.Networking",
+    "rootNamespace": "WarOfNyx.Networking",
+    "references": [
+        "WarOfNyx.Core",
+        "WarOfNyx.Game",
+        "Fusion.Unity"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "WON_FUSION"
+    ],
+    "versionDefines": [
+        {
+            "name": "Unity",
+            "expression": "6000.0",
+            "define": "FUSION_FORCE_WEAVING"
+        }
+    ],
+    "noEngineReferences": false
+}

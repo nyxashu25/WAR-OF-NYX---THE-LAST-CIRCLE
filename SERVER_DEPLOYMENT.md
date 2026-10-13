@@ -1,12 +1,16 @@
 # Dedicated server deployment
 
-Status: **not implemented** (Phases 3 and 12). This file records the plan so later phases follow one route.
+Status: **Stage 1 code written** (Phase 3: server entry, launch arguments, build and launch menus). Not yet built or run. Stages 2–3 are planned for Phase 12.
 
-## Stage 1 – Local dedicated server (Phase 3)
-- Build target: **Dedicated Server → Linux** (or Windows for local testing). Requires the *Linux Dedicated Server Build Support* module.
-- Entry: `GameBootstrap` detects batch mode or a `-server` argument and starts Fusion `NetworkRunner` with `GameMode.Server` instead of loading the menu.
-- Planned launch arguments: `-server -port <udp> -region <code> -maxPlayers 12 -matchId <id> -logFile -`.
-- One process = one match. The process exits after results are sent.
+## Stage 1 – Local dedicated server (Phase 3, code written)
+- **Unity Hub modules:** *Windows Dedicated Server Build Support* (local tests) and *Linux Dedicated Server Build Support* (hosting).
+- **Build:** **War of Nyx → Multiplayer → Build Windows Dedicated Server**, which outputs `Builds/WindowsServer/WarOfNyxServer.exe`. Or **Build Linux Dedicated Server**, which outputs `Builds/LinuxServer/WarOfNyxServer.x86_64`. Both use the Dedicated Server subtarget, so they are headless.
+- **Run locally:** **War of Nyx → Multiplayer → Launch Local Windows Server (WON-DEV)**. Or from a terminal:
+  `WarOfNyxServer.exe -batchmode -nographics -server -session WON-DEV -maxPlayers 12 -port 27015 -logFile server.log`
+- **Entry:** `GameBootstrap` parses the arguments with `ServerLaunchOptions`. With `-server` it starts `NetworkRunner` in `GameMode.Server` and loads BattleArena. It never loads the menu. Invalid arguments fall back to defaults and are logged.
+- **Arguments:** `-server`, `-session <code>` (4–16 chars, default WON-DEV), `-maxPlayers <2-60>` (default 12), `-port <udp>` (default 27015, 0 = any), `-region <code>` (parsed, applied in Phase 12).
+- **Exit codes:** 0 normal shutdown, 1 online module missing (Fusion not installed in the build), 2 start failed, 3 abnormal shutdown.
+- One process = one session. Players connect through Photon Cloud using the session name, so no port forwarding is needed for basic tests.
 
 ## Stage 2 – Docker (Phase 12)
 - Base image `ubuntu:24.04` (glibc compatible with Unity Linux players). Copy the server build in and run as a non-root user.

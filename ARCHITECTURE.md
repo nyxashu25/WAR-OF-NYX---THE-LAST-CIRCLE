@@ -43,7 +43,9 @@ The rules layer holds no physics. Line of sight, hit scans, navmesh and collisio
 | `WarOfNyx.Editor` | `Assets/Scripts/Editor` | Core, Game, URP | Setup and validation tools (`War of Nyx > Setup`). |
 | `WarOfNyx.Tests.EditMode` | `Assets/Tests/EditMode` | Core, Game, Input System, NUnit | Fast logic tests. |
 | `WarOfNyx.Tests.PlayMode` | `Assets/Tests/PlayMode` | Core, Game, NUnit | Scene-level smoke tests. |
-| `WarOfNyx.Networking` *(planned, Phase 3)* | `Assets/Scripts/Networking` | Core, Game, Fusion | Fusion `NetworkBehaviour`s, runner bootstrap, server entry. |
+| `WarOfNyx.Networking` (Phase 3) | `Assets/Scripts/Networking` | Core, Game, Fusion.Unity + Fusion DLLs | Fusion session manager, networked player, input/state structs. Compiles only with `WON_FUSION` (set automatically when the SDK is present). Always woven (`FUSION_FORCE_WEAVING`). |
+| `WarOfNyx.Networking.Editor` | `Assets/Scripts/Networking/Editor` | Networking, Editor, Fusion | Network player prefab builder (`WON_FUSION` only). |
+| `WarOfNyx.Tests.Multiplayer` | `Assets/Tests/Multiplayer` | Networking, Fusion, NUnit | Network struct tests (`WON_FUSION` only). |
 | `WarOfNyx.AI` *(planned, Ghost Protocol)* | `Assets/Scripts/AI` | Core, Game | Bot brain, perception, navigation adapters. |
 
 Namespace note: the `Android/` folder uses the namespace `WarOfNyx.Platform`, and input lives in `Controls/` (`WarOfNyx.Controls`). Namespaces called `Android`, `Input` or `Editor` would hide Unity types (`UnityEngine.Input`, `UnityEditor.Editor`) inside the `WarOfNyx.*` namespaces.

@@ -6,7 +6,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 |---|---|---|---|---|
 | 1 | Architecture & project initialization | — | S | Code written; core tests pass under .NET; **not yet verified in Unity** |
 | 2 | Character, camera, PC + touch controls, Practice Arena graybox | 1 | M | **Code written; movement model 30/30 tests pass under .NET; Unity side not yet verified** |
-| 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | Not started · **gate: nothing advanced until this works** |
+| 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | **Code written; core networking 35/35 tests pass under .NET; needs Fusion SDK + App ID + Unity to run.** Gate: nothing advanced until the two-client test passes |
 | 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | Not started |
 | 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | Not started |
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | Not started |
@@ -57,3 +57,15 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] Tests: 30 movement model tests (passing under .NET) + 6 PlayMode physics/arena tests (not yet run)
 - [ ] **Run in Unity, fix compile errors, play-test feel on PC and a phone** ← next action
 - [ ] Deferred to Phase 11: drag-to-customize touch layout, button scaling, gyro aim
+
+## Phase 3 checklist
+- [x] Fusion version check: **2.1.3 Stable** supports Unity 6.3 (confirmed on Photon's SDK page)
+- [x] `WarOfNyx.Networking` module, compiled only with Fusion (`WON_FUSION` auto-detected), forced weaving + weaver registration
+- [x] Session service: dedicated server / private host room / client join, with errors surfaced to the menu
+- [x] Networked player: server-authoritative movement, owner prediction and re-simulation, proxy interpolation, sanitized names
+- [x] Input over the network: intent only, sanitized on the server (tested)
+- [x] Dedicated-server entry with launch arguments (tested parser), exit codes, Windows/Linux server build menus, local launch
+- [x] BattleArena test scene, ring spawns, online HUD (room, players, ping), leave-match flow
+- [x] Main menu ONLINE screen: name, room code, HOST PRIVATE ROOM, JOIN ROOM, JOIN DEV SERVER
+- [ ] **Import Fusion 2.1.3 + App ID, fix compile issues, run the two-client manual test (TESTING.md)** ← next action, needs the project owner
+- [ ] Automated multi-peer test (moved to Phase 4–5)

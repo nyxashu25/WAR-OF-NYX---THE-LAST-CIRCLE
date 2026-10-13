@@ -1,15 +1,17 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using WarOfNyx.Core.Networking;
 
 namespace WarOfNyx.App
 {
     /// <summary>
-    /// Entry point. Lives alone in the Bootstrap scene (build index 0):
-    /// initializes <see cref="AppServices"/> and then loads the main menu.
+    /// Entry point. Lives alone in the Bootstrap scene (build index 0).
     ///
-    /// Dedicated-server builds (Phase 3+) will branch here to the server entry point
-    /// instead of the menu; that branch does not exist yet.
+    /// Client: initializes <see cref="AppServices"/> and loads the main menu.
+    /// Dedicated server (<c>-server</c> argument): starts the authoritative online session
+    /// instead (spec 3/12). The server never shows UI.
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
@@ -18,6 +20,13 @@ namespace WarOfNyx.App
         private IEnumerator Start()
         {
             AppServices.Initialize(config);
+
+            var launch = ServerLaunchOptions.Parse(Environment.GetCommandLineArgs());
+            if (launch.IsServer)
+            {
+                yield return RunDedicatedServer(launch);
+                yield break;
+            }
 
             string menu = AppServices.Config.mainMenuScene;
             if (!Application.CanStreamedLevelBeLoaded(menu))
@@ -28,6 +37,35 @@ namespace WarOfNyx.App
             }
 
             yield return SceneManager.LoadSceneAsync(menu, LoadSceneMode.Single);
+        }
+
+        private static IEnumerator RunDedicatedServer(ServerLaunchOptions launch)
+        {
+            if (launch.Warnings.Length > 0)
+                Debug.LogWarning($"[WarOfNyx][Server] Launch argument problems: {launch.Warnings}");
+
+            // A headless server has nothing to render; don't burn CPU on frames.
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 60;
+
+            var session = OnlineServices.Session;
+            if (session == null)
+            {
+                Debug.LogError("[WarOfNyx][Server] " + OnlineServices.UnavailableMessage);
+                Application.Quit(1);
+                yield break;
+            }
+
+            Debug.Log($"[WarOfNyx][Server] Starting dedicated server: {launch}");
+            var start = session.StartDedicatedServerAsync(launch);
+            while (!start.IsCompleted)
+                yield return null;
+
+            if (start.IsFaulted || !start.Result)
+            {
+                Debug.LogError($"[WarOfNyx][Server] Failed to start: {session.LastError}");
+                Application.Quit(2);
+            }
         }
     }
 }

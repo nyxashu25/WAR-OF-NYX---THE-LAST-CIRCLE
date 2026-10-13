@@ -1,0 +1,24 @@
+{
+    "name": "WarOfNyx.Networking.Editor",
+    "rootNamespace": "WarOfNyx.EditorTools",
+    "references": [
+        "WarOfNyx.Core",
+        "WarOfNyx.Game",
+        "WarOfNyx.Networking",
+        "WarOfNyx.Editor",
+        "Fusion.Unity"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "WON_FUSION"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

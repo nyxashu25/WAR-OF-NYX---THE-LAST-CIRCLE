@@ -1,0 +1,214 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using WarOfNyx.App;
+using WarOfNyx.Characters;
+using WarOfNyx.Core.Events;
+using WarOfNyx.Core.Movement;
+using WarOfNyx.UI.Common;
+using WarOfNyx.UI.Mobile;
+
+namespace WarOfNyx.Gameplay
+{
+    /// <summary>
+    /// Client-side presentation for the networked BattleArena scene (Phase 3 test map):
+    /// camera, touch controls, connection HUD, and the leave-match menu for the LOCAL player.
+    ///
+    /// It owns no gameplay. The local player's networked object (spawned by the server)
+    /// calls <see cref="BindLocalPlayer"/> when it appears. Unlike practice, pausing never stops
+    /// time: the match keeps running on the server, so the menu only disables local input.
+    /// On the dedicated server this component does nothing.
+    /// </summary>
+    public sealed class OnlineArenaController : MonoBehaviour
+    {
+        public static OnlineArenaController Instance { get; private set; }
+
+        private readonly List<IDisposable> _subscriptions = new List<IDisposable>();
+        private PlayerMovement _localMovement;
+        private PlayerInputRouter _localRouter;
+        private MobileControlsUI _mobile;
+        private ThirdPersonCamera _camera;
+        private GameObject _menuPanel;
+        private Text _status;
+        private Text _stats;
+        private bool _menuOpen;
+
+        private static bool IsHeadless => Application.isBatchMode ||
+                                          (OnlineServices.Session != null && OnlineServices.Session.Role == OnlineRole.DedicatedServer);
+
+        private void Awake() => Instance = this;
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+            foreach (var s in _subscriptions)
+                s.Dispose();
+            _subscriptions.Clear();
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            Screen.sleepTimeout = SleepTimeout.SystemSetting;
+        }
+
+        private void Start()
+        {
+            AppServices.EnsureInitialized();
+            if (IsHeadless)
+                return;
+
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            BuildHud();
+            _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ => ToggleMenu()));
+
+            if (OnlineServices.Session == null || OnlineServices.Session.State != OnlineSessionState.Running)
+                _status.text = "NOT CONNECTED - open this scene from the main menu (ONLINE).";
+        }
+
+        /// <summary>Called by the networking layer when this device's player object spawns.</summary>
+        public void BindLocalPlayer(PlayerMovement movement, PlayerInputRouter router)
+        {
+            if (IsHeadless)
+                return;
+
+            _localMovement = movement;
+            _localRouter = router;
+
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                _camera = cam.GetComponent<ThirdPersonCamera>();
+                if (_camera == null)
+                    _camera = cam.gameObject.AddComponent<ThirdPersonCamera>();
+                _camera.Bind(movement.transform, movement, router);
+            }
+
+            if (_mobile == null)
+                _mobile = MobileControlsUI.Create(router);
+            _mobile.SetVisible(Application.isMobilePlatform || Touchscreen.current != null);
+            UpdateCursor();
+        }
+
+        public void UnbindLocalPlayer(PlayerMovement movement)
+        {
+            if (_localMovement != movement)
+                return;
+            _localMovement = null;
+            _localRouter = null;
+            if (_mobile != null)
+                _mobile.SetVisible(false);
+            UpdateCursor();
+        }
+
+        private void Update()
+        {
+            if (IsHeadless || _status == null)
+                return;
+
+            var session = OnlineServices.Session;
+            if (session != null)
+            {
+                string role = session.Role == OnlineRole.Host ? "HOST (private test room)" : session.Role.ToString().ToUpperInvariant();
+                _status.text = $"ONLINE  |  {role}  |  ROOM {session.SessionName}  |  PLAYERS {session.PlayerCount}/{session.MaxPlayers}" +
+                               (session.RoundTripMs > 0 ? $"  |  PING {session.RoundTripMs} ms" : string.Empty) +
+                               (session.State != OnlineSessionState.Running ? $"  |  {session.State.ToString().ToUpperInvariant()}" : string.Empty);
+            }
+
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.f2Key.wasPressedThisFrame && _mobile != null)
+                {
+                    _mobile.SetVisible(!_mobile.Visible);
+                    UpdateCursor();
+                }
+                if (keyboard.f3Key.wasPressedThisFrame)
+                    _stats.gameObject.SetActive(!_stats.gameObject.activeSelf);
+            }
+
+            var mouse = Mouse.current;
+            if (!_menuOpen && mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
+                UpdateCursor();
+
+            if (_stats.gameObject.activeSelf && _localMovement != null)
+            {
+                MovementState s = _localMovement.State;
+                var p = _localMovement.transform.position;
+                _stats.text = $"STATE {s.Mode}{(s.IsSprinting ? " (SPRINT)" : string.Empty)}\nSPEED {s.HorizontalSpeed:0.00} m/s\n" +
+                              $"POS {p.x:0.0}, {p.y:0.0}, {p.z:0.0}";
+            }
+        }
+
+        private void ToggleMenu()
+        {
+            _menuOpen = !_menuOpen;
+            _menuPanel.SetActive(_menuOpen);
+            if (_localRouter != null)
+                _localRouter.InputEnabled = !_menuOpen; // neutral input; the match keeps running
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(null);
+            UpdateCursor();
+        }
+
+        private async void LeaveMatch()
+        {
+            _menuPanel.SetActive(false);
+            var session = OnlineServices.Session;
+            if (session != null && session.State != OnlineSessionState.Idle)
+            {
+                await session.LeaveAsync(); // the session layer returns to the menu on shutdown
+                return;
+            }
+
+            AppServices.Flow.AbortToMainMenu();
+            SceneManager.LoadScene(AppServices.Config.mainMenuScene);
+        }
+
+        private void UpdateCursor()
+        {
+            bool capture = !_menuOpen && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
+            Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !capture;
+        }
+
+        private void BuildHud()
+        {
+            var canvas = UiFactory.CreateCanvas("OnlineHud", sortingOrder: 20);
+            canvas.transform.SetParent(transform, false);
+            var safe = UiFactory.CreateRect("SafeArea", canvas.transform);
+            UiFactory.Stretch(safe);
+            safe.gameObject.AddComponent<SafeAreaFitter>();
+
+            _status = UiFactory.CreateText(safe, "CONNECTING...", 24, NyxPalette.ElectricCyan, TextAnchor.UpperLeft, FontStyle.Bold);
+            UiFactory.Anchor(_status.rectTransform, new Vector2(0.02f, 0.92f), new Vector2(0.8f, 0.99f));
+
+            _stats = UiFactory.CreateText(safe, string.Empty, 22, NyxPalette.TextPrimary, TextAnchor.UpperLeft);
+            UiFactory.Anchor(_stats.rectTransform, new Vector2(0.02f, 0.74f), new Vector2(0.4f, 0.91f));
+            _stats.gameObject.SetActive(false);
+
+            var menuButton = UiFactory.CreateButton(safe, "II", ToggleMenu, 90f, 34);
+            var rect = (RectTransform)menuButton.Button.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(100f, 90f);
+            rect.anchoredPosition = new Vector2(-20f, -20f);
+
+            var panel = UiFactory.CreatePanel("MatchMenu", safe, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.85f), raycastTarget: true);
+            UiFactory.Stretch(panel.rectTransform);
+            _menuPanel = panel.gameObject;
+
+            var column = UiFactory.CreateRect("Column", panel.rectTransform);
+            UiFactory.Anchor(column, new Vector2(0.35f, 0.3f), new Vector2(0.65f, 0.75f));
+            UiFactory.AddVerticalLayout(column.gameObject, 18f, null, TextAnchor.MiddleCenter);
+            UiFactory.CreateText(column, "MATCH MENU", 56, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold, 80f);
+            UiFactory.CreateText(column, "The match keeps running while this menu is open.", 22, NyxPalette.TextMuted,
+                TextAnchor.MiddleCenter, FontStyle.Normal, 40f);
+            UiFactory.CreateButton(column, "RESUME", ToggleMenu, 100f, 36);
+            UiFactory.CreateButton(column, "LEAVE MATCH", LeaveMatch, 100f, 36);
+            _menuPanel.SetActive(false);
+        }
+    }
+}

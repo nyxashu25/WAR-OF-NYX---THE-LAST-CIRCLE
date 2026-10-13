@@ -1,6 +1,6 @@
 # Multiplayer model
 
-Status: **design only**. No networking code exists yet. Phase 3 starts by installing Fusion 2 (see [DEPENDENCIES.md](DEPENDENCIES.md)).
+Status: **Phase 3 networking code written** (Photon Fusion 2.1, see the section at the end). Not yet run: it needs the Fusion SDK, an App ID and a Unity install.
 
 ## Topology
 - **Photon Fusion 2, Server mode.** A headless Linux dedicated server runs `NetworkRunner` with `GameMode.Server`. Android clients run `GameMode.Client`.
@@ -45,3 +45,28 @@ S = authoritative server (or the local simulation in offline mode) · C = client
 
 ## Anti-cheat principles
 The server validates every command. It enforces speed and teleport limits, fire rate, ammo and inventory, and runs damage and timers itself. Clients have no win authority. Suspicious events are logged in a structured format. Requests are rate-limited. Obfuscation is never the main defense.
+
+## Phase 3 implementation (code written, not yet run)
+
+| Piece | File | Runs on |
+|---|---|---|
+| Session service interface (game ↔ network) | `App/OnlineServices.cs` | all |
+| Runner start/stop, roles, spawning, input polling | `Networking/NetworkSessionManager.cs` | all (spawning server-only) |
+| Networked player: movement in `FixedUpdateNetwork`, name RPC | `Networking/NetworkPlayer.cs` | server + owner simulate; proxies render |
+| Input struct and networked movement state | `Networking/NetworkInputData.cs` | all |
+| Input packing and server-side sanitizing | `Core/Networking/InputCodec.cs` | server (decode), client (encode) |
+| Dedicated-server launch arguments | `Core/Networking/ServerLaunchOptions.cs` + `App/GameBootstrap.cs` | server |
+| Room codes, display-name sanitizing | `Core/Networking/SessionCodes.cs` | server (authoritative), client (pre-check) |
+| Temporary ring spawns | `Core/Networking/SpawnRing.cs`, `Gameplay/ArenaSpawnArea.cs` | server |
+| Local presentation (camera, touch UI, HUD, leave) | `Gameplay/OnlineArenaController.cs` | clients |
+
+**Tick flow (owner client and server):** at the start of each tick, restore the networked `MovementState`, grounded flag and position. Then read this tick's input. If the input is missing, use a neutral command (stand still, gravity still applies). Run `PlayerMovement.Simulate(cmd, Runner.DeltaTime)` and write the networked state back. Fusion re-runs this for every corrected tick on the owner, so prediction and reconciliation fall out of the same code.
+
+**What the client sends:** stick (Vector2), yaw, pitch, 5 button bits. Never position, velocity or state. The server clamps the stick to length 1, zeroes NaN/∞, wraps yaw, clamps pitch, and ignores unknown bits. So speed hacks through input are impossible, and a client cannot teleport. The name is requested by RPC and sanitized on the server.
+
+**Roles in Phase 3:**
+- *Dedicated server:* `WarOfNyxServer -batchmode -nographics -server -session WON-DEV -maxPlayers 12`. No local player.
+- *Private test room:* a device hosts (`GameMode.Host`). Testing only, never used for public matches.
+- *Client:* joins by room code or the dev server session.
+
+**Not yet (Phase 4+):** matchmaking queue, waiting lobby and synchronized countdown, real spawn selection, late-join rejection, reconnect grace, lag compensation (Phase 5), interest management tuning (Phase 13). Region selection (`-region`) is parsed but not applied.

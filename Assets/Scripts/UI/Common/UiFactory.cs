@@ -197,6 +197,32 @@ namespace WarOfNyx.UI.Common
             return element;
         }
 
+        /// <summary>Single-line text input (opens the on-screen keyboard on Android).</summary>
+        public static InputField CreateInputField(Transform parent, string placeholder, int characterLimit, float height = 84f, int fontSize = 30)
+        {
+            var rect = CreateRect("Input_" + placeholder, parent);
+            var background = rect.gameObject.AddComponent<Image>();
+            background.color = NyxPalette.MidnightNavy;
+
+            var text = CreateText(rect, string.Empty, fontSize, NyxPalette.TextPrimary, TextAnchor.MiddleLeft);
+            text.supportRichText = false;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Stretch(text.rectTransform, 20f, 6f, 20f, 6f);
+
+            var hint = CreateText(rect, placeholder, fontSize, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Italic);
+            Stretch(hint.rectTransform, 20f, 6f, 20f, 6f);
+
+            var input = rect.gameObject.AddComponent<InputField>();
+            input.targetGraphic = background;
+            input.textComponent = text;
+            input.placeholder = hint;
+            input.characterLimit = characterLimit;
+            input.lineType = InputField.LineType.SingleLine;
+
+            AddLayoutElement(rect.gameObject, height);
+            return input;
+        }
+
         public static MenuButton CreateButton(Transform parent, string label, Action onClick, float height = 96f, int fontSize = 34)
         {
             var rect = CreateRect("Button_" + label, parent);

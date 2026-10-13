@@ -26,6 +26,19 @@ namespace WarOfNyx.EditorTools
     {
         private const string MenuRoot = "War of Nyx/Setup/";
 
+        /// <summary>
+        /// Extra setup steps contributed by optional editor modules (e.g. the Fusion-dependent
+        /// network prefab builder, which only compiles when the Fusion SDK is installed).
+        /// </summary>
+        private static readonly List<(string name, Action action)> AdditionalSteps = new List<(string, Action)>();
+
+        public static void RegisterStep(string name, Action action)
+        {
+            if (AdditionalSteps.Exists(s => s.name == name))
+                return;
+            AdditionalSteps.Add((name, action));
+        }
+
         public const string CompanyName = "Nyx Games";
         public const string ProductName = "WAR OF NYX";
         public const string AndroidPackageId = "com.nyxgames.warofnyx";
@@ -62,6 +75,9 @@ namespace WarOfNyx.EditorTools
             Step(report, "URP + Low/Medium/High quality presets", ConfigureRendering);
             Step(report, "Bootstrap + MainMenu scenes, Build Settings", () => CreateScenes(config, overwrite: false));
             Step(report, "Practice Arena: player prefab, graybox scene (Phase 2)", () => PracticeArenaBuilder.Build(overwrite: false));
+            foreach (var (name, action) in AdditionalSteps)
+                Step(report, name, action);
+            Step(report, "Register WarOfNyx.Networking with the Fusion weaver", () => FusionIntegration.RegisterAssemblyWithWeaver(quiet: true));
             Step(report, "Input System backend", () => restartNeeded = EnableInputSystemBackend());
 
             if (File.Exists(BootstrapScenePath))
@@ -104,6 +120,7 @@ namespace WarOfNyx.EditorTools
             Check(report, "MainMenu in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == MainMenuScenePath && s.enabled));
             Check(report, "PracticeArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.ScenePath && s.enabled));
             Check(report, "Player placeholder prefab exists", AssetDatabase.LoadAssetAtPath<GameObject>(PracticeArenaBuilder.PrefabPath) != null);
+            Check(report, "BattleArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.BattleArenaScenePath && s.enabled));
             Check(report, "MovementConfig asset exists", AssetDatabase.LoadAssetAtPath<WarOfNyx.Characters.MovementConfig>(PracticeArenaBuilder.MovementConfigPath) != null);
             Check(report, "URP is the default render pipeline", GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset);
             Check(report, $"Android package id = {AndroidPackageId}",
@@ -114,10 +131,7 @@ namespace WarOfNyx.EditorTools
             Check(report, "Input System backend enabled", ReadActiveInputHandler() is int handler && handler != 0);
             Check(report, "Asset serialization = Force Text", EditorSettings.serializationMode == SerializationMode.ForceText);
 
-            bool fusion = Type.GetType("Fusion.NetworkRunner, Fusion.Runtime") != null;
-            report.AppendLine(fusion
-                ? "INFO Photon Fusion 2 SDK detected."
-                : "INFO Photon Fusion 2 SDK not installed (required from Phase 3 - see DEPENDENCIES.md).");
+            FusionIntegration.AppendValidation(report);
 
             Debug.Log("[WarOfNyx] Validation:\n" + report);
             EditorUtility.DisplayDialog("War of Nyx - Validate", report.ToString(), "OK");

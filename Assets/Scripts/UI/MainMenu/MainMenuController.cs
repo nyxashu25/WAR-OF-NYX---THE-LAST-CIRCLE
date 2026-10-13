@@ -6,6 +6,7 @@ using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Core.Events;
 using WarOfNyx.Core.Flow;
+using WarOfNyx.Core.Networking;
 using WarOfNyx.Core.Offline;
 using WarOfNyx.Platform;
 using WarOfNyx.Settings;
@@ -23,7 +24,7 @@ namespace WarOfNyx.UI.MainMenu
     /// </summary>
     public sealed class MainMenuController : MonoBehaviour
     {
-        private enum MenuScreen { Home, OfflineSetup, Settings }
+        private enum MenuScreen { Home, OfflineSetup, Settings, Online }
 
         private static readonly string[] DifficultyBlurbs =
         {
@@ -53,6 +54,12 @@ namespace WarOfNyx.UI.MainMenu
         private Text _difficultyBlurb;
         private Text _capacityNote;
 
+        // Online state
+        private InputField _nameInput;
+        private InputField _roomInput;
+        private Text _onlineStatus;
+        private readonly List<MenuButton> _onlineActions = new List<MenuButton>();
+
         // Settings state
         private readonly List<(GraphicsQualityTier tier, MenuButton button)> _qualityButtons = new List<(GraphicsQualityTier, MenuButton)>();
         private readonly List<Action> _settingsRefreshers = new List<Action>();
@@ -73,6 +80,15 @@ namespace WarOfNyx.UI.MainMenu
             _subscriptions.Add(AppServices.Events.Subscribe<ConnectivityChanged>(_ => RefreshConnectivity()));
             _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ => OnBack()));
             RefreshConnectivity();
+
+            var session = OnlineServices.Session;
+            if (session != null)
+            {
+                session.StateChanged += OnSessionStateChanged;
+                // Back from a session that ended badly (kicked, server gone, failed join): say why.
+                if (session.State == OnlineSessionState.Failed && !string.IsNullOrEmpty(session.LastError))
+                    Notify(session.LastError, 7f);
+            }
         }
 
         private void OnDestroy()
@@ -80,6 +96,14 @@ namespace WarOfNyx.UI.MainMenu
             foreach (var s in _subscriptions)
                 s.Dispose();
             _subscriptions.Clear();
+            if (OnlineServices.Session != null)
+                OnlineServices.Session.StateChanged -= OnSessionStateChanged;
+        }
+
+        private void OnSessionStateChanged(OnlineSessionState state)
+        {
+            if (_current == MenuScreen.Online)
+                RefreshOnline();
         }
 
         private void Update()
@@ -109,6 +133,7 @@ namespace WarOfNyx.UI.MainMenu
             _screens[MenuScreen.Home] = BuildHome(safe);
             _screens[MenuScreen.OfflineSetup] = BuildOfflineSetup(safe);
             _screens[MenuScreen.Settings] = BuildSettings(safe);
+            _screens[MenuScreen.Online] = BuildOnline(safe);
 
             _noticeText = UiFactory.CreateText(safe, string.Empty, 30, NyxPalette.VictoryGold, TextAnchor.MiddleCenter, FontStyle.Bold);
             var noticeRect = _noticeText.rectTransform;
@@ -332,6 +357,8 @@ namespace WarOfNyx.UI.MainMenu
 
             if (screen == MenuScreen.OfflineSetup)
                 RefreshOffline();
+            else if (screen == MenuScreen.Online)
+                RefreshOnline();
             else if (screen == MenuScreen.Settings)
                 RefreshSettings();
         }
@@ -348,7 +375,9 @@ namespace WarOfNyx.UI.MainMenu
             switch (status)
             {
                 case ConnectivityStatus.Online:
-                    _connectionText.text = "INTERNET: CONNECTED\nOnline multiplayer is not implemented yet (Phases 3-4).";
+                    _connectionText.text = OnlineServices.IsAvailable
+                        ? "INTERNET: CONNECTED\nOnline test sessions available (private rooms / dev server). Matchmaking: Phase 4."
+                        : "INTERNET: CONNECTED\nOnline module not installed (needs Photon Fusion 2 SDK + App ID).";
                     _connectionText.color = NyxPalette.ElectricCyan;
                     _onlineButton.Interactable = true;
                     break;
@@ -367,7 +396,116 @@ namespace WarOfNyx.UI.MainMenu
 
         private void OnOnlinePressed()
         {
-            Notify("Online matchmaking (Photon Fusion 2 + dedicated servers) is built in Phases 3-4. Not available yet.");
+            if (!OnlineServices.IsAvailable)
+            {
+                Notify(OnlineServices.UnavailableMessage, 7f);
+                return;
+            }
+            Show(MenuScreen.Online);
+        }
+
+        // ------------------------------------------------------------------ Online (Phase 3 test sessions)
+
+        private GameObject BuildOnline(RectTransform parent)
+        {
+            var root = UiFactory.CreateRect("OnlineScreen", parent);
+            UiFactory.Anchor(root, new Vector2(0.10f, 0.10f), new Vector2(0.90f, 0.95f));
+            UiFactory.AddVerticalLayout(root.gameObject, 14f, null, TextAnchor.UpperCenter);
+
+            UiFactory.CreateText(root, "ONLINE - TEST SESSIONS", 60, NyxPalette.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold, 76f);
+            UiFactory.CreateText(root,
+                "Phase 3: real players on a Photon Fusion session. Public matches run on a dedicated server (JOIN DEV SERVER). " +
+                "HOST PRIVATE ROOM makes this device the host - for testing with friends only. Matchmaking and lobby arrive in Phase 4.",
+                24, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 70f);
+
+            _nameInput = UiFactory.CreateInputField(root, "YOUR NAME", PlayerNames.MaxLength);
+            _nameInput.text = AppServices.UserSettings.Data.playerName ?? string.Empty;
+            _roomInput = UiFactory.CreateInputField(root, "ROOM CODE (empty = new code when hosting)", SessionCodes.MaxLength);
+
+            var row = UiFactory.CreateRow("OnlineActions", root, 96f, 16f);
+            _onlineActions.Add(UiFactory.CreateButton(row, "HOST PRIVATE ROOM", OnHostPressed, 96f, 30));
+            _onlineActions.Add(UiFactory.CreateButton(row, "JOIN ROOM", OnJoinPressed, 96f, 30));
+            _onlineActions.Add(UiFactory.CreateButton(row, $"JOIN DEV SERVER ({AppServices.Config.devServerSession})", OnJoinDevPressed, 96f, 26));
+
+            _onlineStatus = UiFactory.CreateText(root, string.Empty, 28, NyxPalette.VictoryGold, TextAnchor.MiddleLeft, FontStyle.Bold, 80f);
+
+            var back = UiFactory.CreateRow("Back", root, 90f, 16f);
+            UiFactory.CreateButton(back, "BACK", () => Show(MenuScreen.Home), 90f, 32);
+
+            return root.gameObject;
+        }
+
+        private void RefreshOnline()
+        {
+            var session = OnlineServices.Session;
+            bool busy = session != null && (session.State == OnlineSessionState.Starting || session.State == OnlineSessionState.Running);
+            foreach (var button in _onlineActions)
+                button.Interactable = session != null && !busy;
+
+            if (session == null)
+                _onlineStatus.text = OnlineServices.UnavailableMessage;
+            else if (session.State == OnlineSessionState.Starting)
+                _onlineStatus.text = $"CONNECTING TO {session.SessionName}...";
+            else if (!string.IsNullOrEmpty(session.LastError))
+                _onlineStatus.text = session.LastError;
+            else
+                _onlineStatus.text = string.Empty;
+        }
+
+        private void SaveName()
+        {
+            // Same rule the server applies; an unusable name is stored empty so the server assigns NYX-<id>.
+            string clean = PlayerNames.Sanitize(_nameInput.text, 0);
+            bool unusable = clean == PlayerNames.Fallback(0);
+            AppServices.UserSettings.Data.playerName = unusable ? string.Empty : clean;
+            _nameInput.text = AppServices.UserSettings.Data.playerName;
+            AppServices.UserSettings.Save();
+        }
+
+        private async void OnHostPressed()
+        {
+            SaveName();
+            string code = _roomInput.text;
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                code = SessionCodes.Generate(new System.Random());
+                _roomInput.text = code;
+            }
+            else if (!SessionCodes.TrySanitize(code, out code))
+            {
+                _onlineStatus.text = "Room codes use 4-16 letters, digits or '-'.";
+                return;
+            }
+
+            await RunOnline(() => OnlineServices.Session.HostPrivateRoomAsync(code, AppServices.Config.privateRoomMaxPlayers));
+        }
+
+        private async void OnJoinPressed()
+        {
+            SaveName();
+            if (!SessionCodes.TrySanitize(_roomInput.text, out string code))
+            {
+                _onlineStatus.text = "Enter the room code you were given (4-16 letters, digits or '-').";
+                return;
+            }
+
+            await RunOnline(() => OnlineServices.Session.JoinAsync(code));
+        }
+
+        private async void OnJoinDevPressed()
+        {
+            SaveName();
+            await RunOnline(() => OnlineServices.Session.JoinAsync(AppServices.Config.devServerSession));
+        }
+
+        private async System.Threading.Tasks.Task RunOnline(Func<System.Threading.Tasks.Task<bool>> start)
+        {
+            var task = start();
+            RefreshOnline();
+            await task;
+            // On success Fusion loads the BattleArena scene and this menu is destroyed.
+            if (this != null)
+                RefreshOnline();
         }
 
         private void OnPracticePressed()

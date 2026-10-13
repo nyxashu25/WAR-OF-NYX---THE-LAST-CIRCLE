@@ -34,6 +34,9 @@ namespace WarOfNyx.Settings
         public bool reduceCameraShake;
         public bool reduceFlashing;
 
+        /// <summary>Display name sent to servers (sanitized again server-side).</summary>
+        public string playerName = string.Empty;
+
         /// <summary>-1 = use GameConfig default.</summary>
         public int offlineBotCount = -1;
         public int offlineDifficulty = -1;

@@ -43,6 +43,11 @@ namespace WarOfNyx.App
         [Tooltip("Seconds in the online queue before PLAY OFFLINE WITH BOTS is offered.")]
         [Min(5f)] public float matchmakingOfflineOfferSeconds = 30f;
 
+        [Header("Online test sessions (Phase 3)")]
+        [Tooltip("Session name a dev dedicated server is started with (-session). JOIN DEV SERVER connects to it.")]
+        public string devServerSession = "WON-DEV";
+        [Range(2, 24)] public int privateRoomMaxPlayers = 12;
+
         public OfflineMatchSettings DefaultOfflineSettings =>
             new OfflineMatchSettings(defaultOfflineBotCount, defaultOfflineDifficulty);
 

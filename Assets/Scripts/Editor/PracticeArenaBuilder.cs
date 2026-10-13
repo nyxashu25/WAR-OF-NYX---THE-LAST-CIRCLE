@@ -25,6 +25,7 @@ namespace WarOfNyx.EditorTools
     public static class PracticeArenaBuilder
     {
         public const string ScenePath = ProjectSetupWizard.ScenesFolder + "/PracticeArena.unity";
+        public const string BattleArenaScenePath = ProjectSetupWizard.ScenesFolder + "/BattleArena.unity";
         public const string PrefabFolder = "Assets/Prefabs/Characters";
         public const string PrefabPath = PrefabFolder + "/PlayerPlaceholder.prefab";
         public const string ConfigFolder = "Assets/ScriptableObjects/Gameplay";
@@ -65,6 +66,9 @@ namespace WarOfNyx.EditorTools
 
             if (overwrite || !File.Exists(ScenePath))
                 CreateScene(prefab.GetComponent<PlayerController>(), palette);
+
+            if (overwrite || !File.Exists(BattleArenaScenePath))
+                CreateBattleArenaScene(palette);
 
             AddToBuildSettings();
             AssetDatabase.SaveAssets();
@@ -149,6 +153,36 @@ namespace WarOfNyx.EditorTools
 
         private static void CreateScene(PlayerController playerPrefab, Palette p)
         {
+            var scene = CreateArenaBase(p, out var spawn);
+
+            var arena = new GameObject("PracticeArena").AddComponent<PracticeArenaController>();
+            var so = new SerializedObject(arena);
+            so.FindProperty("playerPrefab").objectReferenceValue = playerPrefab;
+            so.FindProperty("spawnPoint").objectReferenceValue = spawn;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+        }
+
+        /// <summary>
+        /// Phase 3 networked test map: same graybox, players spawned by the server on a ring
+        /// (ArenaSpawnArea), local presentation by OnlineArenaController. Replaced by NYX ISLAND later.
+        /// </summary>
+        private static void CreateBattleArenaScene(Palette p)
+        {
+            var scene = CreateArenaBase(p, out var spawn);
+
+            var area = new GameObject("SpawnArea").AddComponent<ArenaSpawnArea>();
+            area.transform.position = new Vector3(0f, 0f, -36f);
+            Object.DestroyImmediate(spawn.gameObject);
+
+            new GameObject("OnlineArena").AddComponent<OnlineArenaController>();
+
+            EditorSceneManager.SaveScene(scene, BattleArenaScenePath);
+        }
+
+        private static UnityEngine.SceneManagement.Scene CreateArenaBase(Palette p, out Transform spawn)
+        {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             RenderSettings.ambientMode = AmbientMode.Flat;
@@ -182,7 +216,7 @@ namespace WarOfNyx.EditorTools
 
             // Spawn pad
             Block(geometry, "SpawnPad", new Vector3(0f, 0.01f, -40f), new Vector3(4f, 0.02f, 4f), p.Spawn);
-            var spawn = new GameObject("SpawnPoint").transform;
+            spawn = new GameObject("SpawnPoint").transform;
             spawn.position = new Vector3(0f, 0.1f, -40f);
 
             // Sprint lane with markers every 10 m
@@ -235,13 +269,7 @@ namespace WarOfNyx.EditorTools
             foreach (Transform child in geometry)
                 child.gameObject.isStatic = true;
 
-            var arena = new GameObject("PracticeArena").AddComponent<PracticeArenaController>();
-            var so = new SerializedObject(arena);
-            so.FindProperty("playerPrefab").objectReferenceValue = playerPrefab;
-            so.FindProperty("spawnPoint").objectReferenceValue = spawn;
-            so.ApplyModifiedPropertiesWithoutUndo();
-
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            return scene;
         }
 
         private static void Ramp(Transform parent, string name, float x, float angle, Material rampMat, Material platformMat, bool withPlatform)
@@ -289,9 +317,11 @@ namespace WarOfNyx.EditorTools
         private static void AddToBuildSettings()
         {
             var scenes = EditorBuildSettings.scenes.ToList();
-            if (scenes.Any(s => s.path == ScenePath))
-                return;
-            scenes.Add(new EditorBuildSettingsScene(ScenePath, true));
+            foreach (var path in new[] { ScenePath, BattleArenaScenePath })
+            {
+                if (!scenes.Any(s => s.path == path))
+                    scenes.Add(new EditorBuildSettingsScene(path, true));
+            }
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }
