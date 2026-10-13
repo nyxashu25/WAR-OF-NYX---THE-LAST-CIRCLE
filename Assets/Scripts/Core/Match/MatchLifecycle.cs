@@ -10,6 +10,7 @@ namespace WarOfNyx.Core.Match
     ///   WaitingForPlayers ─(min reached)→ LobbyCountdown ─(fill timer or lobby full)→ Loading
     ///   Loading ─(everyone loaded, or load timeout: stragglers kicked)→ Countdown (players spawned, locked)
     ///   Countdown ─(server time reaches the shared start time)→ Active
+    ///   Active ─(EndMatch: last survivor decided)→ Ended ─(results shown)→ back to the lobby (reset)
     ///   any state ─(everyone left)→ back to WaitingForPlayers (reset)
     ///
     /// New players are only accepted while waiting (no late joins, spec 20). Private rooms never
@@ -57,6 +58,8 @@ namespace WarOfNyx.Core.Match
         public event Action<IReadOnlyList<int>> SpawnRequested;
         public event Action<float> CountdownStarted;
         public event Action<float> Activated;
+        /// <summary>The match is over (winner decided). Argument: when everyone returns to the lobby.</summary>
+        public event Action<float> MatchEnded;
         /// <summary>Back to the lobby: reload the lobby scene, despawn avatars, reopen the session.</summary>
         public event Action ResetToLobby;
 
@@ -96,6 +99,17 @@ namespace WarOfNyx.Core.Match
             if (!IsPrivateRoom || Phase > MatchPhase.LobbyCountdown || _players.Count < _rules.privateRoomMinPlayersToStart)
                 return false;
             BeginLoading(now);
+            return true;
+        }
+
+        /// <summary>Server: the match result is final. Combat stops; results show for the configured time.</summary>
+        public bool EndMatch(float now)
+        {
+            if (Phase != MatchPhase.Active)
+                return false;
+            Phase = MatchPhase.Ended;
+            PhaseEndsAt = now + Math.Max(0f, _rules.resultsSeconds);
+            MatchEnded?.Invoke(PhaseEndsAt);
             return true;
         }
 
@@ -147,9 +161,13 @@ namespace WarOfNyx.Core.Match
                     break;
 
                 case MatchPhase.Active:
-                case MatchPhase.Ended:
                     if (_players.Count == 0)
                         Reset();
+                    break;
+
+                case MatchPhase.Ended:
+                    if (_players.Count == 0 || now >= PhaseEndsAt)
+                        Reset(); // return to lobby; connected players stay for the next match
                     break;
             }
         }

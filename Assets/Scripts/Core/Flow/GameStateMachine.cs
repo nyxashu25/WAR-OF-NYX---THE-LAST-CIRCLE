@@ -132,8 +132,24 @@ namespace WarOfNyx.Core.Flow
 
             int from = Array.IndexOf(CanonicalOrder, Current);
             int to = Array.IndexOf(CanonicalOrder, target);
-            if (from < 0 || to < 0 || to <= from)
+            if (from < 0 || to < 0)
                 return false;
+
+            // A new round after a finished match (the server returned everyone to the lobby):
+            // finish this round through ReturnToLobby, then walk forward again from the start.
+            if (to <= from && from >= Array.IndexOf(CanonicalOrder, GameFlowState.MatchEnded))
+            {
+                for (int i = from + 1; i < CanonicalOrder.Length; i++)
+                    if (CanTransition(CanonicalOrder[i]))
+                        Apply(CanonicalOrder[i]);
+                if (Current != GameFlowState.ReturnToLobby)
+                    return false;
+                from = -1;
+            }
+            else if (to <= from)
+            {
+                return false;
+            }
 
             for (int i = from + 1; i <= to; i++)
             {

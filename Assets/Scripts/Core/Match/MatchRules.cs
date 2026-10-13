@@ -25,6 +25,9 @@ namespace WarOfNyx.Core.Match
 
         public float spawnProtectionSeconds = 3f;
 
+        /// <summary>Phase 9: the results / victory screen stays this long, then everyone returns to the lobby.</summary>
+        public float resultsSeconds = 15f;
+
         /// <summary>Spec 6: 65 m initial separation, relaxed step by step, never below the hard floor.</summary>
         public float minSpawnSeparation = 65f;
         public float[] separationRelaxSteps = { 50f, 40f, 25f };
@@ -64,7 +67,7 @@ namespace WarOfNyx.Core.Match
         Loading = 2,
         Countdown = 3,
         Active = 4,
-        /// <summary>Phase 9 (winner / results). Not reached yet.</summary>
+        /// <summary>Winner decided; results shown until everyone returns to the lobby (Phase 9).</summary>
         Ended = 5,
     }
 
@@ -72,7 +75,7 @@ namespace WarOfNyx.Core.Match
     public static class NetworkProtocol
     {
         /// <summary>Bump whenever networked state or inputs change incompatibly; clients only join equal versions.</summary>
-        public const int Version = 8;
+        public const int Version = 9;
 
         public const string VersionKey = "pv";
         public const string ModeKey = "mode";

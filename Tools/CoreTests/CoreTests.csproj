@@ -36,6 +36,7 @@
     <Compile Include="../../Assets/Tests/EditMode/ItemsTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/ZoneTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/HuntTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/MatchEndTests.cs" LinkBase="Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,4 +47,5 @@
   </ItemGroup>
 
 </Project>
+
 

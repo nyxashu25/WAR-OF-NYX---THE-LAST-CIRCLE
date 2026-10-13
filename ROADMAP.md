@@ -12,7 +12,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | **Code written; item rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | **Code written; circle rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | **Code written; hunt rules 19 tests pass under .NET; Unity/Fusion side not yet run** |
-| 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | Not started |
+| 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | **Code written; match-end rules 11 tests pass; non-Fusion code compiles in Unity 6.6, 299/299 EditMode tests pass in Unity; Fusion side not yet run** |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | Not started (defaults already configured: NIGHTMARE, 23 bots) |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | Not started |
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | Not started |
@@ -135,3 +135,16 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] Spawn grace (5 s); trackers survive a disconnect so a reconnect never resets the timer (only a 5 s penalty pause); death removes the beacon; multiple campers tracked independently
 - [ ] **Run the camping test in TESTING.md** ← needs the project owner (Fusion + 2 clients)
 - [ ] Reconnecting into a running match is not possible yet (late joins are refused); the tracker side is ready (KNOWN_ISSUES 54)
+
+## Phase 9 checklist
+- [x] Alive tracking on the server (`MatchResolver`), ALIVE x / y counter on every client
+- [x] Kill feed with causes (weapon, melee, circle, camping) plus FIRST BLOOD / DOUBLE / TRIPLE ELIMINATION highlights
+- [x] Match statistics: kills, damage, survival time, placement (server-trusted)
+- [x] Spectating living players after elimination (NEXT / STOP, auto-switch when the watched player falls); spectators see only what that player's camera shows
+- [x] Final survivor detection; same-tick eliminations ranked by kills → damage → player id; if everyone falls in one tick the best-ranked is the single winner (tie-break)
+- [x] Leavers count as eliminated; the circle freezes and combat stops when the match ends
+- [x] Victory screen ("WAR OF NYX / LAST SURVIVOR / VICTORY ACHIEVED" + name, kills, damage, survival, placement), results table for everyone, PLACEHOLDER victory effect
+- [x] Results saved where supported: trusted JSON on the server (`persistentDataPath/match-results`), local history per device (online/offline kept separate), record shown on the Online screen
+- [x] Automatic return to the lobby after 15 s; connected players stay for the next match; flow state machine supports new rounds
+- [x] Server cleanup on reset: avatars, loot capsules, hunt trackers, results, circle
+- [ ] **Run the full-match test in TESTING.md** ← needs Fusion + App ID + 2 clients

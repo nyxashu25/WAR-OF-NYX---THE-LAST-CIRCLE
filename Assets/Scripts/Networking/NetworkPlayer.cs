@@ -56,6 +56,21 @@ namespace WarOfNyx.Networking
         [Networked] private float HuntExposedUntilNet { get; set; }
         [Networked] private int HuntExposureCountNet { get; set; }
 
+        // Match result (Phase 9), set by the server when the player is placed.
+        [Networked] public byte Placement { get; set; }
+        [Networked] public float SurvivalSeconds { get; set; }
+        [Networked] public NetworkBool IsWinner { get; set; }
+
+        /// <summary>Server only: final placement for this player (1 = winner).</summary>
+        public void ServerSetResult(int placement, float survivalSeconds, bool winner)
+        {
+            if (!HasStateAuthority)
+                return;
+            Placement = (byte)Mathf.Clamp(placement, 0, 255);
+            SurvivalSeconds = survivalSeconds;
+            IsWinner = winner;
+        }
+
         /// <summary>Every spawned player on this peer (for beacons, minimap markers and direction indicators).</summary>
         public static readonly System.Collections.Generic.List<NetworkPlayer> All = new System.Collections.Generic.List<NetworkPlayer>();
 
@@ -140,7 +155,10 @@ namespace WarOfNyx.Networking
                 _router.enabled = true;
                 _router.SetAim(state.Yaw, 10f);
                 if (OnlineArenaController.Instance != null)
+                {
                     OnlineArenaController.Instance.BindLocalPlayer(_movement, _router);
+                    OnlineArenaController.Instance.SpectateTargets = GatherSpectateTargets;
+                }
 
                 string requested = AppServices.IsInitialized ? AppServices.UserSettings.Data.playerName : string.Empty;
                 RPC_RequestName(requested ?? string.Empty);
@@ -308,6 +326,21 @@ namespace WarOfNyx.Networking
                 if (cam != null)
                     _nameTag.transform.rotation = Quaternion.LookRotation(_nameTag.transform.position - cam.transform.position);
             }
+        }
+
+        private readonly System.Collections.Generic.List<SpectateTarget> _spectateTargets = new System.Collections.Generic.List<SpectateTarget>();
+
+        /// <summary>Living players this (eliminated) player may watch (spec 21). Only what any player can already see.</summary>
+        private System.Collections.Generic.IReadOnlyList<SpectateTarget> GatherSpectateTargets()
+        {
+            _spectateTargets.Clear();
+            foreach (var other in All)
+            {
+                if (other == null || other == this || !other.IsAlive)
+                    continue;
+                _spectateTargets.Add(new SpectateTarget { Transform = other.transform, Movement = other._movement, Name = other.PlayerName });
+            }
+            return _spectateTargets;
         }
 
         private readonly System.Collections.Generic.List<HuntTarget> _exposed = new System.Collections.Generic.List<HuntTarget>();

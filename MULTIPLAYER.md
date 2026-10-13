@@ -127,4 +127,12 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Replicated per player:** hunt state, warning level, inactivity start, exposure end, exposure count (5 small fields on `NetworkPlayer`). Every client draws the beacon from them; the local player's HUD derives its countdown.
 - **Feed:** `RPC_HuntAlert(eventId, player)`, one per exposure, deduplicated by event id.
 - **Disconnects:** `OnPlayerLeft` → `Hunt.MarkDisconnected`; the tracker is kept by player key, and tracking the same key again continues it with only a short penalty pause. Reconnecting into a running match isn't possible yet (late joins refused), so this path is unit-tested only.
-- `NetworkProtocol.Version` = **8**.
+- `NetworkProtocol.Version` = **8** at the end of Phase 8.
+
+## Phase 9: match end (code written, not yet run online)
+- **Server-only:** `MatchResolver` (created at FIGHT from the spawned players): eliminations recorded with their tick, resolved one tick later (so same-tick deaths are tie-broken together), trusted kills/damage pulled from `NetworkCombat` every tick, leavers recorded from `OnPlayerLeft`. When at most one player is alive: `MatchLifecycle.EndMatch` → `Ended` (input locked on every peer by the existing unlock rule), circle frozen (`NetworkNyxCircle.ServerFreeze`), results JSON written, return to the lobby after `resultsSeconds` (15 s).
+- **Replicated:** alive count, participants, winner id and tie-break flag (match controller); placement, survival time and winner flag per player (`NetworkPlayer`). Clients build the results table from these and the replicated kills/damage. No client can report a result.
+- **Feed:** the elimination RPC also carries the kill-streak notice text (event-id deduplicated as before).
+- **Spectating:** purely local. The camera follows a living player's replicated transform. The spectator receives exactly the same replicated data as before, so nothing privileged is revealed.
+- **Cleanup on reset:** avatars and loot capsules despawned, hunt trackers and results dropped, circle stopped, then the lobby scene reloads.
+- `NetworkProtocol.Version` = **9**.

@@ -694,12 +694,21 @@ namespace WarOfNyx.Networking
             float spread = ranged ? WeaponRules.CurrentSpread(state, weapon, now, _player.LocalAimHeld) : 0.5f;
             hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, Alive);
 
-            if (!Alive && (DamageKind)EliminationCause == DamageKind.Zone)
-                hud.ShowEliminated(null, null, "Consumed by the Nyx Circle.");
-            else if (!Alive && (DamageKind)EliminationCause == DamageKind.Camping)
-                hud.ShowEliminated(null, null, "Taken by the Nyx Hunt (camping).");
-            else if (!Alive)
-                hud.ShowEliminated(NameOf(EliminatedBy), WeaponRegistry.DisplayName(EliminatedByWeapon));
+            if (!Alive)
+            {
+                // Spec 21: who, final kill count, time survived (and placement once the server gave it).
+                var match = NetworkMatchController.Instance;
+                int participants = match != null ? match.Participants : 0;
+                string details = $"{Kills} ELIMINATIONS  ·  SURVIVED {MatchResultText.Clock(_player.SurvivalSeconds)}" +
+                                 (_player.Placement > 0 ? $"  ·  {MatchResultText.Placement(_player.Placement, participants)}" : string.Empty);
+                var cause = (DamageKind)EliminationCause;
+                if (cause == DamageKind.Zone)
+                    hud.ShowEliminated(null, null, "Consumed by the Nyx Circle.", details);
+                else if (cause == DamageKind.Camping)
+                    hud.ShowEliminated(null, null, "Taken by the Nyx Hunt (camping).", details);
+                else
+                    hud.ShowEliminated(NameOf(EliminatedBy), WeaponRegistry.DisplayName(EliminatedByWeapon), null, details);
+            }
             else
                 hud.HideEliminated();
 

@@ -490,9 +490,19 @@ namespace WarOfNyx.Tests
                 GameFlowState.SynchronizedSpawn, GameFlowState.Countdown,
             }, seen);
 
+            Assert.IsFalse(sm.TryAdvanceTo(GameFlowState.WaitingLobby), "never moves backwards during a match");
+            Assert.AreEqual(GameFlowState.Countdown, sm.Current);
+
             Assert.IsTrue(sm.TryAdvanceTo(GameFlowState.MatchEnded));
             CollectionAssert.DoesNotContain(seen, GameFlowState.FinalCircle, "optional final circle is skipped");
-            Assert.IsFalse(sm.TryAdvanceTo(GameFlowState.WaitingLobby), "never moves backwards");
+
+            // Phase 9: after the match the server returns everyone to the lobby: a new round.
+            seen.Clear();
+            Assert.IsTrue(sm.TryAdvanceTo(GameFlowState.WaitingLobby));
+            CollectionAssert.AreEqual(new[]
+            {
+                GameFlowState.ResultsScreen, GameFlowState.ReturnToLobby, GameFlowState.Matchmaking, GameFlowState.WaitingLobby,
+            }, seen);
         }
 
         [Test]

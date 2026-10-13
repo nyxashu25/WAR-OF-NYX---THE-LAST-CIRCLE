@@ -8,6 +8,7 @@ using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Characters;
 using WarOfNyx.Core.Events;
+using WarOfNyx.Core.Flow;
 using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
@@ -15,9 +16,18 @@ using WarOfNyx.Core.Zone;
 using WarOfNyx.UI.Common;
 using WarOfNyx.UI.Hud;
 using WarOfNyx.UI.Mobile;
+using WarOfNyx.Settings;
 
 namespace WarOfNyx.Gameplay
 {
+    /// <summary>A living player an eliminated player can watch (spec 21).</summary>
+    public struct SpectateTarget
+    {
+        public Transform Transform;
+        public PlayerMovement Movement;
+        public string Name;
+    }
+
     /// <summary>
     /// Client-side presentation for the networked BattleArena scene (Phase 3 test map):
     /// camera, touch controls, connection HUD, and the leave-match menu for the LOCAL player.
@@ -39,6 +49,18 @@ namespace WarOfNyx.Gameplay
 
         /// <summary>Nyx Circle HUD and minimap for the local player (null on the dedicated server).</summary>
         public ZoneHud Zone { get; private set; }
+
+        /// <summary>Living players to spectate, provided by the local networked player (Phase 9).</summary>
+        public Func<IReadOnlyList<SpectateTarget>> SpectateTargets { get; set; }
+
+        private MatchResultsPanel _results;
+        private bool _historySaved;
+        private Text _alive;
+        private GameObject _spectateBar;
+        private Text _spectateLabel;
+        private Transform _spectating;
+        private int _spectateIndex = -1;
+        private bool _eliminatedPanelWasUp;
 
         /// <summary>Nyx Hunt status and exposed-player indicators (null on the dedicated server).</summary>
         public HuntHud HuntView { get; private set; }
@@ -99,6 +121,10 @@ namespace WarOfNyx.Gameplay
             Loot = LootPanel.Create(transform);
             Zone = ZoneHud.Create(transform);
             HuntView = HuntHud.Create(transform);
+            _results = MatchResultsPanel.Create(transform);
+            _results.LeaveClicked += LeaveMatch;
+            Hud.SpectateClicked += SpectateNext;
+            Hud.LeaveClicked += LeaveMatch;
             var area = ArenaSpawnArea.Current;
             if (area != null)
                 Zone.Minimap.BakeMap(area.transform.position, area.ZoneRadius * 1.15f);
@@ -185,6 +211,13 @@ namespace WarOfNyx.Gameplay
                 UpdateCursor();
 
             UpdateMatchOverlay(session);
+            UpdateSpectating();
+            bool eliminatedUp = IsLocalEliminatedPanelUp();
+            if (eliminatedUp != _eliminatedPanelWasUp)
+            {
+                _eliminatedPanelWasUp = eliminatedUp;
+                UpdateCursor(); // free the mouse for SPECTATE / RETURN TO LOBBY
+            }
 
             if (_pendingHeadline != null && _banner.text.Length == 0 && Zone != null)
             {
@@ -300,6 +333,10 @@ namespace WarOfNyx.Gameplay
                     _banner.text = string.Empty;
                     _phase.text = $"WAITING FOR ALL PLAYERS TO LOAD  {match.LoadedPlayers}/{match.Players}";
                     break;
+                case MatchPhase.Ended:
+                    _banner.text = string.Empty;
+                    _phase.text = string.Empty;
+                    break;
                 case MatchPhase.Countdown:
                 case MatchPhase.Active:
                     // Same server start time on every device: "3", "2", "1", "FIGHT!".
@@ -314,6 +351,125 @@ namespace WarOfNyx.Gameplay
             }
 
             _protection.text = _protectionRemaining > 0f ? $"SPAWN PROTECTION  {_protectionRemaining:0.0}s" : string.Empty;
+            _alive.text = match.Phase == MatchPhase.Active && match.Participants > 0
+                ? $"ALIVE  {match.AlivePlayers} / {match.Participants}"
+                : string.Empty;
+        }
+
+        // ------------------------------------------------------------------ Phase 9: headlines, spectating, results
+
+        /// <summary>Big centre notice (FIRST BLOOD, DOUBLE ELIMINATION...).</summary>
+        public void ShowHeadline(string text, Color color)
+        {
+            if (Zone != null)
+                Zone.ShowHeadline(text, color);
+        }
+
+        /// <summary>Watch the next living player (spec 21). The spectator sees only what that player's camera shows.</summary>
+        public void SpectateNext()
+        {
+            var targets = SpectateTargets != null ? SpectateTargets() : null;
+            if (targets == null || targets.Count == 0)
+            {
+                Hud?.ShowMessage("Nobody left to spectate.");
+                StopSpectating();
+                return;
+            }
+            _spectateIndex = (_spectateIndex + 1) % targets.Count;
+            var target = targets[_spectateIndex];
+            if (_camera == null && Camera.main != null)
+                _camera = Camera.main.GetComponent<ThirdPersonCamera>();
+            if (_camera == null)
+                return;
+            _camera.Bind(target.Transform, target.Movement, null);
+            _spectating = target.Transform;
+            _spectateLabel.text = $"SPECTATING  {target.Name}";
+            _spectateBar.SetActive(true);
+            Hud?.SuppressEliminated(true);
+        }
+
+        public void StopSpectating()
+        {
+            if (_spectating == null && (_spectateBar == null || !_spectateBar.activeSelf))
+                return;
+            _spectating = null;
+            _spectateIndex = -1;
+            if (_spectateBar != null)
+                _spectateBar.SetActive(false);
+            if (_camera != null && _localMovement != null)
+                _camera.Bind(_localMovement.transform, _localMovement, _localRouter);
+            Hud?.SuppressEliminated(_results != null && _results.Visible);
+        }
+
+        private void UpdateSpectating()
+        {
+            if (_spectating == null)
+                return;
+            var targets = SpectateTargets != null ? SpectateTargets() : null;
+            bool stillAlive = false;
+            if (targets != null)
+                foreach (var t in targets)
+                    stillAlive |= t.Transform == _spectating;
+            if (!stillAlive)
+            {
+                // The watched player fell: move on to someone else (or back to your own view).
+                _spectateIndex = -1;
+                if (targets != null && targets.Count > 0)
+                    SpectateNext();
+                else
+                    StopSpectating();
+            }
+
+            var keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.nKey.wasPressedThisFrame)
+                SpectateNext();
+        }
+
+        /// <summary>Called every frame by the match controller once the server has declared the result.</summary>
+        public void ShowResults(IReadOnlyList<ResultRow> rows, int participants, float secondsToLobby, bool wonByTieBreak)
+        {
+            if (IsHeadless || _results == null)
+                return;
+            if (!_results.Visible)
+            {
+                StopSpectating();
+                Hud?.SuppressEliminated(true);
+                AppServices.Flow.TryAdvanceTo(GameFlowState.ResultsScreen);
+            }
+            _results.Show(rows, participants, secondsToLobby, wonByTieBreak);
+            UpdateCursor();
+
+            if (!_historySaved)
+            {
+                foreach (var r in rows)
+                {
+                    if (!r.IsLocal || r.Placement <= 0)
+                        continue;
+                    _historySaved = true;
+                    MatchHistoryStore.Add(new WarOfNyx.Core.Match.MatchHistoryEntry
+                    {
+                        mode = "online",
+                        unixTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                        placement = r.Placement,
+                        participants = participants,
+                        kills = r.Kills,
+                        damage = r.Damage,
+                        survivalSeconds = r.SurvivalSeconds,
+                        won = r.Winner,
+                    });
+                    Debug.Log($"[WarOfNyx] Match saved to local history: #{r.Placement} of {participants}, {r.Kills} kills.");
+                }
+            }
+        }
+
+        public void HideResults()
+        {
+            if (_results == null || !_results.Visible)
+                return;
+            _results.Hide();
+            _historySaved = false;
+            Hud?.SuppressEliminated(false);
+            UpdateCursor();
         }
 
         /// <summary>
@@ -356,10 +512,14 @@ namespace WarOfNyx.Gameplay
 
         private void UpdateCursor()
         {
-            bool capture = !_menuOpen && !_modalOpen && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
+            bool capture = !_menuOpen && !_modalOpen && !(_results != null && _results.Visible) && !IsLocalEliminatedPanelUp()
+                           && _localMovement != null && !(_mobile != null && _mobile.Visible) && !Application.isMobilePlatform;
             Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !capture;
         }
+
+        /// <summary>The elimination panel has buttons: free the cursor while it shows (desktop).</summary>
+        private bool IsLocalEliminatedPanelUp() => Hud != null && Hud.EliminatedVisible;
 
         private void BuildHud()
         {
@@ -387,6 +547,23 @@ namespace WarOfNyx.Gameplay
 
             _protection = UiFactory.CreateText(safe, string.Empty, 26, NyxPalette.ElectricCyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             UiFactory.Anchor(_protection.rectTransform, new Vector2(0.3f, 0.82f), new Vector2(0.7f, 0.88f));
+
+            _alive = UiFactory.CreateText(safe, string.Empty, 28, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UiFactory.Anchor(_alive.rectTransform, new Vector2(0.4f, 0.93f), new Vector2(0.6f, 0.99f));
+            _alive.gameObject.AddComponent<Outline>().effectColor = NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.85f);
+
+            // Spectator bar (spec 21).
+            var bar = UiFactory.CreatePanel("SpectateBar", safe, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.7f), raycastTarget: true);
+            UiFactory.Anchor(bar.rectTransform, new Vector2(0.3f, 0.02f), new Vector2(0.7f, 0.12f));
+            UiFactory.AddHorizontalLayout(bar.gameObject, 16f, new RectOffset(16, 16, 8, 8));
+            _spectateLabel = UiFactory.CreateText(bar.rectTransform, string.Empty, 28, NyxPalette.ElectricCyan, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UiFactory.AddLayoutElement(_spectateLabel.gameObject, 70f, 3f);
+            var next = UiFactory.CreateButton(bar.rectTransform, "NEXT [N]", SpectateNext, 70f, 26);
+            UiFactory.AddLayoutElement(next.Button.gameObject, 70f, 1f);
+            var stop = UiFactory.CreateButton(bar.rectTransform, "STOP", StopSpectating, 70f, 26);
+            UiFactory.AddLayoutElement(stop.Button.gameObject, 70f, 1f);
+            _spectateBar = bar.gameObject;
+            _spectateBar.SetActive(false);
 
             var menuButton = UiFactory.CreateButton(safe, "II", ToggleMenu, 90f, 34);
             var rect = (RectTransform)menuButton.Button.transform;

@@ -128,6 +128,19 @@ namespace WarOfNyx.Networking
             NetActive = false;
         }
 
+        /// <summary>Server: the match is over. The circle stops where it is (spec 21: stop the safe-zone timer).</summary>
+        public void ServerFreeze(float now)
+        {
+            if (!HasStateAuthority || !NetActive)
+                return;
+            var here = CircleAt(now);
+            _plan = null;
+            NetFrom = NetworkZoneCircle.From(here);
+            NetTo = NetworkZoneCircle.From(here);
+            NetStartsAt = now;
+            NetEndsAt = now;
+        }
+
         public override void Spawned() => Instance = this;
 
         public override void Despawned(NetworkRunner runner, bool hasState)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -36,6 +37,12 @@ namespace WarOfNyx.UI.Hud
         private Image _damageArrowImage;
         private GameObject _eliminated;
         private Text _eliminatedBy;
+        private Text _eliminatedDetails;
+        private bool _eliminatedSuppressed;
+
+        /// <summary>Elimination screen buttons (spec 21): spectate survivors, or leave to the main menu.</summary>
+        public event Action SpectateClicked;
+        public event Action LeaveClicked;
         private Text _feed;
         private readonly List<(string text, float until, bool highlight)> _feedEntries = new List<(string, float, bool)>();
 
@@ -154,9 +161,10 @@ namespace WarOfNyx.UI.Hud
         }
 
         /// <param name="causeText">Overrides the line, e.g. "Consumed by the Nyx Circle.".</param>
-        public void ShowEliminated(string killerName, string weaponName, string causeText = null)
+        public void ShowEliminated(string killerName, string weaponName, string causeText = null, string details = null)
         {
-            _eliminated.SetActive(true);
+            _eliminated.SetActive(!_eliminatedSuppressed);
+            _eliminatedDetails.text = details ?? string.Empty;
             _eliminatedBy.text = !string.IsNullOrEmpty(causeText) ? causeText
                 : string.IsNullOrEmpty(killerName)
                 ? "You were eliminated."
@@ -165,6 +173,16 @@ namespace WarOfNyx.UI.Hud
         }
 
         public void HideEliminated() => _eliminated.SetActive(false);
+
+        public bool EliminatedVisible => _eliminated != null && _eliminated.activeSelf;
+
+        /// <summary>While spectating or on the results screen the elimination panel stays hidden.</summary>
+        public void SuppressEliminated(bool suppress)
+        {
+            _eliminatedSuppressed = suppress;
+            if (suppress)
+                _eliminated.SetActive(false);
+        }
 
         // ------------------------------------------------------------------ frame
 
@@ -280,15 +298,17 @@ namespace WarOfNyx.UI.Hud
             _feed.supportRichText = true;
             UiFactory.Anchor(_feed.rectTransform, new Vector2(0.42f, 0.62f), new Vector2(0.84f, 0.9f));
 
-            // Elimination screen (spectating and results arrive in Phase 9).
-            var panel = UiFactory.CreatePanel("Eliminated", safe, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.55f));
-            UiFactory.Anchor(panel.rectTransform, new Vector2(0.25f, 0.42f), new Vector2(0.75f, 0.72f));
+            // Elimination screen (spec 21): who, kills, time survived, placement, SPECTATE / RETURN TO LOBBY.
+            var panel = UiFactory.CreatePanel("Eliminated", safe, NyxPalette.WithAlpha(NyxPalette.DeepBlack, 0.6f), raycastTarget: true);
+            UiFactory.Anchor(panel.rectTransform, new Vector2(0.25f, 0.36f), new Vector2(0.75f, 0.74f));
             var column = panel.rectTransform;
             UiFactory.AddVerticalLayout(column.gameObject, 8f, new RectOffset(20, 20, 20, 20), TextAnchor.MiddleCenter);
             UiFactory.CreateText(column, "ELIMINATED", 72, NyxPalette.Crimson, TextAnchor.MiddleCenter, FontStyle.Bold, 90f);
             _eliminatedBy = UiFactory.CreateText(column, string.Empty, 30, NyxPalette.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold, 44f);
-            UiFactory.CreateText(column, "Spectating and match results arrive in Phase 9. Use II > LEAVE MATCH.", 20,
-                NyxPalette.TextMuted, TextAnchor.MiddleCenter, FontStyle.Italic, 30f);
+            _eliminatedDetails = UiFactory.CreateText(column, string.Empty, 24, NyxPalette.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, 36f);
+            var buttons = UiFactory.CreateRow("Buttons", column, 80f, 20f);
+            UiFactory.CreateButton(buttons, "SPECTATE", () => SpectateClicked?.Invoke(), 76f, 30);
+            UiFactory.CreateButton(buttons, "RETURN TO LOBBY", () => LeaveClicked?.Invoke(), 76f, 30);
             _eliminated = panel.gameObject;
             _eliminated.SetActive(false);
         }

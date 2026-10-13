@@ -88,6 +88,12 @@ namespace WarOfNyx.App
         /// <summary>True on the private-room host while START is allowed.</summary>
         bool CanHostStart { get; }
 
+        /// <summary>Players still alive in the running match (Phase 9).</summary>
+        int AlivePlayers { get; }
+
+        /// <summary>Players who started the running match.</summary>
+        int Participants { get; }
+
         void RequestHostStart();
     }
 

@@ -391,6 +391,12 @@ namespace WarOfNyx.Networking
                     _runner.Despawn(avatar);
             }
             _avatars.Clear();
+            // Match leftovers never survive into the next round.
+            foreach (var crate in NetworkLootCrate.Active.ToArray())
+            {
+                if (crate != null && crate.Object != null)
+                    _runner.Despawn(crate.Object);
+            }
             SetSessionOpen(true);
             if (SceneManager.GetActiveScene().buildIndex != _lobbySceneIndex)
                 _runner.LoadScene(SceneRef.FromIndex(_lobbySceneIndex), LoadSceneMode.Single);

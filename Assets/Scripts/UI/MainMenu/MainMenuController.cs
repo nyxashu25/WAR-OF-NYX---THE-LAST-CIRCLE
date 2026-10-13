@@ -257,7 +257,7 @@ namespace WarOfNyx.UI.MainMenu
             UiFactory.CreateText(brand, cfg.secondaryTagline, 28, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Italic, 44f);
             UiFactory.CreateRect("Spacer", brand).gameObject.AddComponent<LayoutElement>().preferredHeight = 40f;
             _connectionText = UiFactory.CreateText(brand, "Checking connection...", 28, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal, 90f);
-            UiFactory.CreateText(brand, $"v{Application.version}  |  Phase 2 build - Practice Arena movement only",
+            UiFactory.CreateText(brand, $"v{Application.version}  |  Development build - online battle royale (Fusion) + Practice Arena",
                 22, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal, 34f);
 
             // Right: mode buttons and secondary menu.
@@ -393,8 +393,9 @@ namespace WarOfNyx.UI.MainMenu
             var group = UiFactory.CreateRect("Stepper_" + label, row);
             UiFactory.AddHorizontalLayout(group.gameObject, 4f);
 
+            MenuButton valueButton = null; // assigned before any click can call Change()
             var minus = UiFactory.CreateButton(group, "-", () => Change(-step), 80f, 36);
-            var valueButton = UiFactory.CreateButton(group, label, null, 80f, 24);
+            valueButton = UiFactory.CreateButton(group, label, null, 80f, 24);
             valueButton.Button.interactable = false;
             valueButton.Label.color = NyxPalette.TextPrimary;
             var plus = UiFactory.CreateButton(group, "+", () => Change(step), 80f, 36);
@@ -531,6 +532,9 @@ namespace WarOfNyx.UI.MainMenu
             _onlineActions.Add(UiFactory.CreateButton(row, $"JOIN DEV SERVER ({AppServices.Config.devServerSession})", OnJoinDevPressed, 96f, 26));
 
             _onlineStatus = UiFactory.CreateText(root, string.Empty, 28, NyxPalette.VictoryGold, TextAnchor.MiddleLeft, FontStyle.Bold, 60f);
+            // Local record of finished online matches (server-reported results; display only, spec 23).
+            UiFactory.CreateText(root, "YOUR ONLINE RECORD:  " + WarOfNyx.Settings.MatchHistoryStore.Summary("online"), 22,
+                NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal, 36f);
 
             var back = UiFactory.CreateRow("Back", root, 90f, 16f);
             UiFactory.CreateButton(back, "BACK", () =>

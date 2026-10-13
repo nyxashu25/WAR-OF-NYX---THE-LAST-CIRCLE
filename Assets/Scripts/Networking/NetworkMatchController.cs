@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Fusion;
 using UnityEngine;
 using WarOfNyx.App;
@@ -6,6 +9,8 @@ using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Gameplay;
+using WarOfNyx.Gameplay.Effects;
+using WarOfNyx.UI.Hud;
 
 namespace WarOfNyx.Networking
 {
@@ -54,6 +59,7 @@ namespace WarOfNyx.Networking
             {
                 NetStartTime = 0f;
                 Hunt = null;
+                ServerResetResults();
             };
             // A fresh Nyx Hunt Protocol per match; players are tracked from their first active tick.
             _lifecycle.Activated += _ =>
@@ -68,6 +74,7 @@ namespace WarOfNyx.Networking
                     settings = new HuntSettings();
                 }
                 Hunt = new NyxHuntProtocol(settings);
+                ServerBeginResults(_lifecycle.ActivatedAt);
             };
             Publish();
         }
@@ -90,6 +97,7 @@ namespace WarOfNyx.Networking
             if (!HasStateAuthority || _lifecycle == null)
                 return;
             _lifecycle.Update(Runner.SimulationTime);
+            ServerUpdateResults();
             Publish();
         }
 
@@ -144,13 +152,17 @@ namespace WarOfNyx.Networking
                 return;
             NetEliminationEventId++;
             Eliminations++;
+            float now = Runner.SimulationTime;
+            int killerId = killer == PlayerRef.None || killer == victim ? -1 : killer.PlayerId;
+            _resolver?.RecordElimination(victim.PlayerId, Runner.Tick.Raw, now, killerId, cause);
+            string notice = killerId >= 0 && _notices != null ? _notices.OnElimination(killerId, victim.PlayerId, now) : null;
             Debug.Log($"[WarOfNyx][Match] Elimination #{NetEliminationEventId} ({cause}): player {killer.PlayerId} -> player {victim.PlayerId} " +
                       $"({WeaponRegistry.DisplayName(weaponId)}{(headshot ? ", headshot" : string.Empty)})");
-            RPC_EliminationFeed(NetEliminationEventId, victim, killer, weaponId, headshot, (byte)cause);
+            RPC_EliminationFeed(NetEliminationEventId, victim, killer, weaponId, headshot, (byte)cause, notice ?? string.Empty);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-        public void RPC_EliminationFeed(int eventId, PlayerRef victim, PlayerRef killer, short weaponId, NetworkBool headshot, byte cause)
+        public void RPC_EliminationFeed(int eventId, PlayerRef victim, PlayerRef killer, short weaponId, NetworkBool headshot, byte cause, string notice)
         {
             if (!_feedDedup.TryAccept(eventId) || Application.isBatchMode)
                 return;
@@ -162,7 +174,14 @@ namespace WarOfNyx.Networking
             bool involvesMe = Runner.LocalPlayer != PlayerRef.None && (victim == Runner.LocalPlayer || killer == Runner.LocalPlayer);
             var arena = OnlineArenaController.Instance;
             if (arena != null && arena.Hud != null)
+            {
                 arena.Hud.AddFeed(text, involvesMe);
+                if (!string.IsNullOrEmpty(notice))
+                {
+                    arena.Hud.AddFeed($"{notice}: {NameOf(killer)}", true);
+                    arena.ShowHeadline($"{notice}  -  {NameOf(killer)}", UI.Common.NyxPalette.VictoryGold);
+                }
+            }
         }
 
         private string NameOf(PlayerRef player)
@@ -192,11 +211,226 @@ namespace WarOfNyx.Networking
             RPC_HuntAlert(NetHuntEventId, player);
         }
 
-        /// <summary>Server: a player left mid-match. Their camping timer is kept (reconnecting never resets it).</summary>
+        /// <summary>
+        /// Server: a player left mid-match. Their camping timer is kept (reconnecting never resets it),
+        /// and leaving counts as an elimination for placement.
+        /// </summary>
         public void OnPlayerLeftMatch(PlayerRef player)
         {
-            if (HasStateAuthority && Hunt != null)
+            if (!HasStateAuthority)
+                return;
+            if (Hunt != null)
                 Hunt.MarkDisconnected(player.PlayerId);
+            if (_resolver != null && _lifecycle != null && _lifecycle.Phase == MatchPhase.Active)
+                _resolver.RecordLeft(player.PlayerId, Runner.Tick.Raw, Runner.SimulationTime);
+        }
+
+        // ------------------------------------------------------------------ match end (Phase 9)
+
+        [Networked] private int NetAlive { get; set; }
+        [Networked] private int NetParticipants { get; set; }
+        /// <summary>Player id of the winner, -1 while undecided or when nobody survived a solo test.</summary>
+        [Networked] private int NetWinnerId { get; set; }
+        [Networked] private NetworkBool NetWinnerTieBreak { get; set; }
+
+        private MatchResolver _resolver;
+        private KillNotices _notices;
+        private bool _victoryFxPlayed;
+        private readonly List<ResultRow> _rows = new List<ResultRow>();
+
+        public int WinnerId => NetWinnerId;
+
+        private void ServerBeginResults(float activatedAt)
+        {
+            _resolver = new MatchResolver(activatedAt);
+            _notices = new KillNotices();
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p != null && p.Object != null)
+                    _resolver.AddParticipant(p.Object.InputAuthority.PlayerId, p.PlayerName);
+            }
+            NetParticipants = _resolver.ParticipantCount;
+            NetAlive = _resolver.AliveCount;
+            NetWinnerId = -1;
+            NetWinnerTieBreak = false;
+        }
+
+        private void ServerResetResults()
+        {
+            _resolver = null;
+            _notices = null;
+            NetAlive = 0;
+            NetParticipants = 0;
+            NetWinnerId = -1;
+            NetWinnerTieBreak = false;
+            Eliminations = 0;
+        }
+
+        /// <summary>Server, every tick of an active match: trusted stats, placements, last-survivor check.</summary>
+        private void ServerUpdateResults()
+        {
+            if (_resolver == null || _lifecycle.Phase != MatchPhase.Active)
+                return;
+
+            float now = Runner.SimulationTime;
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p == null || p.Object == null)
+                    continue;
+                int id = p.Object.InputAuthority.PlayerId;
+                if (_resolver.TryGet(id, out var record))
+                    record.Name = p.PlayerName;
+                var combat = p.GetComponent<NetworkCombat>();
+                if (combat != null)
+                    _resolver.UpdateStats(id, combat.Kills, combat.DamageDealt);
+            }
+
+            // Everything from earlier ticks is complete; same-tick eliminations are tie-broken together.
+            foreach (var placed in _resolver.ResolveUpTo(Runner.Tick.Raw - 1, now))
+            {
+                var player = FindPlayer(placed.PlayerId);
+                if (player != null)
+                    player.ServerSetResult(placed.Placement, placed.SurvivalSeconds, placed.Winner);
+            }
+            NetAlive = _resolver.AliveCount;
+
+            if (_resolver.Finished)
+                ServerFinishMatch(now);
+        }
+
+        private void ServerFinishMatch(float now)
+        {
+            if (!_lifecycle.EndMatch(now))
+                return;
+
+            var winner = _resolver.Winner;
+            NetWinnerId = winner != null ? winner.PlayerId : -1;
+            NetWinnerTieBreak = winner != null && winner.WonByTieBreak;
+            if (TryGetComponent<NetworkNyxCircle>(out var zone))
+                zone.ServerFreeze(now);
+
+            Debug.Log(winner != null
+                ? $"[WarOfNyx][Match] VICTORY: {winner.Name} (player {winner.PlayerId}) is the last survivor" +
+                  $"{(winner.WonByTieBreak ? " by tie-break" : string.Empty)}. {winner.Kills} kills, {winner.Damage:0} damage."
+                : "[WarOfNyx][Match] The match ended with no survivor.");
+            WriteResultsFile(winner);
+        }
+
+        private static NetworkPlayer FindPlayer(int playerId)
+        {
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p != null && p.Object != null && p.Object.InputAuthority.PlayerId == playerId)
+                    return p;
+            }
+            return null;
+        }
+
+        [Serializable]
+        private sealed class ResultsFileRow
+        {
+            public int placement;
+            public int playerId;
+            public string name;
+            public int kills;
+            public float damage;
+            public float survivalSeconds;
+            public bool left;
+            public string cause;
+        }
+
+        [Serializable]
+        private sealed class ResultsFile
+        {
+            public string session;
+            public string endedUtc;
+            public int protocol;
+            public string winner;
+            public bool tieBreak;
+            public List<ResultsFileRow> standings = new List<ResultsFileRow>();
+        }
+
+        /// <summary>
+        /// Server: the trusted match record ("save match results where supported"). Written next to the
+        /// server's data as JSON; a persistent backend can import these later. Never written by clients.
+        /// </summary>
+        private void WriteResultsFile(ParticipantRecord winner)
+        {
+            try
+            {
+                var file = new ResultsFile
+                {
+                    session = Runner.SessionInfo != null ? Runner.SessionInfo.Name : "unknown",
+                    endedUtc = DateTime.UtcNow.ToString("o"),
+                    protocol = NetworkProtocol.Version,
+                    winner = winner != null ? winner.Name : string.Empty,
+                    tieBreak = winner != null && winner.WonByTieBreak,
+                };
+                foreach (var r in _resolver.Standings)
+                {
+                    file.standings.Add(new ResultsFileRow
+                    {
+                        placement = r.Placement, playerId = r.PlayerId, name = r.Name, kills = r.Kills, damage = r.Damage,
+                        survivalSeconds = r.SurvivalSeconds, left = r.Left, cause = r.Winner ? "winner" : r.Cause.ToString(),
+                    });
+                }
+
+                string dir = Path.Combine(Application.persistentDataPath, "match-results");
+                Directory.CreateDirectory(dir);
+                string path = Path.Combine(dir, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{file.session}.json");
+                File.WriteAllText(path, JsonUtility.ToJson(file, true));
+                Debug.Log($"[WarOfNyx][Match] Results saved: {path}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[WarOfNyx][Match] Could not save the results file: {e.Message}");
+            }
+        }
+
+        public override void Render()
+        {
+            if (Application.isBatchMode)
+                return;
+            var arena = OnlineArenaController.Instance;
+            if (arena == null)
+                return;
+
+            if (Phase != MatchPhase.Ended)
+            {
+                _victoryFxPlayed = false;
+                arena.HideResults();
+                return;
+            }
+
+            _rows.Clear();
+            NetworkPlayer winnerPlayer = null;
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p == null || p.Object == null)
+                    continue;
+                var combat = p.GetComponent<NetworkCombat>();
+                _rows.Add(new ResultRow
+                {
+                    Placement = p.Placement,
+                    Name = p.PlayerName,
+                    Kills = combat != null ? combat.Kills : 0,
+                    Damage = combat != null ? combat.DamageDealt : 0f,
+                    SurvivalSeconds = p.SurvivalSeconds,
+                    IsLocal = p.HasInputAuthority,
+                    Winner = p.IsWinner,
+                });
+                if (p.IsWinner)
+                    winnerPlayer = p;
+            }
+            _rows.Sort((a, b) => (a.Placement == 0 ? int.MaxValue : a.Placement).CompareTo(b.Placement == 0 ? int.MaxValue : b.Placement));
+            arena.ShowResults(_rows, NetParticipants, SecondsRemaining, NetWinnerTieBreak);
+
+            // PLACEHOLDER victory celebration at the winner (Phase 10 adds the real animation).
+            if (!_victoryFxPlayed && winnerPlayer != null)
+            {
+                _victoryFxPlayed = true;
+                SpawnEffect.Play(winnerPlayer.transform.position);
+            }
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -237,6 +471,9 @@ namespace WarOfNyx.Networking
         public float SecondsRemaining => NetPhaseEndsAt > 0f ? Mathf.Max(0f, NetPhaseEndsAt - Now) : 0f;
 
         public float SecondsSinceStart => StartTime > 0f ? Now - StartTime : float.NegativeInfinity;
+
+        public int AlivePlayers => NetAlive;
+        public int Participants => NetParticipants;
 
         public bool CanHostStart =>
             NetPrivate && Runner != null && Runner.IsServer && Runner.LocalPlayer != PlayerRef.None
