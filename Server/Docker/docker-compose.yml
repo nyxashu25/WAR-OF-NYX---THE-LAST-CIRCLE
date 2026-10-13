@@ -1,0 +1,20 @@
+# Local test of the containerized dedicated server (Phase 12, stage 2).
+#   docker compose -f Server/Docker/docker-compose.yml up --build
+# Then in a game client: ONLINE > JOIN DEV SERVER (session WON-DEV) or QUICK MATCH.
+services:
+  warofnyx-server:
+    build:
+      context: ../..
+      dockerfile: Server/Docker/Dockerfile
+    image: warofnyx-server:dev
+    environment:
+      WON_SESSION: WON-DEV
+      WON_MIN_PLAYERS: "2"      # explicit two-player test mode
+      WON_LOBBY_FILL: "10"
+      WON_ZONE_SECONDS: "20"    # fast circle for testing
+      WON_MAX_MATCHES: "0"      # keep running between test matches
+      WON_IDLE_SHUTDOWN: "0"
+    ports:
+      - "27015:27015/udp"
+      - "8080:8080/tcp"
+    restart: unless-stopped

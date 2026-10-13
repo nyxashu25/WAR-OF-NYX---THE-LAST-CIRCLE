@@ -1,0 +1,3 @@
+# Only the Linux server build goes into the image (keeps the context small, keeps sources and secrets out).
+*
+!Builds/LinuxServer/**

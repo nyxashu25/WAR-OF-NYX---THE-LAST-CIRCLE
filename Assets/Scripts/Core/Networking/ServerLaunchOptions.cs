@@ -33,7 +33,47 @@ namespace WarOfNyx.Core.Networking
         public float LobbyFillSeconds { get; private set; } = -1f;
         /// <summary>Length of every Nyx Circle phase (-zoneSeconds, testing only). -1 = configured value (60 s).</summary>
         public float ZoneStageSeconds { get; private set; } = -1f;
+        /// <summary>TCP port of the HTTP health endpoint (-healthPort). 0 = off.</summary>
+        public int HealthPort { get; private set; }
+        /// <summary>Exit after this many finished matches (-maxMatches). 0 = run forever. Containers use 1.</summary>
+        public int MaxMatches { get; private set; }
+        /// <summary>Exit after this many seconds with no player connected (-idleShutdown). 0 = never.</summary>
+        public int IdleShutdownSeconds { get; private set; }
         public string Warnings { get; private set; } = string.Empty;
+
+        /// <summary>Environment variables a container can set instead of arguments (arguments win when both exist).</summary>
+        public static readonly (string variable, string argument)[] EnvironmentMap =
+        {
+            ("WON_SESSION", "-session"), ("WON_MAX_PLAYERS", "-maxPlayers"), ("WON_MIN_PLAYERS", "-minPlayers"),
+            ("WON_LOBBY_FILL", "-lobbyFill"), ("WON_ZONE_SECONDS", "-zoneSeconds"), ("WON_PORT", "-port"), ("WON_REGION", "-region"),
+            ("WON_HEALTH_PORT", "-healthPort"), ("WON_MAX_MATCHES", "-maxMatches"), ("WON_IDLE_SHUTDOWN", "-idleShutdown"),
+        };
+
+        /// <summary>
+        /// Parses command-line arguments, with container-friendly environment variables as defaults
+        /// (<see cref="EnvironmentMap"/>; WON_SERVER=1 implies -server). Secrets are never read here.
+        /// </summary>
+        public static ServerLaunchOptions Parse(string[] args, Func<string, string> environment)
+        {
+            var combined = new System.Collections.Generic.List<string>();
+            if (environment != null)
+            {
+                if (environment("WON_SERVER") == "1")
+                    combined.Add("-server");
+                foreach (var (variable, argument) in EnvironmentMap)
+                {
+                    string value = environment(variable);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        combined.Add(argument);
+                        combined.Add(value.Trim());
+                    }
+                }
+            }
+            if (args != null)
+                combined.AddRange(args); // later entries override earlier ones
+            return Parse(combined.ToArray());
+        }
 
         public static ServerLaunchOptions Parse(string[] args)
         {
@@ -85,6 +125,24 @@ namespace WarOfNyx.Core.Networking
                         else
                             options.Warn($"invalid -zoneSeconds '{value}' (allowed 5-600), using configured value");
                         break;
+                    case "healthport":
+                        if (TryInt(value, out int health) && health >= 0 && health <= 65535)
+                            options.HealthPort = health;
+                        else
+                            options.Warn($"invalid -healthPort '{value}', health endpoint off");
+                        break;
+                    case "maxmatches":
+                        if (TryInt(value, out int matches) && matches >= 0 && matches <= 100000)
+                            options.MaxMatches = matches;
+                        else
+                            options.Warn($"invalid -maxMatches '{value}', running until stopped");
+                        break;
+                    case "idleshutdown":
+                        if (TryInt(value, out int idle) && idle >= 0 && idle <= 86400)
+                            options.IdleShutdownSeconds = idle;
+                        else
+                            options.Warn($"invalid -idleShutdown '{value}', never idles out");
+                        break;
                     case "port":
                         if (TryInt(value, out int port) && port >= 0 && port <= 65535)
                             options.Port = port;
@@ -106,7 +164,8 @@ namespace WarOfNyx.Core.Networking
         public override string ToString() =>
             $"session={SessionName} maxPlayers={MaxPlayers} minPlayers={(MinPlayersToStart < 0 ? "config" : MinPlayersToStart.ToString())} " +
             $"lobbyFill={(LobbyFillSeconds < 0f ? "config" : LobbyFillSeconds + "s")} zoneSeconds={(ZoneStageSeconds < 0f ? "config" : ZoneStageSeconds + "s")} " +
-            $"port={Port} region={(Region.Length == 0 ? "best" : Region)}";
+            $"port={Port} region={(Region.Length == 0 ? "best" : Region)} healthPort={(HealthPort == 0 ? "off" : HealthPort.ToString())} " +
+            $"maxMatches={(MaxMatches == 0 ? "unlimited" : MaxMatches.ToString())} idleShutdown={(IdleShutdownSeconds == 0 ? "off" : IdleShutdownSeconds + "s")}";
 
         private static bool IsFlag(string s) => !string.IsNullOrEmpty(s) && s[0] == '-' && !(s.Length > 1 && char.IsDigit(s[1]));
 

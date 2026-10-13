@@ -38,6 +38,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | **Unity 6000.6.5f1**, Test Runner | EditMode / PlayMode | **325 / 12 passed, 0 failed** | New: bots-only match on NYX ISLAND (11 bots, winner after 2:16, 10 eliminations) |
 | 2026-10-13 | .NET + **Unity 6000.6.5f1** | Core / EditMode after Phase 11 (adds `ControlsTests`) | **309 / 329 passed** | 4 new: layout offsets clamped per button, corrupted layouts repaired, reset, gyro mapping both landscapes |
 | 2026-10-13 | **Unity 6000.6.5f1** | `BatchTools.BuildAndroidApk` | **Stopped as designed** | Android Build Support not installed on this PC: exit code 1 with the install instructions |
+| 2026-10-13 | .NET + **Unity 6000.6.5f1** | Core / EditMode / PlayMode after Phase 12 (adds `ServerOperationsTests`, `ServerRuntimePlayModeTests`) | **314 / 334 / 13 passed** | 5 new core tests (environment config, invalid values, one-match exit, idle shutdown, JSON escaping); PlayMode: real HTTP requests to the health endpoint (503 while starting, 404 elsewhere) |
+| — | Docker | image build / run | **Not run** | Docker isn't installed here, and the Linux server build needs Fusion |
 | — | Unity 6.3 LTS (the project's pinned version) | everything | **Not run** | The machine has Unity 6.6 installed. See KNOWN_ISSUES 57 |
 
 ## Running the Unity checks from the command line

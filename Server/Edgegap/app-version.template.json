@@ -1,0 +1,23 @@
+{
+  "_comment": "TEMPLATE for an Edgegap application version (Phase 12, stage 3). Field names follow Edgegap's app-version format as documented at the time of writing; verify against the current Edgegap documentation before use. No secrets belong in this file: set any token in the Edgegap dashboard as a secret variable.",
+  "name": "v0-1-0",
+  "docker_repository": "registry.edgegap.com",
+  "docker_image": "YOUR_ORG/warofnyx-server",
+  "docker_tag": "0.1.0",
+  "req_cpu": 1024,
+  "req_memory": 1024,
+  "req_video": 0,
+  "max_duration": 60,
+  "time_to_deploy": 120,
+  "ports": [
+    { "port": 27015, "protocol": "UDP", "name": "game", "to_check": false, "tls_upgrade": false },
+    { "port": 8080, "protocol": "HTTP", "name": "health", "to_check": true, "tls_upgrade": false }
+  ],
+  "envs": [
+    { "key": "WON_SERVER", "value": "1", "is_secret": false },
+    { "key": "WON_MAX_PLAYERS", "value": "12", "is_secret": false },
+    { "key": "WON_MAX_MATCHES", "value": "1", "is_secret": false },
+    { "key": "WON_IDLE_SHUTDOWN", "value": "300", "is_secret": false },
+    { "key": "WON_HEALTH_PORT", "value": "8080", "is_secret": false }
+  ]
+}

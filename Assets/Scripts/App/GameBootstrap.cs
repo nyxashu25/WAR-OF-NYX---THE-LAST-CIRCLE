@@ -21,7 +21,8 @@ namespace WarOfNyx.App
         {
             AppServices.Initialize(config);
 
-            var launch = ServerLaunchOptions.Parse(Environment.GetCommandLineArgs());
+            // Arguments, with WON_* environment variables as container-friendly defaults (Phase 12).
+            var launch = ServerLaunchOptions.Parse(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable);
             if (launch.IsServer)
             {
                 yield return RunDedicatedServer(launch);
@@ -57,6 +58,7 @@ namespace WarOfNyx.App
             }
 
             Debug.Log($"[WarOfNyx][Server] Starting dedicated server: {launch}");
+            ServerRuntime.Start(launch); // health endpoint, telemetry, lifetime policy
             var start = session.StartDedicatedServerAsync(launch);
             while (!start.IsCompleted)
                 yield return null;

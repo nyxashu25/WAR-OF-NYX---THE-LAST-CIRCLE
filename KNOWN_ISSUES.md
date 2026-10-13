@@ -75,3 +75,6 @@
 | 71 | Gyro axes are mapped from the Android sensor convention but untested on a real phone. | Possible inverted direction in one landscape orientation. | Device test (ANDROID_BUILD.md step 3), then flip the sign in `GyroAim`. |
 | 72 | No Android build exists yet: Unity on this PC lacks the Android Build Support module (and the project targets 6.3 while 6.6 is installed). | Phase 11 device tests blocked. | Install Unity 6.3 LTS with Android Build Support + OpenJDK + SDK/NDK in Unity Hub. |
 | 73 | The touch layout editor moves whole buttons; the joystick zone and swipe area are fixed. | Less customization on the left side. | Add joystick-zone editing if players ask. |
+| 74 | `-region` is parsed (and settable via WON_REGION) but Fusion's region is still taken from PhotonAppSettings. | Servers join the "best" region. | Apply `FixedRegion` in `StartGameArgs` once tested with the SDK. |
+| 75 | The health endpoint is a minimal HTTP/1.1 responder (one request per connection, no TLS). Expose it only inside the hosting network. | Fine for orchestrator checks. | — |
+| 76 | The Edgegap template's field names are from documentation known at the time of writing and are unverified against a live account. | Upload may need small edits. | Check the current Edgegap docs. |

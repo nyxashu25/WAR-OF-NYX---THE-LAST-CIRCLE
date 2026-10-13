@@ -16,7 +16,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | **Code written and RUN in Unity: 2 full automated offline matches finish with one legitimate winner; bot rules 26 tests pass. Physical Android tests pending** |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | **Code-built visual identity done and checked in Unity (rendered screenshots, island match). Final art assets pending** |
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); APK not built (Android module missing); device tests pending** |
-| 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | Not started |
+| 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | **Files and server code done (health endpoint verified in Unity); deployment pending Fusion + Docker + Edgegap account** |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | Not started |
 | 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | Not started |
 | post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
@@ -194,3 +194,15 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [ ] 9 Test the mobile-to-server connection ← needs Fusion App ID (+ Phase 12 server)
 - [ ] 10 Record and fix device-specific problems ← after 8/9
 - [x] Gyro aim (optional setting): mapping unit-tested; real axes need a device check
+
+## Phase 12 checklist
+- [~] 1 Linux dedicated-server build: menu + build method exist (Phase 3); needs Fusion SDK and the Linux Dedicated Server module
+- [x] 2 Launch configuration: arguments + WON_* environment variables (tested)
+- [x] 3 Containerize: `Server/Docker/Dockerfile`, `.dockerignore`
+- [ ] 4 Test local Docker deployment ← Docker is not installed on this PC; needs the Linux server build
+- [x] 5 Hosting provider: Edgegap app-version template + instructions (account needed)
+- [x] 6 Matchmaking with allocation: design documented (warm pool by a trusted backend; servers self-announce as Photon sessions)
+- [x] 7 Health checks: `GET /health` (200 / 503 / 404), Docker HEALTHCHECK (endpoint verified in Unity PlayMode)
+- [x] 8 Logs and telemetry: structured JSON lines (`[WarOfNyx][Telemetry]`)
+- [x] 9 Match shutdown and resource cleanup: `-maxMatches`, `-idleShutdown`, in-match cleanup (Phase 9)
+- [x] 10 Deployment documentation: SERVER_DEPLOYMENT.md stages 2–3
