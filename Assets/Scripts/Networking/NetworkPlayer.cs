@@ -2,6 +2,7 @@ using Fusion;
 using UnityEngine;
 using WarOfNyx.App;
 using WarOfNyx.Characters;
+using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Networking;
@@ -35,21 +36,20 @@ namespace WarOfNyx.Networking
         [Networked] public NetworkMovementState Movement { get; set; }
         [Networked] public NetworkString<_16> DisplayName { get; set; }
 
-        // Vitals (spec 15). Damage, healing and armor rules arrive in Phases 5-6; Phase 4 initializes them.
-        [Networked] public float Health { get; set; }
-        [Networked] public float MaxHealth { get; set; }
-        [Networked] public float Armor { get; set; }
-
         // Spawn protection (spec 6), server-authoritative.
         [Networked] private float ProtectionEndsAt { get; set; }
         [Networked] private NetworkBool ProtectionBroken { get; set; }
 
         private PlayerMovement _movement;
         private PlayerInputRouter _router;
+        private NetworkCombat _combat;
         private TextMesh _nameTag;
         private SpawnShieldVisual _shield;
 
         public string PlayerName => DisplayName.Value;
+
+        /// <summary>Local aim button state (crosshair size on the owner). Gameplay uses the networked input instead.</summary>
+        public bool LocalAimHeld => _router != null && _router.enabled && _router.AimHeld;
 
         private SpawnProtectionState Protection =>
             new SpawnProtectionState { EndsAt = ProtectionEndsAt, Broken = ProtectionBroken };
@@ -60,6 +60,7 @@ namespace WarOfNyx.Networking
         {
             _movement = GetComponent<PlayerMovement>();
             _router = GetComponent<PlayerInputRouter>();
+            _combat = GetComponent<NetworkCombat>();
         }
 
         /// <summary>Server only, before the object exists on the network: initial authoritative state.</summary>
@@ -67,12 +68,9 @@ namespace WarOfNyx.Networking
         {
             Movement = NetworkMovementState.From(MovementState.Initial(yaw), false, position);
             DisplayName = PlayerNames.Fallback(playerId);
-            MaxHealth = DefaultMaxHealth;
-            Health = DefaultMaxHealth;
-            Armor = 0f; // basic armor comes with the Phase 6 starting loadout
+            GetComponent<NetworkCombat>().InitializeSpawn(); // health 100, development loadout (Phase 6: randomized)
             ProtectionEndsAt = protectionEndsAt;
             ProtectionBroken = false;
-            // Inventory and starting loadout: Phase 6 (randomized, power-budgeted, server-side).
         }
 
         /// <summary>
@@ -145,14 +143,26 @@ namespace WarOfNyx.Networking
 
             bool hasInput = GetInput(out NetworkInputData input);
             var command = hasInput ? input.ToCommand() : InputCodec.Neutral(state.Yaw, 0f); // lost input: stand still
+            var combat = hasInput ? input.ToCombat() : default;
 
             // Before the shared start tick: look around only (same rule on server and in prediction).
             var match = NetworkMatchController.Instance;
-            if (match != null && !match.MovementAllowedAt(Runner.SimulationTime))
+            bool unlocked = match == null || match.MovementAllowedAt(Runner.SimulationTime);
+            if (!unlocked)
                 command = InputCodec.Neutral(command.Yaw, command.Pitch);
 
-            _movement.Simulate(command, Runner.DeltaTime);
-            Movement = NetworkMovementState.From(_movement.State, _movement.IsGrounded, transform.position);
+            bool alive = _combat == null || _combat.IsAlive;
+            if (alive)
+            {
+                // Authority-applied modifiers (never from the client): active weapon speed.
+                command.SpeedMultiplier = _combat != null ? _combat.ActiveSpeedMultiplier : 1f;
+                _movement.Simulate(command, Runner.DeltaTime);
+                Movement = NetworkMovementState.From(_movement.State, _movement.IsGrounded, transform.position);
+            }
+
+            // Combat after movement: shots start from this tick's position (same order on server and client).
+            if (_combat != null)
+                _combat.Simulate(combat, command.Yaw, command.Pitch, command.AimHeld, _movement.State.IsLowStance, unlocked);
         }
 
         public override void Render()
@@ -167,6 +177,8 @@ namespace WarOfNyx.Networking
                 OnlineArenaController.Instance.ShowSpawnProtection(remaining);
 
             if (_nameTag != null)
+                _nameTag.gameObject.SetActive(_combat == null || _combat.IsAlive);
+            if (_nameTag != null && _nameTag.gameObject.activeSelf)
             {
                 _nameTag.text = DisplayName.Value;
                 var cam = Camera.main;

@@ -75,6 +75,7 @@ namespace WarOfNyx.EditorTools
             Step(report, "URP + Low/Medium/High quality presets", ConfigureRendering);
             Step(report, "Bootstrap + MainMenu scenes, Build Settings", () => CreateScenes(config, overwrite: false));
             Step(report, "Practice Arena: player prefab, graybox scene (Phase 2)", () => PracticeArenaBuilder.Build(overwrite: false));
+            Step(report, "Weapon definitions + database (Phase 5)", WeaponAssetBuilder.Build);
             foreach (var (name, action) in AdditionalSteps)
                 Step(report, name, action);
             Step(report, "Register WarOfNyx.Networking with the Fusion weaver", () => FusionIntegration.RegisterAssemblyWithWeaver(quiet: true));
@@ -124,6 +125,7 @@ namespace WarOfNyx.EditorTools
             Check(report, "FX material (Resources/WarOfNyx/FX_Additive)", AssetDatabase.LoadAssetAtPath<Material>(PracticeArenaBuilder.FxMaterialPath) != null);
             Check(report, "BattleArena NavMesh baked", AssetDatabase.LoadMainAssetAtPath(PracticeArenaBuilder.BattleArenaNavMeshPath) != null);
             Check(report, "BattleArena in Build Settings", EditorBuildSettings.scenes.Any(s => s.path == PracticeArenaBuilder.BattleArenaScenePath && s.enabled));
+            Check(report, "Weapon database (Resources/WarOfNyx/WeaponDatabase)", AssetDatabase.LoadAssetAtPath<WarOfNyx.Combat.WeaponDatabase>(WeaponAssetBuilder.DatabasePath) != null);
             Check(report, "MovementConfig asset exists", AssetDatabase.LoadAssetAtPath<WarOfNyx.Characters.MovementConfig>(PracticeArenaBuilder.MovementConfigPath) != null);
             Check(report, "URP is the default render pipeline", GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset);
             Check(report, $"Android package id = {AndroidPackageId}",

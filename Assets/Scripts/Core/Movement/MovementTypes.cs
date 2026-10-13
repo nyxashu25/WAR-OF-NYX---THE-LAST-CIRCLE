@@ -29,6 +29,12 @@ namespace WarOfNyx.Core.Movement
         public bool JumpPressed;
         public bool CrouchPressed;
         public bool SlidePressed;
+
+        /// <summary>
+        /// Authority-applied speed multiplier (active weapon, later outside-circle effects). Set by the
+        /// server/simulation after decoding input, never taken from the client. 0 or less means 1.
+        /// </summary>
+        public float SpeedMultiplier;
     }
 
     /// <summary>Facts about the world that the physics layer reports before a step.</summary>

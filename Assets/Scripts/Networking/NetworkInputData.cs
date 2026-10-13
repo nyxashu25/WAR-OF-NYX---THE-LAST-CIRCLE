@@ -1,5 +1,6 @@
 using Fusion;
 using UnityEngine;
+using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Networking;
 
@@ -17,15 +18,19 @@ namespace WarOfNyx.Networking
         public float Pitch;
         public uint Buttons;
 
-        public static NetworkInputData From(in MovementCommand command) => new NetworkInputData
+        public static NetworkInputData From(in MovementCommand command) => From(command, default);
+
+        public static NetworkInputData From(in MovementCommand command, in CombatCommand combat) => new NetworkInputData
         {
             Move = new Vector2(command.MoveX, command.MoveY),
             Yaw = command.Yaw,
             Pitch = command.Pitch,
-            Buttons = InputCodec.PackButtons(command),
+            Buttons = InputCodec.PackButtons(command, combat),
         };
 
         public MovementCommand ToCommand() => InputCodec.Unpack(Move.x, Move.y, Yaw, Pitch, Buttons);
+
+        public CombatCommand ToCombat() => InputCodec.UnpackCombat(Buttons);
     }
 
     /// <summary>

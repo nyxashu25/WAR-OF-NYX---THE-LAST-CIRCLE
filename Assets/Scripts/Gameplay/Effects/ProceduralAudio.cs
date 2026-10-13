@@ -50,6 +50,99 @@ namespace WarOfNyx.Gameplay.Effects
             }
         }
 
+        private static AudioClip _gunshot, _heavyShot, _swing, _hitTick, _reload;
+
+        /// <summary>Short noise crack with a low thump (rifles, SMGs, pistol).</summary>
+        public static AudioClip Gunshot => _gunshot != null ? _gunshot : (_gunshot = Shot("Gunshot", 0.18f, 140f, 0.65f, 11));
+
+        /// <summary>Longer, bassier blast (shotgun, marksman).</summary>
+        public static AudioClip HeavyShot => _heavyShot != null ? _heavyShot : (_heavyShot = Shot("HeavyShot", 0.35f, 80f, 0.85f, 23));
+
+        /// <summary>Melee swing whoosh.</summary>
+        public static AudioClip MeleeSwing
+        {
+            get
+            {
+                if (_swing != null)
+                    return _swing;
+                const float length = 0.28f;
+                int n = (int)(SampleRate * length);
+                var data = new float[n];
+                var random = new System.Random(5);
+                float lp = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float p = i / (float)n;
+                    float env = Mathf.Sin(p * Mathf.PI); // swell and fade
+                    float cutoff = Mathf.Lerp(0.02f, 0.25f, p);
+                    lp += ((float)random.NextDouble() * 2f - 1f - lp) * cutoff;
+                    data[i] = lp * env * 0.9f;
+                }
+                return _swing = Create("MeleeSwing", data);
+            }
+        }
+
+        /// <summary>Hit-marker tick for the shooter.</summary>
+        public static AudioClip HitTick
+        {
+            get
+            {
+                if (_hitTick != null)
+                    return _hitTick;
+                int n = (int)(SampleRate * 0.06f);
+                var data = new float[n];
+                for (int i = 0; i < n; i++)
+                {
+                    float t = i / (float)SampleRate;
+                    data[i] = Mathf.Sin(2f * Mathf.PI * 1800f * t) * (1f - i / (float)n) * 0.5f;
+                }
+                return _hitTick = Create("HitTick", data);
+            }
+        }
+
+        /// <summary>Two mechanical clicks.</summary>
+        public static AudioClip Reload
+        {
+            get
+            {
+                if (_reload != null)
+                    return _reload;
+                int n = (int)(SampleRate * 0.4f);
+                var data = new float[n];
+                var random = new System.Random(9);
+                foreach (int start in new[] { 0, (int)(SampleRate * 0.25f) })
+                {
+                    for (int i = 0; i < 900 && start + i < n; i++)
+                        data[start + i] += ((float)random.NextDouble() * 2f - 1f) * (1f - i / 900f) * 0.6f;
+                }
+                return _reload = Create("Reload", data);
+            }
+        }
+
+        private static AudioClip Shot(string name, float length, float thumpHz, float volume, int seed)
+        {
+            int n = (int)(SampleRate * length);
+            var data = new float[n];
+            var random = new System.Random(seed);
+            float lp = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SampleRate;
+                float env = Mathf.Exp(-t * 18f / length);
+                lp += ((float)random.NextDouble() * 2f - 1f - lp) * 0.35f;
+                float thump = Mathf.Sin(2f * Mathf.PI * thumpHz * t) * Mathf.Exp(-t * 30f);
+                data[i] = (lp * 0.8f + thump * 0.6f) * env * volume;
+            }
+            return Create(name, data);
+        }
+
+        private static AudioClip Create(string name, float[] data)
+        {
+            var clip = AudioClip.Create(name + " (procedural)", data.Length, 1, SampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
         /// <summary>Effects volume from the player's settings (master volume is applied by AudioListener).</summary>
         public static float SfxVolume => AppServices.IsInitialized ? AppServices.UserSettings.Data.sfxVolume : 1f;
 

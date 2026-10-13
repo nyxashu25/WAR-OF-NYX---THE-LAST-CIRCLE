@@ -50,17 +50,29 @@ These are random equipment sets, not character classes.
 Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · HP 100. State-driven controller with client prediction and server reconciliation.
 
 ## 7. Weapons (spec 9) [T]
-| Weapon | Dmg | Mag | Role |
-|---|---:|---:|---|
-| NX‑7 Assault Rifle | 24 | 30 | General |
-| Shadow SMG | 16 | 40 | Close |
-| Crimson Shotgun | 12 × 8 | 6 | Burst |
-| Phantom Marksman | 55 | 10 | Precision |
-| Storm Burst Rifle | 21/shot | 24 | Burst fire |
-| Neon Pistol | 26 | 12 | Backup |
+*(Implemented: `WeaponCatalog` / `WeaponRules` / `NetworkCombat`. Values are tunable in the WeaponDefinition assets.)*
 
-- Hitscan with server-side lag-compensated validation · damage falloff · headshot ×1.5 **[T]**, body ×1.0 · fire-rate enforced on the server · magazine and reserve ammo tracked on the server.
-- **Melee:** Katana, Combat Knife, Energy Blade (+ Dagger). Windup → server checks reach and hitbox → cooldown.
+| Weapon | Mode | Dmg | Rate (/s) | Mag / Reserve | Reload | Full dmg → min (m) | Max range | Headshot | Spread hip / aim | Move |
+|---|---|---:|---:|---|---:|---|---:|---:|---|---:|
+| NX‑7 Assault Rifle | Auto | 24 | 9 | 30 / 90 | 2.1 s | 30 → 80 (×0.6) | 150 m | ×1.5 | 2.5° / 0.8° | ×0.95 |
+| Shadow SMG | Auto | 16 | 13 | 40 / 120 | 1.8 s | 15 → 40 (×0.5) | 80 m | ×1.4 | 3° / 1.4° | ×1.0 |
+| Crimson Shotgun | Semi | 12 × 8 | 1.1 | 6 / 24 | 3.0 s | 6 → 18 (×0.2) | 30 m | ×1.25 | 6° / 4.5° | ×0.92 |
+| Phantom Marksman | Semi | 55 | 1.4 | 10 / 30 | 2.6 s | 80 → 200 (×0.8) | 300 m | ×2.0 | 4° / 0.15° | ×0.88 |
+| Storm Burst Rifle | Burst ×3 | 21/shot | 3 bursts | 24 / 72 | 2.2 s | 35 → 90 (×0.6) | 160 m | ×1.5 | 2.2° / 0.6° | ×0.95 |
+| Neon Pistol | Semi | 26 | 5 | 12 / 48 | 1.4 s | 20 → 50 (×0.55) | 90 m | ×1.6 | 2° / 0.9° | ×1.0 |
+| Storm Light SMG (from the loadout table) | Auto | 14 | 15 | 45 / 135 | 1.6 s | 12 → 35 (×0.45) | 70 m | ×1.4 | 3.2° / 1.6° | ×1.03 |
+
+| Melee | Dmg | Windup | Cooldown | Reach | Arc |
+|---|---:|---:|---:|---:|---:|
+| Katana | 45 | 0.22 s | 0.65 s | 2.4 m | 100° |
+| Combat Knife | 35 | 0.12 s | 0.45 s | 1.7 m | 80° |
+| Energy Blade | 50 | 0.28 s | 0.80 s | 2.6 m | 110° |
+| Dagger | 30 | 0.10 s | 0.40 s | 1.5 m | 70° |
+
+- **Firing:** hitscan from the camera shoulder point along the aim, server-side and lag-compensated. Deterministic per-pellet spread. Recoil = bloom (spread grows per shot, recovers over time; recovery is always slower than sustained fire). Blocked attempts (cooldown, reload, empty, outside the circle from Phase 7) never cost ammo. Empty magazine → automatic reload.
+- **Slots:** [1] primary, [2] secondary, [3] melee. Switching takes 0.3 s, cancels a reload, and cancels a melee windup. The MELEE button always swings the melee slot.
+- **Melee:** windup → lag-compensated overlap → nearest target within reach (+0.35 m body radius) and inside the arc, with no wall in between → cooldown. Melee is never restricted by the circle.
+- **Damage:** one server entry point. Spawn protection blocks weapon and melee damage. Armor (Phase 6) reduces weapon and melee damage by 15/25/35 %. At 0 HP: eliminated (attribution, kill credit, feed line, body stops colliding).
 
 ## 8. The Nyx Circle (spec 10–12)
 - Map 1.2 × 1.2 km. Start radius 500 m. Each phase lasts **60 s**, and the circle shrinks continuously toward the next target during it.

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using WarOfNyx.App;
 using WarOfNyx.Controls;
+using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Movement;
 
 namespace WarOfNyx.Characters
@@ -32,8 +33,11 @@ namespace WarOfNyx.Characters
 
         private InputActionAsset _asset;
         private InputAction _move, _look, _sprint, _aim, _jump, _crouch, _slide;
+        private InputAction _fire, _reload, _melee, _slot1, _slot2, _slot3, _nextWeapon;
 
         private bool _jumpLatched, _crouchLatched, _slideLatched;
+        private bool _firePressedLatched, _reloadLatched, _meleeLatched, _nextWeaponLatched;
+        private int _slotLatched;
         private bool _sprintToggled;
         private Vector2 _pendingTouchLook;
 
@@ -65,6 +69,23 @@ namespace WarOfNyx.Characters
             _jump.performed += _ => _jumpLatched = InputEnabled;
             _crouch.performed += _ => _crouchLatched = InputEnabled;
             _slide.performed += _ => _slideLatched = InputEnabled;
+
+            _fire = map.FindAction(GameInputActions.Fire, true);
+            _reload = map.FindAction(GameInputActions.Reload, true);
+            _melee = map.FindAction(GameInputActions.Melee, true);
+            _slot1 = map.FindAction(GameInputActions.WeaponSlot1, true);
+            _slot2 = map.FindAction(GameInputActions.WeaponSlot2, true);
+            _slot3 = map.FindAction(GameInputActions.WeaponSlot3, true);
+            _nextWeapon = map.FindAction(GameInputActions.NextWeapon, true);
+
+            // Mouse fire only counts while the cursor is captured (the click that captures it must not shoot).
+            _fire.performed += _ => _firePressedLatched = InputEnabled && FireAllowedByCursor();
+            _reload.performed += _ => _reloadLatched = InputEnabled;
+            _melee.performed += _ => _meleeLatched = InputEnabled;
+            _slot1.performed += _ => _slotLatched = InputEnabled ? 1 : 0;
+            _slot2.performed += _ => _slotLatched = InputEnabled ? 2 : 0;
+            _slot3.performed += _ => _slotLatched = InputEnabled ? 3 : 0;
+            _nextWeapon.performed += _ => _nextWeaponLatched = InputEnabled;
 
             Yaw = transform.eulerAngles.y;
         }
@@ -136,8 +157,39 @@ namespace WarOfNyx.Characters
             Pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
         }
 
-        /// <summary>Builds the command for one simulation step and clears the button edges.</summary>
+        /// <summary>Movement only (local practice). Combat edges are consumed and discarded.</summary>
         public MovementCommand ConsumeCommand()
+        {
+            ConsumeInput(out var movement, out _);
+            return movement;
+        }
+
+        /// <summary>Builds the commands for one simulation step and clears all button edges.</summary>
+        public void ConsumeInput(out MovementCommand movement, out CombatCommand combat)
+        {
+            combat = new CombatCommand();
+            if (InputEnabled && _fire != null)
+            {
+                combat.FireHeld = _fire.IsPressed() && FireAllowedByCursor();
+                combat.FirePressed = _firePressedLatched;
+                combat.ReloadPressed = _reloadLatched;
+                combat.MeleePressed = _meleeLatched;
+                combat.SelectSlot = _slotLatched;
+                combat.NextWeaponPressed = _nextWeaponLatched;
+            }
+            _firePressedLatched = _reloadLatched = _meleeLatched = _nextWeaponLatched = false;
+            _slotLatched = 0;
+
+            movement = BuildMovement();
+        }
+
+        private bool FireAllowedByCursor()
+        {
+            var device = _fire.activeControl?.device;
+            return !(device is Mouse) || Cursor.lockState == CursorLockMode.Locked;
+        }
+
+        private MovementCommand BuildMovement()
         {
             if (!InputEnabled)
             {

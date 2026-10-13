@@ -58,5 +58,24 @@ namespace WarOfNyx.Tests.Multiplayer
             Assert.AreEqual(0f, command.Yaw);
             Assert.LessOrEqual(command.Pitch, 89f);
         }
+
+        [Test]
+        public void WeaponSlotSurvivesTheNetworkRoundTrip()
+        {
+            var state = new WarOfNyx.Core.Combat.WeaponState
+            {
+                WeaponId = 4, Magazine = 17, Reserve = 51, NextFireAt = 12.5f, ReloadEndsAt = 13.25f,
+                BurstRemaining = 2, NextBurstShotAt = 12.57f, Bloom = 1.4f, BloomUpdatedAt = 12.4f, ShotsFired = 93,
+            };
+            Assert.AreEqual(state, NetworkWeaponSlot.From(state).ToState());
+        }
+
+        [Test]
+        public void CombatButtonsSurviveTheNetworkRoundTrip()
+        {
+            var combat = new WarOfNyx.Core.Combat.CombatCommand { FireHeld = true, ReloadPressed = true, SelectSlot = 3 };
+            var data = NetworkInputData.From(new MovementCommand { MoveY = 1f }, combat);
+            Assert.AreEqual(combat, data.ToCombat());
+        }
     }
 }

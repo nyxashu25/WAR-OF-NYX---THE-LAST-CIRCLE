@@ -13,6 +13,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 60 `.cs` files under `Assets/` (Phase 3, incl. Fusion module) | **0 syntax errors** | Parse only. Fusion API names were checked against the official Fusion 2.1.3 API reference, but never compiled against the SDK |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 4 (adds `MatchStartTests`; removes the retired spawn-ring tests) | **144 passed, 0 failed** | 43 new: lifecycle, spawn planner, protection, matchmaking queue, countdown, flow catch-up, server args |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 72 `.cs` files under `Assets/` (Phase 4) | **0 syntax errors** | Parse only. New Fusion members checked against the 2.1.3 API reference |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 5 (adds `CombatRulesTests`) | **191 passed, 0 failed** | 47 new: catalog, fire rate, semi/auto/burst, pellets, ammo never spent on blocked shots, reload, spread/bloom, falloff, headshots, health/armor/protection, melee timing/arc, combat input, loadout, kill feed, dedup, aim geometry, weapon speed. Caught and fixed a real bloom-tuning bug |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 87 `.cs` files under `Assets/` (Phase 5) | **0 syntax errors** | Parse only. Lag-compensation / hitbox members checked against the Fusion 2.1.3 API reference |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -125,3 +127,21 @@ Prerequisites: as for Phase 3. Re-run **Run Project Setup** (it adds the MatchLo
 **B. Load timeout**: start a match, then kill one client during loading (Task Manager). After 20 s the server removes it and starts with the others (if at least 2 remain). Otherwise it returns to the lobby.
 
 **C. Private room**: HOST PRIVATE ROOM → lobby with START (the host can start alone for testing) → friend joins by code → START → same countdown and spawn behaviour.
+
+## Phase 5 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/CombatRulesTests.cs` | Spec weapon values, ≥6 ranged and ≥2 melee, stable network ids, sustained fire always blooms; fire rate at 60/120 Hz, forged rapid fire rejected, semi needs a press, 3-round burst, 8 pellets per shell, blocked shots never cost ammo (incl. outside-circle flag), empty → auto reload, reload math, cancel gives nothing, spread/bloom/aim, falloff and headshots, deterministic bounded spread; health, overkill, no double kill, protection blocks player damage only, armor levels, zone/camping ignore armor, invalid damage, heal cap; melee windup/once/cooldown, arc and reach; combat input round trip, forged multi-slot, dev loadout, switching, kill feed text, dedup, aim geometry; weapon speed modifier, forged speed multiplier ignored | **47/47 pass** (.NET) |
+| `Tests/Multiplayer/NetworkStateTests.cs` (+2) | Networked weapon slot and combat buttons round trip | Not run (needs Unity + Fusion) |
+
+## Manual test: two players eliminate each other (Phase 5 acceptance)
+Prerequisites: re-run **Run Project Setup**. It creates the weapon assets and **rebuilds the network player prefab with hitboxes** automatically.
+1. Two clients join the same match (Quick Match on the local dev server, or a private room) and wait for **FIGHT!**.
+2. Each has `[1] NX-7 Assault Rifle  [2] Neon Pistol  [3] Katana`, `30 / 90`, health 100.
+3. Player A shoots player B (LMB or FIRE). A sees tracers, muzzle flash and a **hit marker** with a tick sound. B's health bar drops by 24 per body hit (36 for a headshot at close range), and B sees a red flash plus a direction arc pointing at A.
+4. During the 3 s spawn protection after FIGHT, hits do no damage. Once A fires, A's own protection ends immediately.
+5. R reloads (`RELOADING …%`). Empty magazine → reloads automatically. Keys 1/2/3 switch weapons, and the move speed changes slightly.
+6. F (or MELEE) swings the katana: arc FX, and 45 damage when B is within reach, in front and not behind a wall.
+7. B reaches 0 → B's capsule topples, B sees **ELIMINATED – Eliminated by A with …**, both kill feeds show `A eliminated B with …` exactly once, and A can walk through B's body.
+8. Both clients agree on the result. The server log shows `Elimination #1: player X -> player Y`.
+9. Fairness: a client can't fire faster than the weapon allows, and spamming fire while reloading or switching does nothing.

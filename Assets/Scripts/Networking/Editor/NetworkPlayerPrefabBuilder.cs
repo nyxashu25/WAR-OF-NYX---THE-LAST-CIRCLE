@@ -33,7 +33,9 @@ namespace WarOfNyx.EditorTools
         public static void Build(bool overwrite)
         {
             const string path = FusionIntegration.NetworkPlayerPrefabPath;
-            if (!overwrite && AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            // Prefabs from before Phase 5 lack combat/hitboxes: rebuild them automatically.
+            if (!overwrite && existing != null && existing.GetComponent<NetworkCombat>() != null)
                 return;
 
             var source = AssetDatabase.LoadAssetAtPath<GameObject>(PracticeArenaBuilder.PrefabPath);
@@ -56,6 +58,31 @@ namespace WarOfNyx.EditorTools
             instance.AddComponent<NetworkObject>();
             instance.AddComponent<NetworkTransform>();
             instance.AddComponent<NetworkPlayer>();
+            instance.AddComponent<NetworkCombat>();
+
+            // Player capsules live on "Ignore Raycast" (layer 2): shots then hit the LAG-COMPENSATED
+            // hitboxes below instead of present-time CharacterControllers.
+            instance.layer = 2;
+
+            // Lag-compensated hitboxes (spec 9: server-side hit validation, head/body multipliers).
+            var root = instance.AddComponent<HitboxRoot>();
+            root.Offset = new Vector3(0f, 0.9f, 0f);
+            root.BroadRadius = 1.4f;
+
+            var body = new GameObject(NetworkCombat.BodyHitboxName).AddComponent<Hitbox>();
+            body.transform.SetParent(instance.transform, false);
+            body.transform.localPosition = new Vector3(0f, 0.75f, 0f);
+            body.Type = HitboxTypes.Capsule;
+            body.CapsuleRadius = 0.35f;
+            body.CapsuleExtents = 0.35f;
+
+            var head = new GameObject(NetworkCombat.HeadHitboxName).AddComponent<Hitbox>();
+            head.transform.SetParent(instance.transform, false);
+            head.transform.localPosition = new Vector3(0f, 1.62f, 0f);
+            head.Type = HitboxTypes.Sphere;
+            head.SphereRadius = 0.2f;
+
+            root.InitHitboxes();
 
             PrefabUtility.SaveAsPrefabAsset(instance, path);
             Object.DestroyImmediate(instance);

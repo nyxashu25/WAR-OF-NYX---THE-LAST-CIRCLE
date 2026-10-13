@@ -483,7 +483,8 @@ namespace WarOfNyx.Networking
             var router = NetworkPlayer.LocalRouter;
             if (router == null)
                 return;
-            input.Set(NetworkInputData.From(router.ConsumeCommand()));
+            router.ConsumeInput(out var movement, out var combat);
+            input.Set(NetworkInputData.From(movement, combat));
         }
 
         public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)

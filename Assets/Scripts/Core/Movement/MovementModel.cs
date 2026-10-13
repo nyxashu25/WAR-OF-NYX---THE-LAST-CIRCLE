@@ -123,6 +123,8 @@ namespace WarOfNyx.Core.Movement
                     float speed = s.Mode == LocomotionMode.Crouching ? settings.crouchSpeed
                         : s.IsSprinting ? settings.sprintSpeed
                         : settings.walkSpeed;
+                    if (command.SpeedMultiplier > 0f)
+                        speed *= command.SpeedMultiplier;
                     if (command.AimHeld)
                         speed *= settings.aimSpeedMultiplier;
 

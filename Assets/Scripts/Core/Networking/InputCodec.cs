@@ -1,4 +1,5 @@
 using System;
+using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Movement;
 
 namespace WarOfNyx.Core.Networking
@@ -24,7 +25,45 @@ namespace WarOfNyx.Core.Networking
             Jump = 1u << 2,
             Crouch = 1u << 3,
             Slide = 1u << 4,
-            // Reserved for later phases: Fire, Reload, Melee, Interact, Medkit, weapon slots.
+            // Combat (Phase 5)
+            FireHeld = 1u << 5,
+            FirePressed = 1u << 6,
+            Reload = 1u << 7,
+            Melee = 1u << 8,
+            Slot1 = 1u << 9,
+            Slot2 = 1u << 10,
+            Slot3 = 1u << 11,
+            NextWeapon = 1u << 12,
+            // Reserved for later phases: Interact, Medkit.
+        }
+
+        public static uint PackButtons(in MovementCommand movement, in CombatCommand combat)
+        {
+            var b = (Buttons)PackButtons(movement);
+            if (combat.FireHeld) b |= Buttons.FireHeld;
+            if (combat.FirePressed) b |= Buttons.FirePressed;
+            if (combat.ReloadPressed) b |= Buttons.Reload;
+            if (combat.MeleePressed) b |= Buttons.Melee;
+            if (combat.SelectSlot == 1) b |= Buttons.Slot1;
+            else if (combat.SelectSlot == 2) b |= Buttons.Slot2;
+            else if (combat.SelectSlot == 3) b |= Buttons.Slot3;
+            if (combat.NextWeaponPressed) b |= Buttons.NextWeapon;
+            return (uint)b;
+        }
+
+        /// <summary>Decodes combat intent. If several slot bits are set (forged input), the lowest wins.</summary>
+        public static CombatCommand UnpackCombat(uint buttons)
+        {
+            var b = (Buttons)buttons;
+            return new CombatCommand
+            {
+                FireHeld = (b & Buttons.FireHeld) != 0,
+                FirePressed = (b & Buttons.FirePressed) != 0,
+                ReloadPressed = (b & Buttons.Reload) != 0,
+                MeleePressed = (b & Buttons.Melee) != 0,
+                SelectSlot = (b & Buttons.Slot1) != 0 ? 1 : (b & Buttons.Slot2) != 0 ? 2 : (b & Buttons.Slot3) != 0 ? 3 : 0,
+                NextWeaponPressed = (b & Buttons.NextWeapon) != 0,
+            };
         }
 
         public const float MinPitch = -89f;
@@ -75,6 +114,7 @@ namespace WarOfNyx.Core.Networking
             command.MoveY = y;
             command.Yaw = WrapDegrees(Finite(command.Yaw));
             command.Pitch = Math.Clamp(Finite(command.Pitch), MinPitch, MaxPitch);
+            command.SpeedMultiplier = 0f; // authority-only field: never accepted from a client
             return command;
         }
 

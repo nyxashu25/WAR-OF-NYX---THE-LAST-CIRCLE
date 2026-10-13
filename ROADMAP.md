@@ -8,7 +8,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 2 | Character, camera, PC + touch controls, Practice Arena graybox | 1 | M | **Code written; movement model 30/30 tests pass under .NET; Unity side not yet verified** |
 | 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | **Code written; core networking 35/35 tests pass under .NET; needs Fusion SDK + App ID + Unity to run.** Gate: nothing advanced until the two-client test passes |
 | 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | **Code written; match lifecycle, spawn planner, protection and queue: 40 tests pass under .NET; Unity/Fusion side not yet run** |
-| 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | Not started |
+| 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | **Code written; combat rules 47 tests pass under .NET; Unity/Fusion side not yet run** |
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | Not started |
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | Not started |
 | 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | Not started |
@@ -83,3 +83,16 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [ ] Starting inventory/loadout: moved to Phase 6, where the inventory system is built (spec Phase 6 task 1)
 - [ ] **Run the multi-client test in TESTING.md** ← needs the project owner (Unity + Fusion + App ID)
 - [ ] Automated multi-peer PlayMode test (Fusion multi-peer mode): moved to Phase 5
+
+## Phase 5 checklist
+- [x] Weapon definitions: 7 ranged (spec table + Storm Light SMG from the loadout table), 4 melee (Katana, Combat Knife, Energy Blade, Dagger); engine-independent stats + editable `WeaponDefinition` assets + `WeaponDatabase`
+- [x] Firing: semi / auto / burst, server fire-rate enforcement, magazine + reserve, reload (manual and auto), weapon switching (1/2/3, next) with a 0.3 s swap
+- [x] Hit detection: lag-compensated hitscan (Fusion hitboxes rewound to the shooter's view), from the camera shoulder point (anti-peek fallback to the eye), deterministic per-pellet spread, bloom recoil, damage falloff, headshot multipliers, max range
+- [x] Melee: windup → lag-compensated reach + arc + line-of-sight check → cooldown; works with any active weapon via the MELEE button
+- [x] Damage: single server entry point (`ReceiveDamage`), spawn protection blocks it, armor rules ready for Phase 6; health replicated
+- [x] Elimination: attribution (killer, weapon, headshot), kills and damage stats, hitboxes and collision off, defeat fall, ELIMINATED screen, kill feed with event-id de-duplication
+- [x] Feedback: muzzle flash, tracers, impacts, slash arc, recoil kick, reload motion, synthesized sounds, hit markers (server-confirmed), damage flash and direction, dynamic crosshair
+- [x] Touch: FIRE, RELOAD, MELEE, WEAPON buttons live
+- [ ] **Run the two-player elimination test (TESTING.md)** ← needs the project owner (Unity + Fusion + App ID)
+- [ ] Combat in the offline Practice Arena: arrives with the local authoritative simulation (9G)
+- [ ] Automated multi-peer test: deferred to Phase 13 (needs Fusion multi-peer configuration; see KNOWN_ISSUES)

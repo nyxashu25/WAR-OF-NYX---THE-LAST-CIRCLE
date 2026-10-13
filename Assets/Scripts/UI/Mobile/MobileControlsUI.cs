@@ -15,8 +15,8 @@ namespace WarOfNyx.UI.Mobile
     /// RIGHT: swipe-to-look zone behind FIRE, AIM, JUMP, RELOAD, MELEE, WEAPON, MEDKIT, USE.
     ///
     /// Buttons are Input System On-Screen Buttons bound to virtual gamepad controls, i.e. the same
-    /// actions as keyboard/mouse. Combat buttons are shown dimmed: their actions exist,
-    /// but nothing consumes them until Phases 5-6.
+    /// actions as keyboard/mouse. FIRE, RELOAD, MELEE and WEAPON are live from Phase 5;
+    /// USE and MEDKIT stay dimmed until Phase 6 (loot, medkits).
     /// Layout positions are in canvas units (1080 high reference) inside the device safe area.
     /// </summary>
     public sealed class MobileControlsUI : MonoBehaviour
@@ -79,12 +79,12 @@ namespace WarOfNyx.UI.Mobile
             _sprintImage = AddToggleButton(safe, "SPRINT", BottomLeft, new Vector2(430f, 740f), 120f, router.ToggleSprint);
 
             // Right cluster (offsets from the bottom-right corner).
-            AddButton(safe, "FIRE", "<Gamepad>/rightTrigger", BottomRight, new Vector2(-270f, 300f), 180f, active: false);
+            AddButton(safe, "FIRE", "<Gamepad>/rightTrigger", BottomRight, new Vector2(-270f, 300f), 180f, active: true);
             AddButton(safe, "JUMP", "<Gamepad>/buttonSouth", BottomRight, new Vector2(-110f, 140f), 140f, active: true);
-            AddButton(safe, "RELOAD", "<Gamepad>/buttonWest", BottomRight, new Vector2(-110f, 330f), 110f, active: false);
+            AddButton(safe, "RELOAD", "<Gamepad>/buttonWest", BottomRight, new Vector2(-110f, 330f), 110f, active: true);
             AddButton(safe, "AIM", "<Gamepad>/leftTrigger", BottomRight, new Vector2(-450f, 300f), 120f, active: true);
-            AddButton(safe, "MELEE", "<Gamepad>/rightShoulder", BottomRight, new Vector2(-300f, 110f), 110f, active: false);
-            AddButton(safe, "WEAPON", "<Gamepad>/rightStickPress", BottomRight, new Vector2(-450f, 120f), 110f, active: false);
+            AddButton(safe, "MELEE", "<Gamepad>/rightShoulder", BottomRight, new Vector2(-300f, 110f), 110f, active: true);
+            AddButton(safe, "WEAPON", "<Gamepad>/rightStickPress", BottomRight, new Vector2(-450f, 120f), 110f, active: true);
             AddButton(safe, "USE", "<Gamepad>/buttonNorth", BottomRight, new Vector2(-270f, 480f), 110f, active: false);
             AddButton(safe, "MEDKIT", "<Gamepad>/dpad/down", BottomRight, new Vector2(-110f, 500f), 100f, active: false);
         }

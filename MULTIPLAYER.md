@@ -88,3 +88,19 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Synchronized start:** the server sets the start time (simulation seconds) when the countdown begins. `NetworkPlayer` ignores movement input until `MovementAllowedAt(Runner.SimulationTime)`. The server and the owner's prediction evaluate this with the same tick time, so everyone gains control on the same tick, however long their device took to load.
 - **Spawning:** after all players report loaded (or the 20 s timeout removes stragglers), the server plans spawns once and spawns everyone 1.2 m above validated ground, facing the zone centre, locked until FIGHT.
 - **Bump `NetworkProtocol.Version`** whenever inputs or networked state change, so old clients can't match with new servers.
+
+## Phase 5: combat (code written, not yet run)
+| Piece | File | Runs on |
+|---|---|---|
+| Weapon stats and catalog (network ids = catalog index, append-only) | `Core/Combat/WeaponStats.cs`, `WeaponCatalog.cs`; tunable via `Combat/WeaponDefinition` assets | all (same numbers) |
+| Fire rate, ammo, reload, spread, falloff, headshots | `Core/Combat/WeaponRules.cs` | server authoritative, owner predicts |
+| Health, armor, spawn-protection gate | `Core/Combat/HealthRules.cs` | server |
+| Melee timing and arc | `Core/Combat/MeleeRules.cs` | server authoritative, owner predicts timing |
+| Networked weapons, hits, damage, eliminations | `Networking/NetworkCombat.cs` | server decides; owner FX; proxies FX from counters |
+| Kill feed (event ids) | `NetworkMatchController.RegisterElimination` / `RPC_EliminationFeed` | server → all |
+
+- **Input:** 8 more button bits (fire held/pressed, reload, melee, slot 1–3, next weapon). Still intent only.
+- **Hits:** the server runs `Runner.LagCompensation.Raycast` from the shooter's shoulder point along the received aim, with deterministic spread. Hitboxes are rewound to what the shooter saw. Player capsules sit on *Ignore Raycast*, so only rewound hitboxes count. Melee uses a lag-compensated overlap, then reach, arc and a wall check.
+- **Damage:** only `NetworkCombat.ReceiveDamage` (server) changes health. It checks spawn protection and armor. Eliminations record killer, weapon and headshot, increment kills, and broadcast one feed event.
+- **Never trusted from clients:** hits, damage, ammo counts, reload completion, fire timing, speed multipliers, kills.
+- `NetworkProtocol.Version` = **5**.

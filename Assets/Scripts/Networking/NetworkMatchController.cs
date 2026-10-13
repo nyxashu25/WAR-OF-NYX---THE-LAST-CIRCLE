@@ -1,7 +1,10 @@
 using Fusion;
 using UnityEngine;
 using WarOfNyx.App;
+using WarOfNyx.Combat;
+using WarOfNyx.Core.Combat;
 using WarOfNyx.Core.Match;
+using WarOfNyx.Gameplay;
 
 namespace WarOfNyx.Networking
 {
@@ -103,6 +106,50 @@ namespace WarOfNyx.Networking
             {
                 RPC_ReportLoaded();
             }
+        }
+
+        // ------------------------------------------------------------------ eliminations (Phase 5)
+
+        [Networked] private int NetEliminationEventId { get; set; }
+        [Networked] public int Eliminations { get; set; }
+
+        private readonly EventDeduplicator _feedDedup = new EventDeduplicator();
+
+        /// <summary>
+        /// Server only: records an elimination decided by the damage system and announces it.
+        /// Alive counting and victory are completed in Phase 9.
+        /// </summary>
+        public void RegisterElimination(PlayerRef victim, PlayerRef killer, short weaponId, bool headshot)
+        {
+            if (!HasStateAuthority)
+                return;
+            NetEliminationEventId++;
+            Eliminations++;
+            Debug.Log($"[WarOfNyx][Match] Elimination #{NetEliminationEventId}: player {killer.PlayerId} -> player {victim.PlayerId} " +
+                      $"({WeaponRegistry.DisplayName(weaponId)}{(headshot ? ", headshot" : string.Empty)})");
+            RPC_EliminationFeed(NetEliminationEventId, victim, killer, weaponId, headshot);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        public void RPC_EliminationFeed(int eventId, PlayerRef victim, PlayerRef killer, short weaponId, NetworkBool headshot)
+        {
+            if (!_feedDedup.TryAccept(eventId) || Application.isBatchMode)
+                return;
+
+            string text = CombatText.Elimination(NameOf(killer), NameOf(victim), WeaponRegistry.DisplayName(weaponId), headshot);
+            bool involvesMe = Runner.LocalPlayer != PlayerRef.None && (victim == Runner.LocalPlayer || killer == Runner.LocalPlayer);
+            var arena = OnlineArenaController.Instance;
+            if (arena != null && arena.Hud != null)
+                arena.Hud.AddFeed(text, involvesMe);
+        }
+
+        private string NameOf(PlayerRef player)
+        {
+            if (player == PlayerRef.None)
+                return null;
+            return Runner.TryGetPlayerObject(player, out var obj) && obj.TryGetComponent<NetworkPlayer>(out var p)
+                ? p.PlayerName
+                : $"Player {player.PlayerId}";
         }
 
         // ------------------------------------------------------------------ rules shared by all peers

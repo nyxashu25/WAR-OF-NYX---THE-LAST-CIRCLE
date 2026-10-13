@@ -36,3 +36,12 @@
 | 32 | `NetworkProtocol.Version` must be bumped by hand when networked state changes. | Mixed builds could match against each other. | Bump on every networked-struct change; consider auto-hashing in Phase 12. |
 | 33 | Spawn-protection rules exist, but nothing can deal damage yet. | Protection is visible but has nothing to block. | Phase 5 damage checks `IsSpawnProtected` and calls `OnAggressiveAction` before firing/melee. |
 | 34 | The match never ends on its own (no winner yet). It returns to the lobby only when everyone leaves. | Dev servers need players to leave. | Phase 9 (victory, results, return to lobby). |
+| 35 | Phase 5 players all get a **fixed development loadout** (NX-7 + Neon Pistol + Katana) with per-weapon reserve ammo. | Not the spec's randomized loadouts and ammo by type. | Phase 6: randomized power-budgeted loadouts, inventory, ammo by type, loot. |
+| 36 | All firearms are **hitscan** (no projectile travel or bullet drop). | The marksman behaves like a long-range hitscan. | Spec allows "hitscan or appropriate projectile simulation". Revisit in balancing (Phase 13). |
+| 37 | Melee hits one target (the nearest valid one in the arc). | No cleave. | Tunable later if desired. |
+| 38 | Remote players' tracers are drawn from their replicated aim with a local raycast (visual estimate). Only the server's lag-compensated result decides hits. | A tracer can look slightly off on proxies. | Cosmetic only. |
+| 39 | Combat is online-only for now. The offline Practice Arena has movement but no weapons. | Can't test shooting alone offline. | Local authoritative simulation (9G) brings combat offline. |
+| 40 | Automated multi-peer test (two Fusion peers in one process) is **still not written** (planned for Phase 5 earlier). It needs Fusion's multi-peer mode, which changes the project's NetworkProjectConfig. | Two-player behaviour is only verified manually. | Phase 13 test infrastructure. |
+| 41 | Lag compensation relies on Fusion's default HitboxManager settings (enabled; history length from NetworkProjectConfig). | If disabled in the config, no hits register. | Check **Lag Compensation** is enabled in NetworkProjectConfig (TESTING.md Phase 5). |
+| 42 | On touch screens, holding FIRE doesn't steer the aim (mobile shooters usually allow drag-to-aim on the fire button). | Firing and aiming need two fingers. | Phase 11 touch polish. |
+| 43 | Weapon models, muzzle flashes, tracers and all combat sounds are **code-generated placeholders**. | Basic look and sound. | Phase 10 art and audio. |

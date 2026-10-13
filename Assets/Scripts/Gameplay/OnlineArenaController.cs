@@ -11,6 +11,7 @@ using WarOfNyx.Core.Events;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.UI.Common;
+using WarOfNyx.UI.Hud;
 using WarOfNyx.UI.Mobile;
 
 namespace WarOfNyx.Gameplay
@@ -27,6 +28,9 @@ namespace WarOfNyx.Gameplay
     public sealed class OnlineArenaController : MonoBehaviour
     {
         public static OnlineArenaController Instance { get; private set; }
+
+        /// <summary>Combat HUD for the local player (null on the dedicated server).</summary>
+        public CombatHud Hud { get; private set; }
 
         private readonly List<IDisposable> _subscriptions = new List<IDisposable>();
         private PlayerMovement _localMovement;
@@ -67,6 +71,7 @@ namespace WarOfNyx.Gameplay
 
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             BuildHud();
+            Hud = CombatHud.Create(transform);
             _subscriptions.Add(AppServices.Events.Subscribe<BackRequested>(_ => ToggleMenu()));
 
             if (OnlineServices.Session == null || OnlineServices.Session.State != OnlineSessionState.Running)
