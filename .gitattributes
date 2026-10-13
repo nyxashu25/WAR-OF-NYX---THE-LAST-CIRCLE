@@ -1,0 +1,32 @@
+# Normalize text files; Unity YAML stays diffable (Force Text serialization).
+* text=auto
+
+*.cs        text diff=csharp
+*.asmdef    text
+*.json      text
+*.md        text
+*.unity     text merge=unityyamlmerge eol=lf
+*.prefab    text merge=unityyamlmerge eol=lf
+*.asset     text merge=unityyamlmerge eol=lf
+*.mat       text merge=unityyamlmerge eol=lf
+*.anim      text merge=unityyamlmerge eol=lf
+*.controller text merge=unityyamlmerge eol=lf
+*.meta      text eol=lf
+
+# Binary assets. Move these to Git LFS before large art/audio lands (see KNOWN_ISSUES.md).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.psd   binary
+*.tga   binary
+*.exr   binary
+*.fbx   binary
+*.blend binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.ttf   binary
+*.otf   binary
+*.dll   binary
+*.so    binary
+*.a     binary

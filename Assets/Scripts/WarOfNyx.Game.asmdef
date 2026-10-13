@@ -1,0 +1,18 @@
+{
+    "name": "WarOfNyx.Game",
+    "rootNamespace": "WarOfNyx",
+    "references": [
+        "WarOfNyx.Core",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

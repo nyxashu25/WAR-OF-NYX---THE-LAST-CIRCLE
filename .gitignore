@@ -1,0 +1,70 @@
+# ---------------- Unity generated ----------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/Assets/Plugins/Editor/JetBrains*
+/Assets/AssetStoreTools*
+
+# Crash reports / profiler captures
+sysinfo.txt
+crashlytics-build.properties
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+*.raw
+
+# Test results
+TestResults*.xml
+/TestResults/
+
+# ---------------- IDEs ----------------
+.vs/
+.vscode/
+.idea/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.booproj
+*.svd
+
+# ---------------- Build outputs ----------------
+*.apk
+*.aab
+*.unitypackage
+*.app
+/ServerBuild/
+/DedicatedServer/
+
+# ---------------- Secrets: NEVER commit ----------------
+*.keystore
+*.jks
+*.p12
+*.pem
+*.env
+.env*
+!.env.example
+**/secrets/
+user.keystore
+
+# ---------------- OS ----------------
+.DS_Store
+Thumbs.db
+Desktop.ini

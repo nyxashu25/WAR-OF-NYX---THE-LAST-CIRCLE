@@ -1,0 +1,45 @@
+# Roadmap
+
+Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months), for one experienced indie developer. These are rough estimates.
+
+| # | Phase | Depends on | Size | Status |
+|---|---|---|---|---|
+| 1 | Architecture & project initialization | — | S | **Code written, not yet verified in Unity** |
+| 2 | Character, camera, PC + touch controls, Practice Arena graybox | 1 | M | Not started |
+| 3 | Real multiplayer connectivity (Fusion 2, dedicated server route, 2 clients) | 2, Fusion App ID | L | Not started · **gate: nothing advanced until this works** |
+| 4 | Matchmaking, waiting lobby, synchronized start, random spawning | 3 | M | Not started |
+| 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | Not started |
+| 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | Not started |
+| 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | Not started |
+| 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | Not started |
+| 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | Not started |
+| **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | Not started (defaults already configured: NIGHTMARE, 23 bots) |
+| 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | Not started |
+| 11 | Android controls finalization, quality presets, physical devices | 9 | M | Not started |
+| 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | Not started |
+| 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | Not started |
+| 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | Not started |
+| post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
+
+## Why 9G sits there
+Spec 38.18 says to implement the offline mode after shared movement, combat, inventory and match rules work. Bots must use the exact same rules, so building them earlier would mean writing the rules twice.
+
+## Milestones
+- **M1 – Foundation (Phase 1):** project opens with no compile errors, menu runs, tests pass.
+- **M2 – Two clients see each other (Phase 3).**
+- **M3 – Networked kill (Phase 5).**
+- **M4 – Full online match loop on PC (Phase 9):** the 32-step two-player scenario from spec §36, run with PC clients.
+- **M5 – Offline match without internet (9G):** complete match against 11 bots on a phone in airplane mode. A bot can win, and the human can win.
+- **M6 – Two Android phones, internet server (Phases 11–12).**
+- **M7 – Internal testing track (Phase 14).**
+
+## Phase 1 checklist
+- [x] Version compatibility report ([DEPENDENCIES.md](DEPENDENCIES.md))
+- [x] Folder structure and assembly definitions
+- [x] Package manifest (URP, Input System, AI Navigation, Test Framework, uGUI)
+- [x] Foundational code: bootstrap, services, config, flow state machine, event bus, settings, graphics presets, connectivity, lifecycle, input actions
+- [x] Main menu with Online / Offline (Ghost Protocol setup) / Practice / Settings
+- [x] Editor setup tool (player settings, URP presets, scenes, input backend)
+- [x] EditMode and PlayMode tests written
+- [ ] **Open in Unity 6.3, fix any compile errors, run setup, run tests** ← next action
+- [ ] Commit the generated `.meta` files, ProjectSettings and scenes
