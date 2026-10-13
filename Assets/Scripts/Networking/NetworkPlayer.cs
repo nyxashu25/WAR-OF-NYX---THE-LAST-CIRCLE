@@ -3,12 +3,14 @@ using UnityEngine;
 using WarOfNyx.App;
 using WarOfNyx.Characters;
 using WarOfNyx.Core.Combat;
+using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Networking;
 using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay;
 using WarOfNyx.Gameplay.Effects;
+using WarOfNyx.UI.Hud;
 
 namespace WarOfNyx.Networking
 {
@@ -47,12 +49,34 @@ namespace WarOfNyx.Networking
         /// </summary>
         [Networked] public NetworkBool OutsideZone { get; set; }
 
+        // Nyx Hunt Protocol (spec 13), written by the server only, shown by every client.
+        [Networked] private byte HuntStateNet { get; set; }
+        [Networked] private byte HuntWarningNet { get; set; }
+        [Networked] private float HuntInactiveSinceNet { get; set; }
+        [Networked] private float HuntExposedUntilNet { get; set; }
+        [Networked] private int HuntExposureCountNet { get; set; }
+
+        /// <summary>Every spawned player on this peer (for beacons, minimap markers and direction indicators).</summary>
+        public static readonly System.Collections.Generic.List<NetworkPlayer> All = new System.Collections.Generic.List<NetworkPlayer>();
+
+        public HuntStatus Hunt => new HuntStatus
+        {
+            State = (HuntState)HuntStateNet,
+            WarningLevel = HuntWarningNet,
+            InactiveSince = HuntInactiveSinceNet,
+            ExposedUntil = HuntExposedUntilNet,
+            ExposureCount = HuntExposureCountNet,
+        };
+
+        public bool IsAlive => _combat == null || _combat.IsAlive;
+
         private PlayerMovement _movement;
         private PlayerInputRouter _router;
         private NetworkCombat _combat;
         private TextMesh _nameTag;
         private SpawnShieldVisual _shield;
         private OutsideZoneVisual _outsideVisual;
+        private HuntBeaconVisual _beacon;
 
         public string PlayerName => DisplayName.Value;
 
@@ -96,6 +120,7 @@ namespace WarOfNyx.Networking
 
         public override void Spawned()
         {
+            All.Add(this);
             var state = Movement;
             _movement.RestoreState(state.ToState(), state.Grounded, state.Position);
             gameObject.name = $"Player {Object.InputAuthority.PlayerId}{(HasInputAuthority ? " (local)" : string.Empty)}";
@@ -106,6 +131,7 @@ namespace WarOfNyx.Networking
                 SpawnEffect.Play(state.Position - Vector3.up * drop);
                 _shield = SpawnShieldVisual.Attach(transform);
                 _outsideVisual = OutsideZoneVisual.Attach(transform);
+                _beacon = HuntBeaconVisual.Attach(transform);
             }
 
             if (HasInputAuthority)
@@ -130,6 +156,7 @@ namespace WarOfNyx.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            All.Remove(this);
             bool wasLocal = LocalRouter == _router;
             if (wasLocal)
                 LocalRouter = null;
@@ -195,12 +222,59 @@ namespace WarOfNyx.Networking
 
             // Combat after movement: shots start from this tick's position (same order on server and client).
             if (_combat != null)
-            {
                 _combat.Simulate(combat, yaw, pitch, command.AimHeld, _movement.State.IsLowStance, _movement.State.IsSprinting, unlocked,
                     firearmsAllowed: !outside);
-                if (HasStateAuthority && alive && zoneLive)
-                    _combat.ApplyZoneExposure(!outside, zone.DamagePerSecond, Runner.DeltaTime, settings.damageIntervalSeconds);
+
+            // Server: one environmental damage pass per tick (zone + camping, spec 12-13).
+            if (HasStateAuthority && unlocked && _combat != null)
+                ServerEnvironmentPass(zoneLive ? zone : null, outside, settings);
+        }
+
+        /// <summary>Server only. Zone exposure and the Nyx Hunt Protocol for this tick, applied together.</summary>
+        private void ServerEnvironmentPass(NetworkNyxCircle zone, bool outside, ZoneSettings zoneSettings)
+        {
+            var match = NetworkMatchController.Instance;
+            var hunt = match != null ? match.Hunt : null;
+            int key = Object.InputAuthority.PlayerId;
+
+            if (!_combat.IsAlive)
+            {
+                if (hunt != null)
+                    hunt.Remove(key); // eliminated: beacon removed, tracking stops
+                PublishHunt(default);
+                return;
             }
+
+            float dt = Runner.DeltaTime;
+            float now = Runner.SimulationTime;
+            float zoneDamage = zone != null ? _combat.StepZoneExposure(!outside, zone.DamagePerSecond, dt, zoneSettings.damageIntervalSeconds) : 0f;
+
+            float campingDamage = 0f;
+            if (hunt != null)
+            {
+                var p = transform.position;
+                var tracker = hunt.TryGet(key, out var existing) ? existing : hunt.Track(key, now, p.x, p.z);
+                var tick = hunt.Update(key, now, p.x, p.z, dt);
+                campingDamage = tick.Damage;
+                if ((tick.Events & HuntEvents.Exposed) != 0)
+                    match.AnnounceHuntAlert(Object.InputAuthority, tracker.Status.ExposureCount);
+                PublishHunt(tracker.Status);
+            }
+
+            if (_combat.ApplyEnvironmentDamage(zoneDamage, campingDamage) && hunt != null)
+            {
+                hunt.Remove(key);
+                PublishHunt(default);
+            }
+        }
+
+        private void PublishHunt(in HuntStatus status)
+        {
+            HuntStateNet = (byte)status.State;
+            HuntWarningNet = status.WarningLevel;
+            HuntInactiveSinceNet = status.InactiveSince;
+            HuntExposedUntilNet = status.ExposedUntil;
+            HuntExposureCountNet = status.ExposureCount;
         }
 
         public override void Render()
@@ -217,8 +291,13 @@ namespace WarOfNyx.Networking
             bool outsideVisible = OutsideZone && (_combat == null || _combat.IsAlive);
             if (_outsideVisual != null)
                 _outsideVisual.SetActive(outsideVisible);
+            if (_beacon != null)
+                _beacon.SetActive(IsAlive && Hunt.BeaconVisible);
             if (HasInputAuthority && OnlineArenaController.Instance != null)
+            {
                 OnlineArenaController.Instance.ShowZone(BuildZoneView(), transform.position, Movement.Yaw);
+                ShowHuntToLocalPlayer(OnlineArenaController.Instance);
+            }
 
             if (_nameTag != null)
                 _nameTag.gameObject.SetActive(_combat == null || _combat.IsAlive);
@@ -229,6 +308,22 @@ namespace WarOfNyx.Networking
                 if (cam != null)
                     _nameTag.transform.rotation = Quaternion.LookRotation(_nameTag.transform.position - cam.transform.position);
             }
+        }
+
+        private readonly System.Collections.Generic.List<HuntTarget> _exposed = new System.Collections.Generic.List<HuntTarget>();
+
+        /// <summary>Local player: own hunt status plus every OTHER exposed player (beacon targets for minimap and arrows).</summary>
+        private void ShowHuntToLocalPlayer(OnlineArenaController arena)
+        {
+            _exposed.Clear();
+            foreach (var other in All)
+            {
+                if (other == null || other == this || !other.IsAlive || !other.Hunt.BeaconVisible)
+                    continue;
+                _exposed.Add(new HuntTarget { Position = other.transform.position, Name = other.PlayerName });
+            }
+            float now = Runner != null ? Runner.SimulationTime : 0f;
+            arena.ShowHunt(Hunt, IsAlive, now, transform.position, _exposed);
         }
 
         private ZoneView BuildZoneView()

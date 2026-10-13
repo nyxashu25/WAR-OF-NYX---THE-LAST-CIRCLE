@@ -19,6 +19,8 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 95 `.cs` files under `Assets/` (Phase 6) | **0 syntax errors** | Parse only |
 | 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 7 (adds `ZoneTests`) | **249 passed, 0 failed** | 29 new: spec table, validation, containment over 500 seeds, map scaling, determinism, fair centres, 60 s linear shrink, final/closed circle, monotonic radius, replicated stage = server circle, test override, boundary, gun inside/outside without ammo loss, trigger held across the edge, no grace window, forged input, melee outside, zone damage per phase, re-entry, in-and-out dodging, armor ignored, wobble bounds/determinism/speed/no drift, aim sway, announcements |
 | 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 107 `.cs` files under `Assets/` (Phase 7) | **0 syntax errors** | Parse only. `Runner.Tick`, `Tick.Raw` and `Runner.LocalRenderTime` checked against the Fusion 2.1.3 API reference |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` after Phase 8 (adds `HuntTests`) | **268 passed, 0 failed** | 19 new: spec settings, 10/20/25/30 s, 10 s exposure + penalty, repeated exposure without spam, clearing, rotating, small move, circling, jiggling, teleport, wall, spawn grace, reconnect, death, three campers, combined zone+camping pass, texts, local notices |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 111 `.cs` files under `Assets/` (Phase 8) | **0 syntax errors** | Parse only |
 | — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
 
 ## Running the core rules tests without Unity
@@ -183,3 +185,17 @@ Prerequisites: re-run **Run Project Setup** (rebuilds the MatchController prefab
 7. Walk back in → "SAFE ZONE ENTERED", guns work at once, all effects stop, no more damage.
 8. Settings → REDUCE SHAKE / REDUCE FLASHING: the tremor, edge pulse and lightning soften. Damage, wobble and the gun lock stay exactly the same.
 9. Let the circle reach the end: the feed shows "FINAL CIRCLE BEGINS IN 10 SECONDS", then "FINAL CIRCLE" (6 HP/s outside), then "THE NYX CIRCLE HAS CLOSED". A player left in it dies: the feed reads `<name> was consumed by the Nyx Circle` and the elimination screen says "Consumed by the Nyx Circle." (Victory and results arrive in Phase 9.)
+
+## Phase 8 test inventory
+| File | Covers | Status |
+|---|---|---|
+| `Tests/EditMode/HuntTests.cs` | All 13 spec 13 test cases that can run without the network (stationary 10/20/25/30 s, 10 s exposure, penalty start, meaningful movement clears, rotation, small move, reconnect, death removes the beacon, several campers, zone + camping in one pass) plus the anti-exploit list (circling, jiggling, teleports, walls), spawn grace, repeated exposure policy, texts, local notices | **19/19 pass** (.NET) |
+
+## Manual test: camping (Phase 8 acceptance)
+Two clients (A and B) in one match on the local dev server.
+1. A stands still. At 20 s: crimson `WARNING: KEEP MOVING` headline and `WARNING: KEEP MOVING · EXPOSED IN 10 s` status. At 25 s: `NYX IS WATCHING YOU`. Rotating, crouching, firing and swapping weapons don't stop the countdown.
+2. At 30 s: A sees `YOU ARE BEING HUNTED` and loses 2 HP/s (armor makes no difference). B sees a giant crimson pillar over A from anywhere on the map, a pulsing crimson dot on the minimap (clamped to the edge if far away), an arrow toward A with A's name and distance, and the feed line `HUNT ALERT: A EXPOSED FOR CAMPING`.
+3. After 10 s the beacon, marker and arrow disappear for B, but A keeps losing health. 20 s after the first exposure A is exposed again (one new feed line).
+4. A walks about 10 m in one direction: `HUNT STATUS CLEARED`, the damage stops, and the timer starts again from 0. Walking 5 m and stopping, or running in tight circles, does **not** clear it.
+5. A camps outside the circle: zone and camping damage add up in the same ticks (e.g. 1 + 2 HP/s in phase 1), never doubled. A dies: `A was taken by the Nyx Hunt` (or `consumed by the Nyx Circle` if the zone dealt more), and the beacon disappears at once.
+6. B camps at the same time as A: two independent beacons and markers.

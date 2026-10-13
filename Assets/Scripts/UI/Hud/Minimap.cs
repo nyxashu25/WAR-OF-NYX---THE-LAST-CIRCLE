@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using WarOfNyx.Core.Zone;
@@ -9,7 +10,8 @@ namespace WarOfNyx.UI.Hud
     /// North-up minimap (spec 19 "Minimap Requirements"), centred on the local player:
     /// a top-down map of the arena (baked once from the level's colliders), the player's position
     /// and facing, the current Nyx Circle, the next circle, and an edge arrow toward the safe zone.
-    /// Shows no other players (spec: never reveal enemy locations; exposed campers arrive in Phase 8).
+    /// Other players are never shown (spec: don't reveal enemies) EXCEPT players exposed for camping
+    /// (Nyx Hunt, spec 13), as pulsing crimson markers clamped to the edge when out of view.
     /// PLACEHOLDER look; Phase 10 restyles it.
     /// </summary>
     public sealed class Minimap : MonoBehaviour
@@ -25,6 +27,8 @@ namespace WarOfNyx.UI.Hud
         private RectTransform _player;
         private RectTransform _toSafe;
         private Texture2D _texture;
+        private readonly List<Image> _markers = new List<Image>();
+        private Vector3 _lastPlayer;
 
         private Vector2 _mapCentre;
         private float _mapHalf = 60f;
@@ -120,6 +124,7 @@ namespace WarOfNyx.UI.Hud
         {
             float scale = PanelSize * 0.5f / _viewRadius; // canvas units per metre
             var p = new Vector2(player.x, player.z);
+            _lastPlayer = player;
 
             _map.rectTransform.sizeDelta = Vector2.one * (_mapHalf * 2f * scale);
             _map.rectTransform.anchoredPosition = (_mapCentre - p) * scale;
@@ -149,6 +154,36 @@ namespace WarOfNyx.UI.Hud
                 var dir = toCentre.normalized;
                 _toSafe.anchoredPosition = dir * (PanelSize * 0.5f - 16f);
                 _toSafe.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f);
+            }
+        }
+
+        /// <summary>Players currently exposed for camping (spec 13: visible on everyone's minimap for the exposure).</summary>
+        public void SetHuntMarkers(IReadOnlyList<HuntTarget> exposed)
+        {
+            int count = exposed != null ? exposed.Count : 0;
+            while (_markers.Count < count)
+            {
+                var dot = UiFactory.CreatePanel("HuntMarker", _content, NyxPalette.Crimson);
+                dot.sprite = UiFactory.CircleSprite;
+                dot.rectTransform.anchorMin = dot.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                _markers.Add(dot);
+            }
+
+            float scale = PanelSize * 0.5f / _viewRadius;
+            float pulse = 14f + 4f * Mathf.Sin(Time.unscaledTime * 8f);
+            for (int i = 0; i < _markers.Count; i++)
+            {
+                var marker = _markers[i];
+                marker.gameObject.SetActive(i < count);
+                if (i >= count)
+                    continue;
+                var offset = new Vector2(exposed[i].Position.x - _lastPlayer.x, exposed[i].Position.z - _lastPlayer.z) * scale;
+                float limit = PanelSize * 0.5f - 10f;
+                if (offset.magnitude > limit)
+                    offset = offset.normalized * limit; // clamp to the edge: still shows the direction
+                marker.rectTransform.anchoredPosition = offset;
+                marker.rectTransform.sizeDelta = Vector2.one * pulse;
+                marker.transform.SetAsLastSibling();
             }
         }
 

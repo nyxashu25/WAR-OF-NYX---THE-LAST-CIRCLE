@@ -120,4 +120,11 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - **Instability:** `ZoneInstability.Lateral(tick, dt, playerId)` is applied by the authority into `MovementCommand.LateralWobble`. Prediction computes the same value from the same tick, so it doesn't cause corrections.
 - **Firearm lock:** `NetworkCombat.Simulate(..., firearmsAllowed)` passes it to `WeaponRules.TryFire`. Blocked attempts cost nothing. Shots fired from inside resolve in the tick they were fired (all guns are hitscan; nothing is in flight to cancel).
 - **Feed:** `RegisterElimination` / `RPC_EliminationFeed` carry the cause (weapon, melee, zone). Circle announcements are derived locally from the replicated stage (`ZoneAnnouncer`), so they need no RPC and can't repeat.
-- `NetworkProtocol.Version` = **7**.
+- `NetworkProtocol.Version` = **7** at the end of Phase 7.
+
+## Phase 8: Nyx Hunt Protocol (code written, not yet run)
+- **Server-only:** `NetworkMatchController.Hunt` (`NyxHuntProtocol`) is created at FIGHT and dropped on reset. Each living player's server tick runs `NetworkPlayer.ServerEnvironmentPass`: zone exposure + hunt tracker → **one** `NetworkCombat.ApplyEnvironmentDamage(zone, camping)`. Positions come from the server's own simulation (the input stream carries no positions), so forged transforms are impossible.
+- **Replicated per player:** hunt state, warning level, inactivity start, exposure end, exposure count (5 small fields on `NetworkPlayer`). Every client draws the beacon from them; the local player's HUD derives its countdown.
+- **Feed:** `RPC_HuntAlert(eventId, player)`, one per exposure, deduplicated by event id.
+- **Disconnects:** `OnPlayerLeft` → `Hunt.MarkDisconnected`; the tracker is kept by player key, and tracking the same key again continues it with only a short penalty pause. Reconnecting into a running match isn't possible yet (late joins refused), so this path is unit-tested only.
+- `NetworkProtocol.Version` = **8**.

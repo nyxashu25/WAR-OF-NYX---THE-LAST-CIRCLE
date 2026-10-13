@@ -3,6 +3,7 @@ using UnityEngine;
 using WarOfNyx.App;
 using WarOfNyx.Combat;
 using WarOfNyx.Core.Combat;
+using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Gameplay;
 
@@ -49,7 +50,25 @@ namespace WarOfNyx.Networking
             _lifecycle = lifecycle;
             _session = session;
             _lifecycle.CountdownStarted += endsAt => NetStartTime = endsAt;
-            _lifecycle.ResetToLobby += () => NetStartTime = 0f;
+            _lifecycle.ResetToLobby += () =>
+            {
+                NetStartTime = 0f;
+                Hunt = null;
+            };
+            // A fresh Nyx Hunt Protocol per match; players are tracked from their first active tick.
+            _lifecycle.Activated += _ =>
+            {
+                var settings = App.AppServices.IsInitialized && App.AppServices.Config.hunt != null
+                    ? App.AppServices.Config.hunt
+                    : new HuntSettings();
+                string error = settings.Validate();
+                if (error != null)
+                {
+                    Debug.LogError($"[WarOfNyx][Hunt] Invalid hunt settings ({error}); using the spec defaults.");
+                    settings = new HuntSettings();
+                }
+                Hunt = new NyxHuntProtocol(settings);
+            };
             Publish();
         }
 
@@ -153,6 +172,41 @@ namespace WarOfNyx.Networking
             return Runner.TryGetPlayerObject(player, out var obj) && obj.TryGetComponent<NetworkPlayer>(out var p)
                 ? p.PlayerName
                 : $"Player {player.PlayerId}";
+        }
+
+        // ------------------------------------------------------------------ Nyx Hunt Protocol (Phase 8)
+
+        /// <summary>Server only: the camping trackers of the running match (null outside a match).</summary>
+        public NyxHuntProtocol Hunt { get; private set; }
+
+        [Networked] private int NetHuntEventId { get; set; }
+        private readonly EventDeduplicator _huntDedup = new EventDeduplicator();
+
+        /// <summary>Server only: a player has just been exposed (first or repeated exposure). One feed line per exposure.</summary>
+        public void AnnounceHuntAlert(PlayerRef player, int exposureCount)
+        {
+            if (!HasStateAuthority)
+                return;
+            NetHuntEventId++;
+            Debug.Log($"[WarOfNyx][Hunt] Player {player.PlayerId} exposed for camping (#{exposureCount}).");
+            RPC_HuntAlert(NetHuntEventId, player);
+        }
+
+        /// <summary>Server: a player left mid-match. Their camping timer is kept (reconnecting never resets it).</summary>
+        public void OnPlayerLeftMatch(PlayerRef player)
+        {
+            if (HasStateAuthority && Hunt != null)
+                Hunt.MarkDisconnected(player.PlayerId);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        public void RPC_HuntAlert(int eventId, PlayerRef player)
+        {
+            if (!_huntDedup.TryAccept(eventId) || Application.isBatchMode)
+                return;
+            var arena = OnlineArenaController.Instance;
+            if (arena != null && arena.Hud != null)
+                arena.Hud.AddFeed(HuntText.Alert(NameOf(player)), highlight: true);
         }
 
         // ------------------------------------------------------------------ rules shared by all peers

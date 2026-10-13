@@ -61,6 +61,10 @@ namespace WarOfNyx.App
                  "Dedicated servers can shorten every phase with -zoneSeconds for testing.")]
         public WarOfNyx.Core.Zone.ZoneSettings zone = new WarOfNyx.Core.Zone.ZoneSettings();
 
+        [Header("Nyx Hunt Protocol – anti-camping (Phase 8, server-side)")]
+        [Tooltip("Inactivity timings (20/25/30 s), meaningful movement (8 m net + 12 m path), exposure and the 2 HP/s penalty.")]
+        public WarOfNyx.Core.Hunt.HuntSettings hunt = new WarOfNyx.Core.Hunt.HuntSettings();
+
         public OfflineMatchSettings DefaultOfflineSettings =>
             new OfflineMatchSettings(defaultOfflineBotCount, defaultOfflineDifficulty);
 

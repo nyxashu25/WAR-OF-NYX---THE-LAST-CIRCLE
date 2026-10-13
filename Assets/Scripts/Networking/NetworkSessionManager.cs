@@ -482,6 +482,8 @@ namespace WarOfNyx.Networking
                 _avatars.Remove(player);
             }
             _playerRefs.Remove(player.PlayerId);
+            if (_matchController != null)
+                _matchController.OnPlayerLeftMatch(player); // camping timer kept for a reconnect
             _lifecycle.RemovePlayer(player.PlayerId, Now);
             Debug.Log($"[WarOfNyx][Match] Player {player.PlayerId} left ({_lifecycle.PlayerCount} remaining).");
         }

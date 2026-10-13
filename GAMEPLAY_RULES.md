@@ -107,6 +107,11 @@ Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · H
 - Grace period after spawn and after an approved reconnect. **Reconnecting never resets the timer.**
 - Zone and camping damage stack additively in one damage pass per tick. Neither can be applied twice in the same tick.
 - Death while camping counts as an environmental elimination with cause "Camping".
+- *Implemented (Phase 8):* `Core/Hunt/NyxHunt.cs` (`HuntSettings` in GameConfig, `HuntTracker`, `NyxHuntProtocol`, `EnvironmentDamage`, `HuntStatusAnnouncer`). Details:
+  - Sample steps shorter than 0.5 m add no path; steps faster than 14 m/s count for nothing **[T]**.
+  - Spawn grace: 5 s **[T]**. Reconnect grace: the penalty pauses for 5 s **[T]**, but the timer is never reset.
+  - RECOVERING lasts 2 s.
+  - When zone and camping damage both apply, the elimination cause is the larger contributor.
 
 ## 10. Health, medkits, armor (spec 15) [T]
 - HP 100. Small medkit 25 HP / 2 s · Standard 50 / 4 s · Advanced 75 / 6 s. Healing is channeled; sprinting, attacking or firing interrupts it. Health never goes above max.

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     Runs the engine-independent rules (Assets/Scripts/Core, assembly WarOfNyx.Core) and their
@@ -35,6 +35,7 @@
     <Compile Include="../../Assets/Tests/EditMode/CombatRulesTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/ItemsTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/ZoneTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/HuntTests.cs" LinkBase="Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,3 +46,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -8,6 +8,7 @@ using UnityEngine.UI;
 using WarOfNyx.App;
 using WarOfNyx.Characters;
 using WarOfNyx.Core.Events;
+using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Zone;
@@ -39,6 +40,11 @@ namespace WarOfNyx.Gameplay
         /// <summary>Nyx Circle HUD and minimap for the local player (null on the dedicated server).</summary>
         public ZoneHud Zone { get; private set; }
 
+        /// <summary>Nyx Hunt status and exposed-player indicators (null on the dedicated server).</summary>
+        public HuntHud HuntView { get; private set; }
+
+        private readonly HuntStatusAnnouncer _huntAnnouncer = new HuntStatusAnnouncer();
+        private bool _huntShown;
         private readonly ZoneAnnouncer _zoneAnnouncer = new ZoneAnnouncer();
         private string _pendingHeadline;
         private Color _pendingHeadlineColor;
@@ -92,6 +98,7 @@ namespace WarOfNyx.Gameplay
             Hud = CombatHud.Create(transform);
             Loot = LootPanel.Create(transform);
             Zone = ZoneHud.Create(transform);
+            HuntView = HuntHud.Create(transform);
             var area = ArenaSpawnArea.Current;
             if (area != null)
                 Zone.Minimap.BakeMap(area.transform.position, area.ZoneRadius * 1.15f);
@@ -187,6 +194,12 @@ namespace WarOfNyx.Gameplay
             if (!_zoneShown && Zone != null)
                 Zone.Hide();
             _zoneShown = false;
+            if (!_huntShown && HuntView != null)
+            {
+                HuntView.Hide();
+                Zone?.Minimap.SetHuntMarkers(null);
+            }
+            _huntShown = false;
 
             if (_stats.gameObject.activeSelf && _localMovement != null)
             {
@@ -239,6 +252,29 @@ namespace WarOfNyx.Gameplay
                 _mobile.SetFireBlocked(outside);
             Hud?.SetFirearmsBlocked(outside);
         }
+
+        /// <summary>
+        /// Called every frame by the local networked player (spec 13): own camping status and notices,
+        /// plus every exposed player for the minimap and direction indicators.
+        /// </summary>
+        public void ShowHunt(in HuntStatus status, bool alive, float now, Vector3 playerPosition, IReadOnlyList<HuntTarget> exposed)
+        {
+            if (IsHeadless || HuntView == null)
+                return;
+            _huntShown = true;
+            var settings = AppServices.IsInitialized && AppServices.Config.hunt != null ? AppServices.Config.hunt : DefaultHunt;
+            HuntView.Apply(status, alive, now, settings, playerPosition, exposed);
+            Zone?.Minimap.SetHuntMarkers(exposed);
+
+            string headline = _huntAnnouncer.Update(status, alive);
+            if (headline != null && Zone != null)
+            {
+                var color = headline == HuntText.Cleared ? NyxPalette.ElectricCyan : NyxPalette.Crimson;
+                Zone.ShowHeadline(headline, color);
+            }
+        }
+
+        private static readonly HuntSettings DefaultHunt = new HuntSettings();
 
         private static bool ReduceShake => AppServices.IsInitialized && AppServices.UserSettings.Data.reduceCameraShake;
 

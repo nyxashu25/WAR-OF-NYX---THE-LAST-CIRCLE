@@ -54,3 +54,6 @@
 | 50 | Zone damage arrives in 0.5 s pulses (1 HP/s shows as −0.5 twice a second). | Slightly steppy health bar. | Tunable (`damageIntervalSeconds`). |
 | 51 | The barrier, hexagons, particles and lightning are code-generated **placeholders** (additive material, procedural texture). The minimap is baked from collider raycasts. | Basic look. | Phase 10 art: shader-based barrier, painted minimap. |
 | 52 | After the circle closes nobody can be inside, so everyone takes 6 HP/s until one remains. Winner selection (and simultaneous deaths) are Phase 9. | Matches can't end cleanly yet. | Phase 9. |
+| 54 | Hunt trackers are keyed by the network player id. Reconnecting into a running match isn't supported yet (late joins are refused), so the keep-timer-on-reconnect path is only unit-tested. | None until reconnect exists. | Key by account id when reconnect is added (Phase 9 / 13). |
+| 55 | Movement thresholds (8 m net / 12 m path in 10 s) are spec defaults on the 120 m test arena. | May feel strict or loose on the real map. | Tune with NYX ISLAND (Phase 13). |
+| 56 | The camping beacon is a placeholder (line renderers). It isn't occluded and has no world-space name label; direction indicators show name and distance instead. | Basic look. | Phase 10 VFX. |

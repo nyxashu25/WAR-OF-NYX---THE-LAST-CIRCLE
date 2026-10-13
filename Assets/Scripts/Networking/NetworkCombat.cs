@@ -3,6 +3,7 @@ using Fusion;
 using UnityEngine;
 using WarOfNyx.Combat;
 using WarOfNyx.Core.Combat;
+using WarOfNyx.Core.Hunt;
 using WarOfNyx.Core.Items;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Zone;
@@ -382,28 +383,41 @@ namespace WarOfNyx.Networking
         }
 
         /// <summary>
-        /// Server only, once per tick while the circle is active: zone damage for time spent outside
-        /// (spec 12). Pulses of damage-per-second × interval; ignores armor; stops on re-entry.
-        /// Camping damage (Phase 8) joins this same per-tick pass.
+        /// Server only, once per tick while the circle is active: zone damage earned this tick for time
+        /// spent outside (spec 12). Pulses of damage-per-second × interval; stops on re-entry.
+        /// Apply it through <see cref="ApplyEnvironmentDamage"/> together with camping damage.
         /// </summary>
-        public void ApplyZoneExposure(bool inside, float damagePerSecond, float dt, float interval)
+        public float StepZoneExposure(bool inside, float damagePerSecond, float dt, float interval)
         {
             if (!HasStateAuthority || !Alive)
-                return;
-
+                return 0f;
             var exposure = new ZoneExposure { Pending = ZonePending, Outside = ZoneOutside };
             var step = ZoneDamage.Step(ref exposure, inside, damagePerSecond, dt, interval);
             ZonePending = exposure.Pending;
             ZoneOutside = exposure.Outside;
-            if (step.Damage <= 0f)
-                return;
-
-            var result = ReceiveDamage(step.Damage, DamageKind.Zone, PlayerRef.None, WeaponCatalog.NoWeapon, transform.position);
-            if (result.Killed && NetworkMatchController.Instance != null)
-                NetworkMatchController.Instance.RegisterElimination(Object.InputAuthority, PlayerRef.None, WeaponCatalog.NoWeapon, false, DamageKind.Zone);
+            return step.Damage;
         }
 
-        /// <summary>Server only. The single entry point for all damage (weapons, melee, the Nyx Circle; camping in Phase 8).</summary>
+        /// <summary>
+        /// Server only: the single environmental damage pass of a tick (spec 13). Zone and camping
+        /// damage stack additively in ONE application, so neither can hit twice in the same tick.
+        /// Both ignore armor. An elimination is attributed to the larger contributor.
+        /// </summary>
+        /// <returns>True when this eliminated the player.</returns>
+        public bool ApplyEnvironmentDamage(float zoneDamage, float campingDamage)
+        {
+            float total = EnvironmentDamage.Total(zoneDamage, campingDamage);
+            if (!HasStateAuthority || !Alive || total <= 0f)
+                return false;
+
+            var cause = EnvironmentDamage.Cause(zoneDamage, campingDamage);
+            var result = ReceiveDamage(total, cause, PlayerRef.None, WeaponCatalog.NoWeapon, transform.position);
+            if (result.Killed && NetworkMatchController.Instance != null)
+                NetworkMatchController.Instance.RegisterElimination(Object.InputAuthority, PlayerRef.None, WeaponCatalog.NoWeapon, false, cause);
+            return result.Killed;
+        }
+
+        /// <summary>Server only. The single entry point for all damage (weapons, melee, the Nyx Circle, camping).</summary>
         public DamageResult ReceiveDamage(float amount, DamageKind kind, PlayerRef attacker, short weaponId, Vector3 sourcePosition)
         {
             if (!HasStateAuthority)
@@ -682,6 +696,8 @@ namespace WarOfNyx.Networking
 
             if (!Alive && (DamageKind)EliminationCause == DamageKind.Zone)
                 hud.ShowEliminated(null, null, "Consumed by the Nyx Circle.");
+            else if (!Alive && (DamageKind)EliminationCause == DamageKind.Camping)
+                hud.ShowEliminated(null, null, "Taken by the Nyx Hunt (camping).");
             else if (!Alive)
                 hud.ShowEliminated(NameOf(EliminatedBy), WeaponRegistry.DisplayName(EliminatedByWeapon));
             else

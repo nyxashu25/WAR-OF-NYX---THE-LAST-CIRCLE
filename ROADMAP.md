@@ -11,7 +11,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 5 | Shooting & melee (server-validated, lag-compensated) | 4 | L | **Code written; combat rules 47 tests pass under .NET; Unity/Fusion side not yet run** |
 | 6 | Loadouts, inventory, medkits, loot capsules | 5 | M | **Code written; item rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
 | 7 | Shrinking Nyx Circle, firearm lock, instability, zone damage | 5 | M | **Code written; circle rules 29 tests pass under .NET; Unity/Fusion side not yet run** |
-| 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | Not started |
+| 8 | Anti-camping (Nyx Hunt Protocol) | 7 | M | **Code written; hunt rules 19 tests pass under .NET; Unity/Fusion side not yet run** |
 | 9 | Complete match lifecycle: feed, spectate, victory, cleanup | 6, 7, 8 | M | Not started |
 | **9G** | **Offline Ghost Protocol: local simulation + AI bots** (spec 38.18) | 5–9 | XL | Not started (defaults already configured: NIGHTMARE, 23 bots) |
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | Not started |
@@ -123,3 +123,15 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] HUD: minimap (map, player, current + next circle, arrow to safety), phase status and timer, RETURN TO SAFE ZONE warning with distance, announcements (shrinking, final in 10 s, final circle), disabled FIRE button
 - [x] Test helper: `-zoneSeconds 20` and a "fast circle" local server menu item
 - [ ] **Run the circle test in TESTING.md** ← needs the project owner
+
+## Phase 8 checklist
+- [x] Authoritative position sampling once per second (server), timestamped steps in a 10 s recovery window
+- [x] Meaningful movement = ≥ 8 m net displacement AND ≥ 12 m path in the window; micro-steps (< 0.5 m) don't add path; implausible jumps (> 14 m/s) count for nothing
+- [x] Inactivity timer only resets on meaningful movement; rotating, crouching, firing, swapping, walking into walls, jiggling and circling in a small area never reset it (tested)
+- [x] State machine NORMAL → CAMPING_WARNING (20 s "WARNING: KEEP MOVING", 25 s "NYX IS WATCHING YOU") → EXPOSED (30 s) → CAMPING_PENALTY → RECOVERING ("HUNT STATUS CLEARED") → NORMAL
+- [x] Exposure: 10 s giant crimson/purple beacon (all clients), minimap marker for everyone, direction indicators with distance, feed line "HUNT ALERT: <name> EXPOSED FOR CAMPING" (one per exposure, event-id deduplicated)
+- [x] Penalty 2 HP/s from 30 s until meaningful movement, ignores armor; repeated exposure every 20 s while still camping
+- [x] Zone + camping damage in ONE pass per server tick (`ApplyEnvironmentDamage`), elimination cause = larger contributor; "taken by the Nyx Hunt" feed line
+- [x] Spawn grace (5 s); trackers survive a disconnect so a reconnect never resets the timer (only a 5 s penalty pause); death removes the beacon; multiple campers tracked independently
+- [ ] **Run the camping test in TESTING.md** ← needs the project owner (Fusion + 2 clients)
+- [ ] Reconnecting into a running match is not possible yet (late joins are refused); the tracker side is ready (KNOWN_ISSUES 54)
