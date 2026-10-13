@@ -78,3 +78,5 @@
 | 74 | `-region` is parsed (and settable via WON_REGION) but Fusion's region is still taken from PhotonAppSettings. | Servers join the "best" region. | Apply `FixedRegion` in `StartGameArgs` once tested with the SDK. |
 | 75 | The health endpoint is a minimal HTTP/1.1 responder (one request per connection, no TLS). Expose it only inside the hosting network. | Fine for orchestrator checks. | — |
 | 76 | The Edgegap template's field names are from documentation known at the time of writing and are unverified against a live account. | Upload may need small edits. | Check the current Edgegap docs. |
+| 77 | The offline benchmark measures CPU for AI + rules only (batch mode, no rendering), on a desktop CPU. | Phone FPS unknown. | Device sessions with the CSV recorder (PERFORMANCE.md §2). |
+| 78 | The settings screen now has 9 rows; on very short landscape screens the bottom text may be tight. | Possible overlap on small phones. | Check on devices; make the settings list scrollable if needed. |

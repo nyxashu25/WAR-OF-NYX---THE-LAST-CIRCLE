@@ -382,6 +382,10 @@ namespace WarOfNyx.UI.MainMenu
             });
             AddToggle(toggleRow, "GYRO AIM", () => data.gyroAim, v => data.gyroAim = v);
 
+            var perfRow = UiFactory.CreateRow("PerformanceRow", root, 80f, 14f);
+            AddToggle(perfRow, "SHOW FPS", () => data.showPerformance, v => data.showPerformance = v);
+            AddToggle(perfRow, "RECORD PERFORMANCE (CSV)", () => data.recordPerformance, v => data.recordPerformance = v);
+
             // Cosmetic character (spec 17): same hitboxes, speed and health for everyone.
             var characterRow = UiFactory.CreateRow("CharacterRow", root, 80f, 14f);
             string CharacterLabel()

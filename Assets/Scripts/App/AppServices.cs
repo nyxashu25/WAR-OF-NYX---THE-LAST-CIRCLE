@@ -83,6 +83,7 @@ namespace WarOfNyx.App
             Connectivity.Initialize(Events, Config);
 
             IsInitialized = true;
+            UI.Hud.PerformanceOverlay.EnsureCreated(); // hidden until F4 or Settings → SHOW FPS
             Debug.Log($"[WarOfNyx] Services ready. Device: {DeviceCapabilityService.Describe()} | " +
                       $"Graphics: {Graphics.CurrentTier} | Max offline bots: {DeviceCapabilityService.MaxOfflineBots}");
         }

@@ -17,7 +17,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 10 | Anime visual upgrade (cel shading, characters, VFX, audio) | 9, 9G | XL | **Code-built visual identity done and checked in Unity (rendered screenshots, island match). Final art assets pending** |
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); APK not built (Android module missing); device tests pending** |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | **Files and server code done (health endpoint verified in Unity); deployment pending Fusion + Docker + Edgegap account** |
-| 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | Not started |
+| 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | **Tools, benchmarks and fuzz tests done (PERFORMANCE.md); device + network measurements pending** |
 | 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | Not started |
 | post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
 
@@ -206,3 +206,16 @@ Spec 38.18 says to implement the offline mode after shared movement, combat, inv
 - [x] 8 Logs and telemetry: structured JSON lines (`[WarOfNyx][Telemetry]`)
 - [x] 9 Match shutdown and resource cleanup: `-maxMatches`, `-idleShutdown`, in-match cleanup (Phase 9)
 - [x] 10 Deployment documentation: SERVER_DEPLOYMENT.md stages 2–3
+
+## Phase 13 checklist
+- [x] 1 Profile CPU: offline AI + rules benchmark (5/11/23 bots) in PERFORMANCE.md; FPS / frame-time overlay + CSV recorder for devices
+- [ ] 2 Profile GPU ← device (Profiler / GPU inspector)
+- [~] 3 Profile memory: overlay + CSV columns; device numbers pending
+- [ ] 4 Network bandwidth ← Fusion SDK statistics
+- [~] 5 2/4/12/24 players: offline 5/11/23 bots measured; online counts need Fusion + clients
+- [ ] 6–7 Latency / packet loss ← Fusion network simulation (procedure in PERFORMANCE.md)
+- [x] 8 Reconnects: behaviour documented (refused by design, state kept server-side)
+- [x] 9 Collision and combat exploits: abuse matrix + fuzz tests (50 000 hostile inputs, no failure)
+- [ ] 10 Android lifecycle ← device checklist in PERFORMANCE.md
+- [ ] 11 Crashes and desync ← found none in the automated runs; real sessions pending
+- [x] 12 Document performance measurements: PERFORMANCE.md (only measured values)

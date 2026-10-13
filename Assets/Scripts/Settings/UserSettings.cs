@@ -34,6 +34,10 @@ namespace WarOfNyx.Settings
         public bool reduceCameraShake;
         public bool reduceFlashing;
 
+        /// <summary>Phase 13: FPS / frame-time / memory overlay, and per-second CSV recording for device tests.</summary>
+        public bool showPerformance;
+        public bool recordPerformance;
+
         /// <summary>Touch control layout: size, opacity, moved buttons (Phase 11).</summary>
         public WarOfNyx.Core.Controls.TouchLayout touchLayout = new WarOfNyx.Core.Controls.TouchLayout();
 
