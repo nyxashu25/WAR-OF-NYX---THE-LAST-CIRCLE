@@ -34,10 +34,11 @@ URP 17.3.0 · Input System 1.14.2 · AI Navigation 2.0.9 · Test Framework 1.5.1
 7. Namespaces avoid `Android` / `Input` / `Editor` to prevent hiding Unity types.
 
 ## Verified tests
-None.
+- 2026-10-13: `dotnet test Tools/CoreTests` → **39/39 passed** (WarOfNyx.Core compiled as C# 9 on .NET 10).
+- 2026-10-13: all 29 scripts under `Assets/` parse as C# 9 with **0 syntax errors** (syntax only).
 
 ## Unverified
-Everything in "Implemented".
+Everything that depends on UnityEngine/UnityEditor: bootstrap, services, UI, input actions, setup tool, `ProjectFoundationTests`, PlayMode smoke test.
 
 ## External dependencies still required
 - Unity 6.3 LTS install (with Android + Linux Dedicated Server modules)

@@ -1,11 +1,20 @@
 # Testing
 
 ## Verified results
-**None yet.** No test has been run, because no Unity Editor was available when Phase 1 was written. Record real results here, with date and Unity version, after the first run.
+Record every real run here, with the date and toolchain.
 
-| Date | Unity | Suite | Result | Notes |
+| Date | Toolchain | Suite | Result | Notes |
 |---|---|---|---|---|
-| — | — | — | — | Not run |
+| 2026-10-13 | .NET SDK 10.0.401, C# 9, NUnit 3.14 | `Tools/CoreTests` (WarOfNyx.Core + GameStateMachine, GameEventBus, OfflineSettings/BotDifficulty tests) | **39 passed, 0 failed** | Run outside Unity; warnings treated as errors |
+| 2026-10-13 | Roslyn 4.12 syntax parse, C# 9 | All 29 `.cs` files under `Assets/` | **0 syntax errors** | Parse only. Unity API usage (types, members) is **not** checked |
+| — | Unity 6.3 | EditMode (incl. `ProjectFoundationTests`) / PlayMode | **Not run** | Needs the Unity Editor |
+
+## Running the core rules tests without Unity
+Requires the .NET SDK (10.x):
+```bash
+dotnet test Tools/CoreTests
+```
+`Tools/CoreTests/CoreTests.csproj` links the files in `Assets/Scripts/Core` and the engine-independent test files. It compiles them with the same C# version as Unity (C# 9), so the code under test is the same code Unity builds.
 
 ## How to run
 **In the editor:** Window → General → **Test Runner** → *EditMode* → Run All, then *PlayMode* → Run All.

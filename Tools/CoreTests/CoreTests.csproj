@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs the engine-independent rules (Assets/Scripts/Core, assembly WarOfNyx.Core) and their
+    NUnit tests with plain .NET, without the Unity Editor. Source files are linked, not copied,
+    so this always tests the same code Unity compiles.
+
+    LangVersion is pinned to 9.0 to match Unity 6's C# compiler: anything that compiles here
+    but needs a newer C# version would break in Unity.
+
+    Tests that need UnityEngine (ProjectFoundationTests, PlayMode tests) only run in Unity's Test Runner.
+
+    Run:  dotnet test Tools/CoreTests
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>WarOfNyx.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Assets/Scripts/Core/**/*.cs" LinkBase="Core" />
+    <Compile Include="../../Assets/Tests/EditMode/GameStateMachineTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/GameEventBusTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/OfflineSettingsTests.cs" LinkBase="Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- NUnit 3.x: Unity's Test Framework uses the NUnit 3 Assert API (NUnit 4 moved it to ClassicAssert). -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+</Project>

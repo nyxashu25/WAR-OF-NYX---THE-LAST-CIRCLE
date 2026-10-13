@@ -11,7 +11,7 @@ An original anime-style third-person battle royale for **Android**, built with *
 | Current phase | **Phase 1 – Architecture & project initialization** (code written, not yet opened in Unity) |
 | Offline default | Ghost Protocol, **NIGHTMARE**, **23 bots** (automatically lowered on devices that can't run 23) |
 
-> **Honest status:** nothing here has been compiled or run yet. When this was written there was no Unity Editor on the machine. Gameplay (movement, combat, circle, bots, multiplayer) is **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> **Honest status:** the pure rules core (`WarOfNyx.Core`) compiles and passes 39/39 tests under .NET (`dotnet test Tools/CoreTests`). The Unity-side code has **not** been compiled in Unity yet. Gameplay (movement, combat, circle, bots, multiplayer) is **not implemented**. See [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ---
 
@@ -74,6 +74,7 @@ Assets/
     Networking/ Matchmaking/ Audio/ Backend/          (empty – later phases)
   Tests/EditMode, Tests/PlayMode, Tests/Multiplayer
   Art/ Audio/ Prefabs/ Scenes/ ScriptableObjects/ Settings/
+Tools/CoreTests/          .NET test runner for WarOfNyx.Core (no Unity needed)
 Packages/manifest.json
 ProjectSettings/ProjectVersion.txt
 ```

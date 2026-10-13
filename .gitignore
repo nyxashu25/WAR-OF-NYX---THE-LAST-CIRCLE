@@ -68,3 +68,9 @@ user.keystore
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# ---------------- .NET tooling outside Unity ----------------
+/Tools/**/bin/
+/Tools/**/obj/
+/Tools/**/TestResults/
+!/Tools/**/*.csproj

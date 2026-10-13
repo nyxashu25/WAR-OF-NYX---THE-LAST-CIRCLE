@@ -2,7 +2,7 @@
 
 | # | Issue | Impact | Plan |
 |---|---|---|---|
-| 1 | **Phase 1 code has never been compiled.** No Unity Editor or .NET SDK was installed on the machine where it was written. | There may be compile errors on first open. | Open in Unity 6.3, fix errors, record in TESTING.md. |
+| 1 | **Unity-dependent Phase 1 code has never been compiled.** The pure `WarOfNyx.Core` rules compile and pass their 39 tests under .NET 10 / C# 9, and every script parses as valid C# 9. Unity API usage (bootstrap, UI, editor setup tool, Unity-only tests) is unchecked. | There may be compile errors on first open in Unity. | Open in Unity 6.3, fix errors, record in TESTING.md. |
 | 2 | **No `.meta` files committed.** Unity generates them on first import. | GUIDs differ per machine until they are committed. | Commit them right after the first successful open. |
 | 3 | **`ProjectSettings/` is mostly absent.** Unity generates defaults, then the setup tool configures them. | Setup must be run once per fresh clone, until the generated settings are committed. | Commit ProjectSettings after setup. |
 | 4 | Package versions in `manifest.json` were chosen from registry data, not resolved by a real 6000.3 install. | Package Manager may bump or replace a version. | Accept Unity's suggestion and update DEPENDENCIES.md. |
