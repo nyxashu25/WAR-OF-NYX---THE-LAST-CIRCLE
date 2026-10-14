@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using WarOfNyx.Gameplay;
+using WarOfNyx.Gameplay.World;
 
 namespace WarOfNyx.EditorTools
 {
@@ -13,7 +14,10 @@ namespace WarOfNyx.EditorTools
     /// coastline, hills and plateaus, the seven named locations built from primitives (cel-shaded,
     /// neon accents), routes and scattered cover, an invisible sea boundary, the spawn area / first
     /// circle (radius 480 m), the offline match authority, and a NavMesh for bots.
-    /// Stage 3+ (stylized building assets, painted textures) replaces the primitives later.
+    /// Environment pass (v2): painted terrain with worn dirt paths and sandy coasts, instanced grass
+    /// and flower fields, ~1 500 procedural trees by biome (broadleaf, pine, cherry blossom, palm),
+    /// bushes (sight cover), faceted rocks, an animated sea, and the weather-driven sky.
+    /// Stage 3+ (artist-made buildings and models) replaces the primitives later.
     /// Everything is original geometry; nothing copies existing maps.
     /// </summary>
     public static class NyxIslandBuilder
@@ -48,24 +52,34 @@ namespace WarOfNyx.EditorTools
 
         private static readonly Vector2 ValleyCentre = new Vector2(0f, 310f); // Eclipse Valley: hills, no plateau
 
+        /// <summary>Raise when the generated map changes, so existing projects rebuild it on the next setup.</summary>
+        public const int BuildVersion = 2;
+        private const string VersionPath = TerrainFolder + "/NyxIsland.version.txt";
+
         private static Dictionary<string, Material> _materials;
         private static System.Random _random;
+        private static EnvironmentArtBuilder.Library _art;
+
+        private static bool UpToDate =>
+            File.Exists(ScenePath) && File.Exists(VersionPath) && File.ReadAllText(VersionPath).Trim() == BuildVersion.ToString();
 
         public static void Build(bool overwrite)
         {
-            if (!overwrite && File.Exists(ScenePath))
+            if (!overwrite && UpToDate)
                 return;
 
             ProjectSetupWizard.EnsureFolder(TerrainFolder);
             ProjectSetupWizard.EnsureFolder(MaterialFolder);
             _random = new System.Random(2026);
             CreateMaterials();
+            _art = EnvironmentArtBuilder.Build();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var light = new GameObject("Directional Light").AddComponent<Light>();
             light.type = LightType.Directional;
             light.shadows = LightShadows.Soft;
-            light.transform.rotation = Quaternion.Euler(42f, -35f, 0f);
+            light.transform.rotation = Quaternion.Euler(24f, -35f, 0f);
+            RenderSettings.sun = light;
 
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
             var cam = camGo.AddComponent<Camera>();
@@ -90,6 +104,13 @@ namespace WarOfNyx.EditorTools
             foreach (var t in world.GetComponentsInChildren<Transform>())
                 GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic);
 
+            // Vegetation is NOT static-batched: thousands of copies of a few meshes would multiply memory.
+            // The SRP batcher draws them cheaply, and LOD groups cull them.
+            ScatterVegetation(new GameObject("Vegetation").transform);
+            var petals = new GameObject("Cherry petals (ambient)");
+            petals.transform.position = new Vector3(PoiNamed("Crimson Temple").Centre.x, PlateauHeight, PoiNamed("Crimson Temple").Centre.y);
+            petals.AddComponent<PetalSource>();
+
             var area = new GameObject("SpawnArea").AddComponent<ArenaSpawnArea>();
             area.transform.position = new Vector3(0f, PlateauHeight, 0f);
             // Reachability starts on the open plaza south of the reactor (the centre itself is the reactor).
@@ -111,6 +132,7 @@ namespace WarOfNyx.EditorTools
 
             BakeNavMesh();
             EditorSceneManager.SaveScene(scene, ScenePath);
+            File.WriteAllText(VersionPath, BuildVersion.ToString());
             AddToBuildSettings();
             AssetDatabase.SaveAssets();
             Debug.Log("[WarOfNyx] NYX ISLAND built: " + ScenePath);
@@ -118,12 +140,21 @@ namespace WarOfNyx.EditorTools
 
         // ------------------------------------------------------------------ terrain
 
+        /// <summary>Radius of the coastline in the direction of x/z.</summary>
+        private static float CoastRadius(float x, float z)
+        {
+            float angle = Mathf.Atan2(z, x);
+            return 585f + 25f * Mathf.Sin(angle * 3f + 1.3f) + 15f * Mathf.Sin(angle * 7f);
+        }
+
+        /// <summary>Metres inland from the coastline (negative = out at sea).</summary>
+        private static float ShoreDistance(float x, float z) => CoastRadius(x, z) - Mathf.Sqrt(x * x + z * z);
+
         /// <summary>Island height (metres, world) at x/z: coast, gentle noise, Eclipse Valley hills, flat POI plateaus.</summary>
         public static float Height(float x, float z)
         {
             float d = Mathf.Sqrt(x * x + z * z);
-            float angle = Mathf.Atan2(z, x);
-            float edge = 585f + 25f * Mathf.Sin(angle * 3f + 1.3f) + 15f * Mathf.Sin(angle * 7f);
+            float edge = CoastRadius(x, z);
             float land = Smooth(edge + 15f, edge - 25f, d);
             float h = Mathf.Lerp(-6f, PlateauHeight, land);
             h += land * (1.2f * Mathf.Sin(x * 0.021f + 0.7f) * Mathf.Cos(z * 0.017f) + 0.8f * Mathf.Sin(x * 0.05f) * Mathf.Sin(z * 0.043f));
@@ -161,13 +192,10 @@ namespace WarOfNyx.EditorTools
             }
             data.SetHeights(0, 0, heights);
 
-            var grass = Layer("Island_Grass", new Color(0.24f, 0.5f, 0.42f));
-            var sand = Layer("Island_Sand", new Color(0.78f, 0.66f, 0.52f));
-            var rock = Layer("Island_Rock", new Color(0.36f, 0.31f, 0.44f));
-            var plaza = Layer("Island_Plaza", new Color(0.3f, 0.28f, 0.38f));
-            data.terrainLayers = new[] { grass, sand, rock, plaza };
+            data.terrainLayers = EnvironmentArtBuilder.TerrainLayers();
 
-            data.alphamapResolution = 256;
+            // Splat map at ~1.3 m per texel: fine enough for 4 m wide worn paths.
+            data.alphamapResolution = 1024;
             int ar = data.alphamapResolution;
             var maps = new float[ar, ar, 4];
             for (int zi = 0; zi < ar; zi++)
@@ -175,23 +203,14 @@ namespace WarOfNyx.EditorTools
             {
                 float nx = xi / (ar - 1f), nz = zi / (ar - 1f);
                 float x = -Size * 0.5f + nx * Size, z = -Size * 0.5f + nz * Size;
-                float h = Height(x, z);
-                float steep = data.GetSteepness(nx, nz);
-                float w0 = 1f, w1 = 0f, w2 = 0f, w3 = 0f;
-                if (h < WaterLevel + 1.5f) { w0 = 0f; w1 = 1f; }
-                else if (steep > 22f) { w0 = 0f; w2 = 1f; }
-                foreach (var poi in Pois)
-                    if (poi.Name != "Shadow Forest" && Vector2.Distance(new Vector2(x, z), poi.Centre) < poi.Radius * 0.9f)
-                    {
-                        w0 = w1 = w2 = 0f;
-                        w3 = 1f;
-                    }
-                maps[zi, xi, 0] = w0;
-                maps[zi, xi, 1] = w1;
-                maps[zi, xi, 2] = w2;
-                maps[zi, xi, 3] = w3;
+                var w = Surface(x, z, data.GetSteepness(nx, nz));
+                maps[zi, xi, 0] = w.x;
+                maps[zi, xi, 1] = w.y;
+                maps[zi, xi, 2] = w.z;
+                maps[zi, xi, 3] = w.w;
             }
             data.SetAlphamaps(0, 0, maps);
+            PaintDetails(data);
 
             AssetDatabase.DeleteAsset(TerrainFolder + "/NyxIsland_Terrain.asset");
             AssetDatabase.CreateAsset(data, TerrainFolder + "/NyxIsland_Terrain.asset");
@@ -210,29 +229,11 @@ namespace WarOfNyx.EditorTools
             }
             terrain.basemapDistance = 600f;
             terrain.heightmapPixelError = 8f;
+            terrain.drawInstanced = true;
+            terrain.detailObjectDistance = 45f;
+            terrain.detailObjectDensity = 0.55f;
+            terrainGo.AddComponent<WarOfNyx.Gameplay.World.TerrainDetailQuality>();
             GameObjectUtility.SetStaticEditorFlags(terrainGo, StaticEditorFlags.BatchingStatic);
-        }
-
-        private static TerrainLayer Layer(string name, Color color)
-        {
-            string texPath = $"{TerrainFolder}/{name}_Tex.asset";
-            string layerPath = $"{TerrainFolder}/{name}.terrainlayer";
-            var texture = new Texture2D(16, 16, TextureFormat.RGBA32, true) { name = name };
-            var pixels = new Color[256];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float n = 0.92f + 0.16f * (float)_random.NextDouble(); // painterly speckle
-                pixels[i] = new Color(color.r * n, color.g * n, color.b * n, 0.05f); // alpha = smoothness in URP terrain: matte
-            }
-            texture.SetPixels(pixels);
-            texture.Apply(true);
-            AssetDatabase.DeleteAsset(texPath);
-            AssetDatabase.CreateAsset(texture, texPath);
-
-            var layer = new TerrainLayer { diffuseTexture = texture, tileSize = new Vector2(6f, 6f), name = name, smoothness = 0f, metallic = 0f };
-            AssetDatabase.DeleteAsset(layerPath);
-            AssetDatabase.CreateAsset(layer, layerPath);
-            return layer;
         }
 
         private static void CreateSea()
@@ -243,7 +244,7 @@ namespace WarOfNyx.EditorTools
             sea.transform.position = new Vector3(0f, WaterLevel, 0f);
             sea.transform.localScale = new Vector3(400f, 1f, 400f);
             sea.layer = 4; // Water
-            sea.GetComponent<Renderer>().sharedMaterial = _materials["Water"];
+            sea.GetComponent<Renderer>().sharedMaterial = _art.Water != null ? _art.Water : _materials["Water"];
 
             // Invisible sea wall: nobody walks off the island (the circle never extends beyond it).
             var wall = new GameObject("Sea Boundary (invisible)").transform;
@@ -343,29 +344,26 @@ namespace WarOfNyx.EditorTools
             }
         }
 
-        /// <summary>Shadow Forest: stylized trees, rocks and natural cover along winding paths.</summary>
+        /// <summary>
+        /// Shadow Forest: its dense trees, bushes and rocks are placed by <see cref="ScatterVegetation"/>
+        /// (violet-tinted canopies, a winding lane kept open). Here: a few fallen-tree barricades as hard cover.
+        /// </summary>
         private static void BuildForest(Transform g)
         {
-            for (int i = 0; i < 140; i++)
+            for (int i = 0; i < 10; i++)
             {
-                float a = (float)(_random.NextDouble() * Mathf.PI * 2f);
-                float r = 105f * Mathf.Sqrt((float)_random.NextDouble());
-                var p = new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
-                // Keep a winding path open (sine-shaped lane through the forest).
-                if (Mathf.Abs(p.z - 25f * Mathf.Sin(p.x * 0.04f)) < 4f)
+                float a = i * 0.63f * Mathf.PI;
+                float r = 30f + (i % 4) * 18f;
+                var p = new Vector3(Mathf.Cos(a) * r, 0.45f, Mathf.Sin(a) * r);
+                if (InForestLane(p.x, p.z))
                     continue;
-                float trunk = 5f + (float)_random.NextDouble() * 4f;
-                Prim(PrimitiveType.Cylinder, "Trunk", g, p + Vector3.up * trunk * 0.5f, new Vector3(0.9f, trunk * 0.5f, 0.9f), "Wood");
-                Deco(PrimitiveType.Sphere, "Canopy", g, p + Vector3.up * (trunk + 2f), new Vector3(6f, 5f, 6f), "Foliage");
-            }
-            for (int i = 0; i < 40; i++)
-            {
-                float a = (float)(_random.NextDouble() * Mathf.PI * 2f);
-                float r = 100f * Mathf.Sqrt((float)_random.NextDouble());
-                float s = 1.5f + (float)_random.NextDouble() * 2.5f;
-                Prim(PrimitiveType.Sphere, "Rock", g, new Vector3(Mathf.Cos(a) * r, s * 0.35f, Mathf.Sin(a) * r), new Vector3(s * 1.4f, s, s * 1.2f), "Rock");
+                var log = Prim(PrimitiveType.Cylinder, "FallenLog", g, p, new Vector3(0.9f, 3f, 0.9f), "Wood", new Vector3(0f, a * Mathf.Rad2Deg, 90f));
+                log.name = "FallenLog";
             }
         }
+
+        /// <summary>The winding lane through the Shadow Forest (forest-local coordinates).</summary>
+        private static bool InForestLane(float localX, float localZ) => Mathf.Abs(localZ - 25f * Mathf.Sin(localX * 0.04f)) < 4.5f;
 
         /// <summary>Iron Fortress: perimeter walls with gaps, watchtowers with ramps, barriers, a central bunker.</summary>
         private static void BuildFortress(Transform g)
@@ -439,7 +437,7 @@ namespace WarOfNyx.EditorTools
                 float r = 150f * Mathf.Sqrt((float)_random.NextDouble());
                 float x = ValleyCentre.x + Mathf.Cos(a) * r, z = ValleyCentre.y + Mathf.Sin(a) * r;
                 float s = 2f + (float)_random.NextDouble() * 3f;
-                Prim(PrimitiveType.Sphere, "Rock", g, new Vector3(x, Height(x, z) + s * 0.25f, z), new Vector3(s * 1.5f, s, s * 1.3f), "Rock", default, true);
+                PlaceRock(g, x, z, s * 1.4f, (float)_random.NextDouble() * 360f);
             }
             for (int i = 0; i < 6; i++)
             {
@@ -469,6 +467,296 @@ namespace WarOfNyx.EditorTools
                         new Vector3(0f, yaw + 90f, 0f), true);
                 }
             }
+        }
+
+        // ------------------------------------------------------------------ surface, grass, vegetation
+
+        private static Poi PoiNamed(string name)
+        {
+            foreach (var poi in Pois)
+                if (poi.Name == name)
+                    return poi;
+            throw new System.ArgumentException(name);
+        }
+
+        /// <summary>Route segments between nearby locations (the same pairs <see cref="BuildRoutes"/> lines with cover).</summary>
+        private static List<(Vector2 a, Vector2 b)> Routes()
+        {
+            var routes = new List<(Vector2 a, Vector2 b)>();
+            for (int i = 0; i < Pois.Length; i++)
+            for (int j = i + 1; j < Pois.Length; j++)
+                if (Vector2.Distance(Pois[i].Centre, Pois[j].Centre) <= 520f)
+                    routes.Add((Pois[i].Centre, Pois[j].Centre));
+            return routes;
+        }
+
+        private static List<(Vector2 a, Vector2 b)> _routes;
+
+        /// <summary>Distance to the nearest route, with a gentle meander so paths don't look ruler-straight.</summary>
+        private static float RouteDistance(float x, float z)
+        {
+            _routes ??= Routes();
+            var p = new Vector2(x, z);
+            float best = float.MaxValue;
+            foreach (var (a, b) in _routes)
+            {
+                var ab = b - a;
+                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                var side = new Vector2(-ab.y, ab.x).normalized;
+                var q = a + ab * t + side * (Mathf.Sin(t * Mathf.PI * 5f) * 7f * Mathf.Sin(t * Mathf.PI));
+                best = Mathf.Min(best, Vector2.Distance(p, q));
+            }
+            return best;
+        }
+
+        /// <summary>Inside a built location (everything except the Shadow Forest), grown or shrunk by <paramref name="margin"/>.</summary>
+        private static bool InBuiltPoi(float x, float z, float margin)
+        {
+            foreach (var poi in Pois)
+                if (poi.Name != "Shadow Forest" && Vector2.Distance(new Vector2(x, z), poi.Centre) < poi.Radius + margin)
+                    return true;
+            return false;
+        }
+
+        /// <summary>Terrain layer weights (grass, dirt / sand, rock, plaza stone) at a point.</summary>
+        private static Vector4 Surface(float x, float z, float steepness)
+        {
+            foreach (var poi in Pois)
+                if (poi.Name != "Shadow Forest" && Vector2.Distance(new Vector2(x, z), poi.Centre) < poi.Radius * 0.9f)
+                    return new Vector4(0f, 0f, 0f, 1f);
+
+            float h = Height(x, z);
+            float shore = ShoreDistance(x, z);
+            if (shore < 26f && h < WaterLevel + 2.6f)
+                return new Vector4(0f, 1f, 0f, 0f); // beach
+            if (steepness > 24f)
+                return new Vector4(0f, 0.15f, 0.85f, 0f);
+
+            // Worn paths along the routes (soft edges), dirt patches in meadows, more on the forest floor.
+            float path = Smooth(4.5f, 1.8f, RouteDistance(x, z));
+            var forest = PoiNamed("Shadow Forest");
+            bool inForest = Vector2.Distance(new Vector2(x, z), forest.Centre) < forest.Radius;
+            float patch = Mathf.Clamp01((Mathf.PerlinNoise(x * 0.035f + 11f, z * 0.035f + 7f) - (inForest ? 0.45f : 0.68f)) * 3f);
+            float beach = Smooth(40f, 24f, shore);
+            float dirt = Mathf.Clamp01(Mathf.Max(path, Mathf.Max(patch * 0.7f, beach)));
+            return new Vector4(1f - dirt, dirt, 0f, 0f);
+        }
+
+        /// <summary>Grass and flowers as instanced terrain details (density and distance follow the quality tier).</summary>
+        private static void PaintDetails(TerrainData data)
+        {
+            var prototypes = new List<DetailPrototype>();
+            foreach (var prefab in _art.Grass)
+                prototypes.Add(DetailFor(prefab, 0.85f, 1.1f));
+            foreach (var prefab in _art.Flowers)
+                prototypes.Add(DetailFor(prefab, 0.85f, 1.05f));
+            data.detailPrototypes = prototypes.ToArray();
+
+            const int resolution = 1024;
+            // Values below are INSTANCES per cell. New terrains default to coverage mode, where small values
+            // (out of 255) draw almost nothing.
+            data.SetDetailScatterMode(DetailScatterMode.InstanceCountMode);
+            data.SetDetailResolution(resolution, 32);
+            var layers = new int[prototypes.Count][,];
+            for (int i = 0; i < layers.Length; i++)
+                layers[i] = new int[resolution, resolution];
+
+            var temple = PoiNamed("Crimson Temple");
+            var forest = PoiNamed("Shadow Forest");
+            var random = new System.Random(4242);
+            int grassKinds = _art.Grass.Count;
+            for (int zi = 0; zi < resolution; zi++)
+            for (int xi = 0; xi < resolution; xi++)
+            {
+                float x = -Size * 0.5f + (xi + 0.5f) / resolution * Size;
+                float z = -Size * 0.5f + (zi + 0.5f) / resolution * Size;
+                float h = Height(x, z);
+                if (h < WaterLevel + 0.6f || InBuiltPoi(x, z, -5f))
+                    continue;
+                var surface = Surface(x, z, 0f);
+                if (surface.x < 0.55f)
+                    continue;
+                bool inForest = Vector2.Distance(new Vector2(x, z), forest.Centre) < forest.Radius;
+                float lush = Mathf.PerlinNoise(x * 0.02f + 3f, z * 0.02f + 5f);
+                int count = Mathf.RoundToInt((inForest ? 1.5f : 2.5f + lush * 2.5f) * surface.x);
+                for (int c = 0; c < count; c++)
+                    layers[random.Next(grassKinds)][zi, xi]++;
+
+                // Flower patches; pink ones around the temple.
+                float bloom = Mathf.PerlinNoise(x * 0.05f + 21f, z * 0.05f + 17f);
+                bool nearTemple = Vector2.Distance(new Vector2(x, z), temple.Centre) < temple.Radius + 90f;
+                if (bloom > (nearTemple ? 0.55f : 0.72f) && random.NextDouble() < 0.6)
+                {
+                    int kind = nearTemple ? 0 : (Mathf.PerlinNoise(x * 0.01f, z * 0.01f) < 0.5f ? 1 : 2);
+                    layers[grassKinds + kind][zi, xi] += 1;
+                }
+            }
+            for (int i = 0; i < layers.Length; i++)
+                data.SetDetailLayer(0, 0, i, layers[i]);
+        }
+
+        private static DetailPrototype DetailFor(GameObject prefab, float minScale, float maxScale) => new DetailPrototype
+        {
+            prototype = prefab,
+            usePrototypeMesh = true,
+            useInstancing = true,
+            renderMode = DetailRenderMode.VertexLit,
+            minWidth = minScale,
+            maxWidth = maxScale,
+            minHeight = minScale,
+            maxHeight = maxScale,
+            noiseSpread = 0.4f,
+            healthyColor = Color.white,
+            dryColor = Color.white,
+        };
+
+        /// <summary>
+        /// Trees, bushes and rocks over the whole island by biome, on a jittered 9 m grid (deterministic):
+        /// dense violet Shadow Forest, cherry blossoms around Crimson Temple, palms on the coast, pines in
+        /// Eclipse Valley and around Iron Fortress, groves of broadleaf trees in the open fields.
+        /// Kept clear: built locations, the core plaza, route lanes, the forest lane, the beach and water.
+        /// </summary>
+        private static void ScatterVegetation(Transform root)
+        {
+            var random = new System.Random(77);
+            var forest = PoiNamed("Shadow Forest");
+            var temple = PoiNamed("Crimson Temple");
+            var fortress = PoiNamed("Iron Fortress");
+            var trees = new GameObject("Trees").transform;
+            var bushes = new GameObject("Bushes").transform;
+            var rocks = new GameObject("Rocks").transform;
+            trees.SetParent(root, false);
+            bushes.SetParent(root, false);
+            rocks.SetParent(root, false);
+            int treeCount = 0, bushCount = 0, rockCount = 0;
+
+            const float cell = 9f;
+            for (float gx = -600f; gx <= 600f; gx += cell)
+            for (float gz = -600f; gz <= 600f; gz += cell)
+            {
+                // Draw every random number up front so one cell's outcome never shifts the next cell.
+                float x = gx + ((float)random.NextDouble() - 0.5f) * cell * 0.9f;
+                float z = gz + ((float)random.NextDouble() - 0.5f) * cell * 0.9f;
+                double rollTree = random.NextDouble(), rollBush = random.NextDouble(), rollRock = random.NextDouble();
+                double pick = random.NextDouble();
+                double rollUnder = random.NextDouble();
+                float yaw = (float)random.NextDouble() * 360f;
+                float scale = Mathf.Lerp(0.8f, 1.25f, (float)random.NextDouble());
+
+                float h = Height(x, z);
+                if (h < WaterLevel + 0.8f || InBuiltPoi(x, z, 10f))
+                    continue;
+                var p2 = new Vector2(x, z);
+                if (p2.magnitude < 75f) // core plaza and spawn anchor
+                    continue;
+                float route = RouteDistance(x, z);
+                if (route < 7f)
+                    continue;
+                float slope = Vector3.Angle(Vector3.up, new Vector3(Height(x - 1f, z) - Height(x + 1f, z), 2f, Height(x, z - 1f) - Height(x, z + 1f)));
+
+                float dForest = Vector2.Distance(p2, forest.Centre);
+                float dTemple = Vector2.Distance(p2, temple.Centre);
+                float dFortress = Vector2.Distance(p2, fortress.Centre);
+                float dValley = Vector2.Distance(p2, ValleyCentre);
+                bool coast = ShoreDistance(x, z) < 60f;
+
+                float pTree, pBush, pRock;
+                TreeKind kind;
+                bool shadowLeaves = false;
+                if (dForest < forest.Radius + 4f)
+                {
+                    var local = p2 - forest.Centre;
+                    if (InForestLane(local.x, local.y))
+                        continue;
+                    pTree = 0.72f; pBush = 0.4f; pRock = 0.06f;
+                    kind = pick < 0.65 ? TreeKind.Broadleaf : TreeKind.Pine;
+                    shadowLeaves = kind == TreeKind.Broadleaf;
+                }
+                else if (coast)
+                {
+                    pTree = 0.1f; pBush = 0.04f; pRock = 0.035f;
+                    kind = TreeKind.Palm;
+                }
+                else if (dTemple < temple.Radius + 90f)
+                {
+                    pTree = 0.2f; pBush = 0.1f; pRock = 0.02f;
+                    kind = pick < 0.85 ? TreeKind.Blossom : TreeKind.Broadleaf;
+                }
+                else if (dValley < 175f)
+                {
+                    pTree = 0.06f; pBush = 0.05f; pRock = 0.09f;
+                    kind = TreeKind.Pine;
+                }
+                else if (dFortress < fortress.Radius + 80f)
+                {
+                    pTree = 0.08f; pBush = 0.05f; pRock = 0.04f;
+                    kind = TreeKind.Pine;
+                }
+                else
+                {
+                    float grove = Mathf.PerlinNoise(x * 0.011f + 40f, z * 0.011f + 90f);
+                    pTree = 0.015f + 0.34f * Smooth(0.52f, 0.74f, grove);
+                    pBush = 0.05f + 0.16f * Smooth(0.48f, 0.7f, grove);
+                    pRock = 0.02f;
+                    kind = pick < 0.7 ? TreeKind.Broadleaf : (pick < 0.92 ? TreeKind.Pine : TreeKind.Blossom);
+                }
+                if (route < 11f)
+                    pTree *= 0.3f; // keep sight lines along the paths
+
+                if (slope < 28f && rollTree < pTree)
+                {
+                    var prefabs = _art.Trees[kind];
+                    var tree = Place(prefabs[(int)(pick * 997) % prefabs.Count], trees, x, z, yaw, scale, sink: 0.2f);
+                    if (shadowLeaves)
+                        foreach (var renderer in tree.GetComponentsInChildren<MeshRenderer>())
+                        {
+                            var materials = renderer.sharedMaterials;
+                            materials[1] = _art.ShadowForestLeaves;
+                            renderer.sharedMaterials = materials;
+                        }
+                    treeCount++;
+                    // Undergrowth: a bush beside some trees (cover where it looks natural).
+                    if (rollUnder < pBush * 0.6f)
+                    {
+                        float a = yaw * Mathf.Deg2Rad;
+                        float ux = x + Mathf.Cos(a) * 3.2f, uz = z + Mathf.Sin(a) * 3.2f;
+                        if (!InBuiltPoi(ux, uz, 8f) && RouteDistance(ux, uz) > 6f)
+                        {
+                            Place(_art.Bushes[(int)(rollUnder * 7919) % _art.Bushes.Count], bushes, ux, uz, yaw * 1.7f, Mathf.Lerp(0.9f, 1.25f, (float)rollUnder), sink: 0.15f);
+                            bushCount++;
+                        }
+                    }
+                }
+                else if (rollBush < pBush)
+                {
+                    float bushScale = Mathf.Lerp(0.9f, 1.3f, (float)(rollBush / Mathf.Max(pBush, 0.001f)));
+                    Place(_art.Bushes[(int)(pick * 991) % _art.Bushes.Count], bushes, x, z, yaw, bushScale, sink: 0.15f);
+                    bushCount++;
+                }
+                else if (rollRock < pRock)
+                {
+                    float size = Mathf.Lerp(0.8f, 3.4f, Mathf.Pow((float)pick, 2.2f)); // mostly small, a few big cover rocks
+                    PlaceRock(rocks, x, z, size, yaw);
+                    rockCount++;
+                }
+            }
+            Debug.Log($"[WarOfNyx] NYX ISLAND vegetation: {treeCount} trees, {bushCount} bushes, {rockCount} rocks.");
+        }
+
+        private static GameObject Place(GameObject prefab, Transform parent, float x, float z, float yaw, float scale, float sink)
+        {
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            go.transform.position = new Vector3(x, Height(x, z) - sink * scale, z);
+            go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            go.transform.localScale = Vector3.one * scale;
+            return go;
+        }
+
+        private static void PlaceRock(Transform parent, float x, float z, float size, float yaw)
+        {
+            var prefab = _art.Rocks[Mathf.Abs((int)(x * 7f + z * 13f)) % _art.Rocks.Count];
+            var go = Place(prefab, parent, x, z, yaw, size, sink: 0.12f);
+            go.transform.localScale = new Vector3(size, size * 0.9f, size * 1.05f);
         }
 
         // ------------------------------------------------------------------ helpers
@@ -570,6 +858,7 @@ namespace WarOfNyx.EditorTools
             var surface = new GameObject("NavMesh").AddComponent<Unity.AI.Navigation.NavMeshSurface>();
             surface.collectObjects = Unity.AI.Navigation.CollectObjects.All;
             surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+            surface.layerMask = ~EnvironmentLayers.FoliageMask; // bush sight volumes are walk-through
             // A 1.3 km island: coarser voxels keep the bake to a reasonable time and memory.
             surface.overrideVoxelSize = true;
             surface.voxelSize = 0.25f;

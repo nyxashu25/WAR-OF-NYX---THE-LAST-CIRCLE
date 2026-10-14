@@ -31,11 +31,16 @@ namespace WarOfNyx.Gameplay.Effects
             var material = Resources.Load<Material>(SpawnEffect.MaterialResource);
             if (material == null || Application.isBatchMode)
                 return null;
+            return Create(character, material);
+        }
+
+        /// <summary>Builds the beacon hidden. Separate from <see cref="Attach"/> so tests can build one in batch mode.</summary>
+        public static HuntBeaconVisual Create(Transform character, Material material)
+        {
             var go = new GameObject("HuntBeacon (PLACEHOLDER)");
             go.transform.SetParent(character, false);
             var beacon = go.AddComponent<HuntBeaconVisual>();
-            beacon.Build(material);
-            beacon.SetActive(false);
+            beacon.Build(material); // built hidden: _active starts false, so SetActive(false) would be a no-op
             return beacon;
         }
 
@@ -122,6 +127,7 @@ namespace WarOfNyx.Gameplay.Effects
             line.loop = loop;
             line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             line.receiveShadows = false;
+            line.enabled = false;
             return line;
         }
     }

@@ -170,6 +170,111 @@ namespace WarOfNyx.Gameplay.Effects
             return Create(name, data);
         }
 
+        private static AudioClip _rainLoop, _windLoop, _thunder;
+
+        /// <summary>Seamless rain hiss with scattered drop ticks (4 s loop).</summary>
+        public static AudioClip RainLoop
+        {
+            get
+            {
+                if (_rainLoop != null)
+                    return _rainLoop;
+                const float length = 4f;
+                int n = (int)(SampleRate * length);
+                var data = new float[n];
+                var random = new System.Random(41);
+                float lp = 0f, hp = 0f, previous = 0f, drop = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float white = (float)random.NextDouble() * 2f - 1f;
+                    lp += (white - lp) * 0.45f;            // soften the top end
+                    hp = 0.97f * (hp + lp - previous);      // and remove rumble
+                    previous = lp;
+                    if (random.NextDouble() < 0.0009)
+                        drop = 0.6f + (float)random.NextDouble() * 0.4f;
+                    drop *= 0.992f;
+                    data[i] = hp * 0.35f + drop * white * 0.25f;
+                }
+                return _rainLoop = Create("RainLoop", Crossfade(data, (int)(SampleRate * 0.25f)));
+            }
+        }
+
+        /// <summary>Low wind howl with slow gusts (about 6 s loop).</summary>
+        public static AudioClip WindLoop
+        {
+            get
+            {
+                if (_windLoop != null)
+                    return _windLoop;
+                const float length = 6f;
+                int n = (int)(SampleRate * length);
+                var data = new float[n];
+                var random = new System.Random(57);
+                float lp1 = 0f, lp2 = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float p = i / (float)n;
+                    float gust = 0.55f + 0.3f * Mathf.Sin(p * Mathf.PI * 2f * 2f) + 0.15f * Mathf.Sin(p * Mathf.PI * 2f * 5f + 1f);
+                    float cutoff = 0.02f + 0.03f * gust;
+                    lp1 += ((float)random.NextDouble() * 2f - 1f - lp1) * cutoff;
+                    lp2 += (lp1 - lp2) * cutoff;
+                    data[i] = lp2 * gust * 3.2f;
+                }
+                return _windLoop = Create("WindLoop", Crossfade(data, (int)(SampleRate * 0.3f)));
+            }
+        }
+
+        /// <summary>Distant thunder: a crack followed by a long rolling rumble (3.5 s).</summary>
+        public static AudioClip Thunder
+        {
+            get
+            {
+                if (_thunder != null)
+                    return _thunder;
+                const float length = 3.5f;
+                int n = (int)(SampleRate * length);
+                var data = new float[n];
+                var random = new System.Random(73);
+                float lp1 = 0f, lp2 = 0f, crackLp = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float t = i / (float)SampleRate;
+                    float white = (float)random.NextDouble() * 2f - 1f;
+                    crackLp += (white - crackLp) * 0.5f;
+                    lp1 += (white - lp1) * 0.012f;
+                    lp2 += (lp1 - lp2) * 0.012f;
+                    float crack = crackLp * Mathf.Exp(-t * 9f) * Mathf.Clamp01(t / 0.01f);
+                    float roll = 0.6f + 0.4f * Mathf.Sin(t * 5.3f) * Mathf.Sin(t * 2.1f + 0.5f);
+                    float rumble = lp2 * 14f * roll * Mathf.Clamp01(t / 0.15f) * Mathf.Exp(-t * 0.9f);
+                    data[i] = Mathf.Clamp(crack * 0.5f + rumble, -1f, 1f);
+                }
+                return _thunder = Create("Thunder", data);
+            }
+        }
+
+        /// <summary>
+        /// Makes a seamless loop: the last <paramref name="overlap"/> samples are blended into the start and
+        /// then cut off, so the final sample leads straight into the first.
+        /// </summary>
+        private static float[] Crossfade(float[] data, int overlap)
+        {
+            int length = data.Length - overlap;
+            var loop = new float[length];
+            for (int i = 0; i < length; i++)
+            {
+                if (i < overlap)
+                {
+                    float w = i / (float)overlap;
+                    loop[i] = data[i] * w + data[length + i] * (1f - w);
+                }
+                else
+                {
+                    loop[i] = data[i];
+                }
+            }
+            return loop;
+        }
+
         private static AudioClip Shot(string name, float length, float thumpHz, float volume, int seed)
         {
             int n = (int)(SampleRate * length);

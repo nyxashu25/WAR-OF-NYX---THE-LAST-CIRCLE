@@ -75,7 +75,7 @@ namespace WarOfNyx.Core.Match
     public static class NetworkProtocol
     {
         /// <summary>Bump whenever networked state or inputs change incompatibly; clients only join equal versions.</summary>
-        public const int Version = 10;
+        public const int Version = 11; // 11: replicated atmosphere seed (weather)
 
         public const string VersionKey = "pv";
         public const string ModeKey = "mode";

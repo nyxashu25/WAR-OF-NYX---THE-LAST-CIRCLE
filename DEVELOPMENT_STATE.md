@@ -9,6 +9,9 @@ Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: P
 ## Current phase
 **Phase 14 – Release preparation, done as far as possible without accounts.** Release validator (1 blocked: Fusion; 0 warnings), offline-only development APK built with Unity 6000.3.26f1 (target API 36, not yet run on a phone), generated icon / splash / feature graphic, PRIVACY.md, STORE_LISTING.md, RELEASE_CHECKLIST.md. A Windows offline build is on the owner's desktop (shortcut "WAR OF NYX").
 
+
+**Environment pass (2026-10-14):** atmosphere per match (time of day + weather from the seed, visual only, fog ≥ 250 m), procedural trees / bushes / rocks / grass / flowers on NYX ISLAND by biome, wind, longer softer shadows (same LOD culling on every tier for fairness), animated sea, cloudy sky, ambient birds / fireflies / petals, weather sounds. Bushes block bot sight. Hunt beacon bug fixed. See ENVIRONMENT.md.
+
 ## Configuration requested by the project owner
 - Offline Ghost Protocol defaults: **Difficulty = NIGHTMARE, Bots = 23** (in `GameConfig`, clamped by `OfflineCapacityPolicy`; difficulty never lowered).
 
@@ -43,7 +46,7 @@ Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: P
 Scenes `Bootstrap`, `MainMenu`, `PracticeArena`, `MatchLobby`, `BattleArena` (+NavMesh). Prefabs `PlayerPlaceholder`; Fusion-only `Resources/WarOfNyx/NetworkPlayer` (with hitboxes), `MatchController`, `LootCrate`. Assets `MovementConfig`, `GameConfig`, `FX_Additive.mat`, **`ScriptableObjects/Weapons/*.asset` + `Resources/WarOfNyx/WeaponDatabase.asset`**, URP assets, graybox materials.
 
 ## Versions
-Unity 6000.3.26f1 · URP 17.3.0 · Input System 1.20.0 · AI Navigation 2.0.15 · Test Framework 1.6.0 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **10**.
+Unity 6000.3.26f1 · URP 17.3.0 · Input System 1.20.0 · AI Navigation 2.0.15 · Test Framework 1.6.0 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **11**.
 
 ## Key decisions (cumulative, newest last)
 1. Unity 6.3 LTS + Fusion 2.1.3. Rules in pure C# shared by server, prediction, offline simulation and bots. Online isolated behind `WON_FUSION`.

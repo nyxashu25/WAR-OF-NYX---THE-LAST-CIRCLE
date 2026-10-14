@@ -21,6 +21,7 @@ Reading: the AI and rules use well under 10 % of a frame even with 23 bots on th
 | Memory | CSV `total_mb` column; must stay well below the device's RAM class |
 | Thermal | note device temperature / throttling after 10 minutes |
 | GPU | Unity Profiler (USB) with Development Build; or Android GPU Inspector |
+| Environment (grass, ~1 250 trees, weather) | Same 10-minute run per tier in Clear and Storm (seeds can be fixed with the dev capture run); grass budget per tier in ENVIRONMENT.md |
 
 ## 3. Network (needs Fusion + App ID)
 | Test | How |

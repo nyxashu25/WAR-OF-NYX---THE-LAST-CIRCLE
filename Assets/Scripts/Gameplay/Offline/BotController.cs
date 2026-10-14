@@ -24,6 +24,16 @@ namespace WarOfNyx.Gameplay.Offline
     {
         private static readonly int EnvironmentMask = ~(1 << 2);
         private const float ArriveDistance = 2f;
+        /// <summary>Closer than this, a bush no longer hides someone (you'd see them through the leaves).</summary>
+        private const float FoliageSeeThroughDistance = 4f;
+
+        /// <summary>
+        /// True when a bush (trigger volume on the Foliage layer) is between the eye and the target, or the
+        /// target is inside one. One direction on purpose: a linecast ignores the volume it starts in, so a
+        /// bot hiding in a bush can still see out, like a player peeking through leaves.
+        /// </summary>
+        private static bool HiddenByFoliage(Vector3 eye, Vector3 target) =>
+            Physics.Linecast(eye, target, World.EnvironmentLayers.FoliageMask, QueryTriggerInteraction.Collide);
 
         private readonly OfflineMatch _match;
         private readonly System.Random _random;
@@ -136,8 +146,10 @@ namespace WarOfNyx.Gameplay.Offline
                     ObserverX = Self.Feet.x, ObserverZ = Self.Feet.z, ObserverYaw = Self.Yaw,
                     TargetX = other.Feet.x, TargetZ = other.Feet.z,
                     TargetCrouched = other.LowStance, TargetMoving = other.Moving, TargetFiring = other.FiredRecently(now),
-                    // Physics line of sight from eye to chest: walls and terrain always block (spec 38.6 / 38.8).
-                    LineOfSightClear = !Physics.Linecast(eye, chest, EnvironmentMask, QueryTriggerInteraction.Ignore),
+                    // Physics line of sight from eye to chest: walls and terrain always block (spec 38.6 / 38.8),
+                    // and so do bushes, unless the target is right next to the bot (what a human would see).
+                    LineOfSightClear = !Physics.Linecast(eye, chest, EnvironmentMask, QueryTriggerInteraction.Ignore)
+                                       && (sqr < FoliageSeeThroughDistance * FoliageSeeThroughDistance || !HiddenByFoliage(eye, chest)),
                 };
                 if (BotPerception.CanSee(Difficulty, q))
                     Memory.See(other.Id, other.Feet.x, other.Feet.z, now);

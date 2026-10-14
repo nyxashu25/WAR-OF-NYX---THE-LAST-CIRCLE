@@ -18,6 +18,7 @@ Complexity: S (days) · M (1–2 weeks) · L (2–4 weeks) · XL (1–2+ months)
 | 11 | Android controls finalization, quality presets, physical devices | 9 | M | **Code done (controls, layout editor, gyro, build methods); development APK built with Unity 6000.3.26f1 (offline-only); device tests pending** |
 | 12 | Public infrastructure: Linux server, Docker, Edgegap, health checks | 9 | L | **Files and server code done (health endpoint verified in Unity); deployment pending Fusion + Docker + Edgegap account** |
 | 13 | Optimization & testing (2/4/12/24 players, latency/loss, bots on devices) | 11, 12, 9G | L | **Tools, benchmarks and fuzz tests done (PERFORMANCE.md); device + network measurements pending** |
+| 10E | Environment pass: weather, time of day, vegetation, shadows, ambient life | 10 | L | **Done and checked in the built Windows game (screenshots of all six atmospheres); phone frame rate not measured** |
 | 14 | Release preparation (AAB, target API 36, store listing, data safety) | 13 | M | **Prepared: validator, icon/splash, privacy + store drafts, release checklist. APK builds with target API 36. Blocked for submission: Fusion, device tests, signed AAB (owner's upload key), final art** |
 | post | Accounts and stats backend, leaderboards, extra modes, cosmetics | 14 | — | Not started |
 

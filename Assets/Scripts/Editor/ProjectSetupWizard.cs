@@ -219,27 +219,30 @@ namespace WarOfNyx.EditorTools
                 a.renderScale = 0.8f;
                 a.msaaSampleCount = 1;
                 a.supportsHDR = false;
-                a.shadowDistance = 25f;
+                a.shadowDistance = 30f;
                 a.shadowCascadeCount = 1;
                 a.maxAdditionalLightsCount = 0;
+                ConfigureShadows(a, resolution: 1024, soft: false);
             });
             var medium = CreateOrUpdateUrpAsset("Medium", a =>
             {
                 a.renderScale = 1.0f;
                 a.msaaSampleCount = 1;
                 a.supportsHDR = false;
-                a.shadowDistance = 45f;
-                a.shadowCascadeCount = 1;
+                a.shadowDistance = 60f;
+                a.shadowCascadeCount = 2;
                 a.maxAdditionalLightsCount = 2;
+                ConfigureShadows(a, resolution: 2048, soft: true);
             });
             var high = CreateOrUpdateUrpAsset("High", a =>
             {
                 a.renderScale = 1.0f;
                 a.msaaSampleCount = 2;
                 a.supportsHDR = false;
-                a.shadowDistance = 70f;
-                a.shadowCascadeCount = 2;
+                a.shadowDistance = 120f;
+                a.shadowCascadeCount = 4;
                 a.maxAdditionalLightsCount = 4;
+                ConfigureShadows(a, resolution: 2048, soft: true);
             });
 
             GraphicsSettings.defaultRenderPipeline = medium;
@@ -321,6 +324,22 @@ namespace WarOfNyx.EditorTools
         /// Edits ProjectSettings/QualitySettings.asset through SerializedObject because Unity has no
         /// public API for renaming or removing quality levels.
         /// </summary>
+        /// <summary>Main-light shadow map size and soft shadows (serialized fields: no public setters on every URP version).</summary>
+        private static void ConfigureShadows(UniversalRenderPipelineAsset asset, int resolution, bool soft)
+        {
+            var so = new SerializedObject(asset);
+            var mainShadows = so.FindProperty("m_MainLightShadowsSupported");
+            if (mainShadows != null)
+                mainShadows.boolValue = true;
+            var res = so.FindProperty("m_MainLightShadowmapResolution");
+            if (res != null)
+                res.intValue = resolution;
+            var softProp = so.FindProperty("m_SoftShadowsSupported");
+            if (softProp != null)
+                softProp.boolValue = soft;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         private static void ConfigureQualityLevels(RenderPipelineAsset low, RenderPipelineAsset medium, RenderPipelineAsset high)
         {
             var qualityObject = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset").FirstOrDefault();
@@ -333,9 +352,12 @@ namespace WarOfNyx.EditorTools
                 throw new InvalidOperationException("Unexpected QualitySettings format; configure quality levels manually.");
 
             levels.arraySize = 3;
-            ConfigureLevel(levels.GetArrayElementAtIndex(0), "Low", low, lodBias: 0.7f, textureMipLimit: 1);
+            // LOD bias is the SAME on every tier: bushes, trees and rocks are cover, and a lower tier must
+            // never cull cover earlier than a higher one (it would reveal hidden players). Tiers differ in
+            // shadows, grass density, render scale and effects instead.
+            ConfigureLevel(levels.GetArrayElementAtIndex(0), "Low", low, lodBias: 1.0f, textureMipLimit: 1);
             ConfigureLevel(levels.GetArrayElementAtIndex(1), "Medium", medium, lodBias: 1.0f, textureMipLimit: 0);
-            ConfigureLevel(levels.GetArrayElementAtIndex(2), "High", high, lodBias: 1.5f, textureMipLimit: 0);
+            ConfigureLevel(levels.GetArrayElementAtIndex(2), "High", high, lodBias: 1.0f, textureMipLimit: 0);
 
             var current = so.FindProperty("m_CurrentQuality");
             if (current != null)

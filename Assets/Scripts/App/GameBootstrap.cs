@@ -29,6 +29,10 @@ namespace WarOfNyx.App
                 yield break;
             }
 
+            // Developer screenshot run (offline only, see DevCapture).
+            if (Gameplay.World.DevCapture.TryStart(Environment.GetCommandLineArgs()))
+                yield break;
+
             string menu = AppServices.Config.mainMenuScene;
             if (!Application.CanStreamedLevelBeLoaded(menu))
             {

@@ -135,6 +135,8 @@ namespace WarOfNyx.Gameplay.Offline
             if (OfflineMatchRequest.IncludeHuman)
                 AppServices.Flow.TryStartSession(GameMode.OfflineBattleRoyale);
             SpawnEveryone(seed, OfflineMatchRequest.IncludeHuman);
+            // Same seed, same sky: time of day and weather are part of the match (visual only).
+            World.WeatherSystem.Ensure().Begin(Core.Weather.Atmosphere.Plan(seed), 0f, seed);
             Debug.Log($"[WarOfNyx][Offline] Ghost Protocol: {(Human != null ? "1 human + " : string.Empty)}{BotCount} bots, {Difficulty}, seed {seed}.");
         }
 

@@ -1,8 +1,10 @@
 using Fusion;
 using UnityEngine;
 using WarOfNyx.App;
+using WarOfNyx.Core.Weather;
 using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay.Effects;
+using WarOfNyx.Gameplay.World;
 
 namespace WarOfNyx.Networking
 {
@@ -46,11 +48,15 @@ namespace WarOfNyx.Networking
         [Networked] private float NetDamagePerSecond { get; set; }
         /// <summary>Ground height of the map centre, for placing the barrier visual.</summary>
         [Networked] private float NetGroundY { get; set; }
+        /// <summary>Seed of the match atmosphere (time of day + weather; visual only). 0 = none.</summary>
+        [Networked] private int NetAtmosphereSeed { get; set; }
+        [Networked] private float NetAtmosphereStart { get; set; }
 
         private ZonePlan _plan;
         private ZoneSettings _serverSettings;
         private float _matchStart;
         private NyxCircleVisual _visual;
+        private int _shownAtmosphere;
         private static ZoneSettings _fallbackSettings;
 
         public bool IsActive => NetActive;
@@ -112,6 +118,8 @@ namespace WarOfNyx.Networking
             _matchStart = matchStart;
             _plan = ZonePlanner.Plan(settings, centre.x, centre.z, startRadius, seed, validator);
             NetGroundY = centre.y;
+            NetAtmosphereSeed = unchecked(seed ^ 0x6A09E667) | 1; // independent of the circle draw, never 0
+            NetAtmosphereStart = matchStart;
             NetActive = true;
             Publish();
 
@@ -126,6 +134,7 @@ namespace WarOfNyx.Networking
                 return;
             _plan = null;
             NetActive = false;
+            NetAtmosphereSeed = 0;
         }
 
         /// <summary>Server: the match is over. The circle stops where it is (spec 21: stop the safe-zone timer).</summary>
@@ -177,6 +186,14 @@ namespace WarOfNyx.Networking
         {
             if (Application.isBatchMode)
                 return;
+
+            // Every client derives the same sky from the replicated seed (late joiners start mid-way).
+            if (NetAtmosphereSeed != 0 && NetAtmosphereSeed != _shownAtmosphere)
+            {
+                _shownAtmosphere = NetAtmosphereSeed;
+                WeatherSystem.Ensure().Begin(Atmosphere.Plan(NetAtmosphereSeed),
+                    Mathf.Max(0f, Runner.LocalRenderTime - NetAtmosphereStart), NetAtmosphereSeed);
+            }
 
             if (!NetActive)
             {

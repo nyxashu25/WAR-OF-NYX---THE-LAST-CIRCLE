@@ -47,6 +47,9 @@ Record every real run here, with the date and toolchain.
 | 2026-10-13 | **Unity 6000.3.26f1** | EditMode / PlayMode | **339 / 16 passed, 0 failed** | Same results as on 6.6, including the three complete offline matches |
 | 2026-10-13 | **Unity 6000.3.26f1** + Android Build Support | `BatchTools.BuildAndroidApk` | **Built: 46 MB APK** | `aapt`: package com.nyxgames.warofnyx 0.1.0 (1), min API 26, target API 36, arm64-v8a only, permissions INTERNET + ACCESS_NETWORK_STATE; `apksigner`: debug certificate. Offline-only (no Fusion). **Not yet installed on a phone** |
 | 2026-10-13 | **Unity 6000.3.26f1** | `ReleaseTools.ValidateRelease` | **1 blocked, 0 warnings** | Blocked: Fusion SDK. Android module and target API 36 now pass |
+| 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the environment pass (adds `AtmosphereTests`, `EnvironmentTests`, `EffectVisualTests`) | **326 / 355 / 16 passed** | New: deterministic weather plans, fog never below 250 m, mesh budgets / face directions / wind weights, grass shorter than a crouched player, weather lighting, hunt beacon hidden until exposed. One real bug found by the tests: pine canopy undersides lit like tops (fixed) |
+| 2026-10-14 | **Unity 6000.3.26f1** Windows player | `WarOfNyx.exe -devCapture` (offline NYX ISLAND match, 10 screenshots) | **Reviewed** | Found and fixed: terrain grass not drawn (coverage scatter mode), palms inland (coast by height), over-bright ground, grass blades blocking the camera |
+| 2026-10-14 | **Unity 6000.3.26f1** + Android | APK + `ValidateRelease` | **Built (63 MB); 1 blocked (Fusion), 0 warnings** | Not yet run on a phone |
 | — | Android phone | install + play the APK | **Not run** | Needs the owner's phone (ANDROID_BUILD.md) |
 
 ## Running the Unity checks from the command line
