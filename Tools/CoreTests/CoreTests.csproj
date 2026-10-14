@@ -42,6 +42,7 @@
     <Compile Include="../../Assets/Tests/EditMode/ServerOperationsTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/RobustnessTests.cs" LinkBase="Tests" />
     <Compile Include="../../Assets/Tests/EditMode/AtmosphereTests.cs" LinkBase="Tests" />
+    <Compile Include="../../Assets/Tests/EditMode/VehicleAndLootTests.cs" LinkBase="Tests" />
   </ItemGroup>
 
   <ItemGroup>

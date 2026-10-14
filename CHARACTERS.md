@@ -78,6 +78,45 @@ A veteran of the reactor wars who lost his left arm to the Nyx Core and rebuilt 
 - **Personal marks:** KAI's scar has stitch marks; AKIRA has a beauty mark under the left eye; YUNA has freckles; REN has crow's feet and a forehead line.
 - **YUNA's visor** is a glowing frame with a targeting reticle over the right eye, so her eye stays visible.
 
+## Materials and outfit detail (2026-10-14)
+Every surface now has a real material, lit by its own rules in `WarOfNyx/NyxToonVC`:
+- **Fabrics:** each has a woven pattern you can see up close.
+  - Ripstop grid on tactical cloth, twill on coats and trousers, knit ribs on scarves and cuffs.
+  - Quilted diamonds on padded panels, and a hex mesh on bodysuits.
+  - Each fabric has a soft sheen at grazing angles.
+- **Leather:** grain and a glossy highlight.
+- **Brushed metal:** stretched highlights and tinted reflections.
+- **Polymer armour:** a clear-coat highlight.
+- **Carbon fibre:** twill tows that catch the light in alternate directions.
+- **Lacquer:** for KAI's armour and scabbard.
+- **Hair:** anime highlight bands that follow each strand.
+- **Fur:** a soft sheen.
+- **Skin:** warm shadows.
+- **Eyes:** wet highlights.
+- **Circuits:** glowing lines with light flowing along them.
+
+Patterns fade out with distance, so they never shimmer. On the Low graphics setting they are switched off.
+
+| Character | What the suit adds |
+|---|---|
+| KAI | A bokashi-dyed haori: violet at the hem, fading to black at the shoulders. Drape folds, satin lapels with a glowing thread, and silver seigaiha wave embroidery around the hem. A lamellar chest guard (*do*) in the open front: lacquered plates in five rows, gold-edged and laced with violet cord. A lamellar shoulder guard (*sode*) over the left sleeve, splinted bracers (*kote*) and shin guards (*kyahan*). A twisted cord around the obi, with a silver clan plate. A glowing tomoe crest on the back. The scabbard has gold fittings and a wrapped cord. Fringed scarf tails. |
+| AKIRA | A leather jacket with quilted crimson side panels and quilted shoulders, a half-open metal zipper and double-stitched seams. A plate carrier with MOLLE webbing, three open-top pouches showing rifle magazines with shock cords, a glowing hunter's patch and side-release buckles. A cobra-buckle belt with a carabiner, a polymer holster with a pistol, cargo pockets with snaps, polymer elbow and knee pads, and laced boots with brass eyelets. |
+| YUNA | A white ripstop jacket with a polymer yoke and a glowing zipper and hem. Circuit traces run across the back and down the sleeves, with light flowing along them. A "data spine" on the back: a polymer module with carbon cooling fins, glowing slots and cables. Polymer shoulder caps, thigh plates and shin guards, each with a glowing line. A wrist computer with buttons, glowing soles and a hex-mesh bodysuit. |
+| REN | Brushed-steel chest and back plates with pectoral plates, a panel line, rivets and battle scratches, plus overlapping abdominal plates. A wolf-fur mantle of up to 44 tufts. A stitched leather bandolier of red shells with brass caps. A ball-chain with dog tags. A riveted pauldron with three glowing claw marks. A mechanical arm with a carbon-fibre core, steel armour, hydraulic pistons with polished rods, cables and amber joints. Steel toe caps and a leather belt with snap pouches. |
+
+All base clothing has cloth folds: creases at the elbows, knees, waist and ankles, and knife pleats on KAI's hakama. The folds darken their own creases (baked occlusion). Seams carry running stitches, gloves have stitching and knuckle guards, and boots have welts, tread lugs, toe caps and heel counters.
+
+### Detail levels
+Each character is built three times, and a `LODGroup` swaps between them by size on screen:
+
+| Level | Used for | What it includes | Vertex budget |
+|---|---|---|---|
+| LOD 0 | Within about 10 m | Everything above: smooth resampled surfaces, stitches, zipper teeth, rivets, embroidery, iris fibres, single lashes | ≤ 90 000 |
+| LOD 1 | About 10–35 m | Same outfits, without the smallest details | ≤ 34 000 |
+| LOD 2 | Beyond that | Simplified shapes | ≤ 14 000 |
+
+The budgets are checked by `CharacterModelTests` for every character. Each level has the same parts, so the swap is seamless.
+
 ## Shared anatomy (all characters)
 - **Body:** sculpted torso, muscled limbs (deltoids, calves, forearm swell), gloved hands with curled fingers and thumbs.
 - **Head:** anime proportions with a V jaw, ears and nose.
@@ -87,7 +126,7 @@ A veteran of the reactor wars who lost his left arm to the Nyx Core and rebuilt 
 - **Motion:** the jointed skeleton is animated by `CharacterAnimator` (gait, IK, weapon holding, melee combos).
 
 ## Technical notes
-- One combined mesh per body part, coloured with vertex colours (`WarOfNyx/NyxToonVC`); glowing details use the colour's glow channel. A character is about 16–25 renderers and up to about 24 000 vertices (`CharacterModelTests`). Meshes are built once per character and shared.
+- One combined mesh per body part, coloured with vertex colours (`WarOfNyx/NyxToonVC`); glowing details use the colour's glow channel, and a second UV channel carries each vertex's material, occlusion, outline weight and weave. A character is about 16–28 renderers per detail level (see the budgets above, `CharacterModelTests`). Meshes are built once per character and level, and shared.
 - **CHARACTERS** screen in the main menu: 3D preview holding the signature weapon (drag to turn), name, title, role, story, gear and SELECT.
 - Signature weapons in the preview: KAI katana, AKIRA NX-7 assault rifle, YUNA Shadow SMG, REN Crimson shotgun. Match loadouts stay random (fairness).
 - Replacing with final art: swap the meshes per joint (names in `CharacterModelTests.Parts`) or switch to a rigged model with an Animator (the path exists in `PlayerAnimationController`).

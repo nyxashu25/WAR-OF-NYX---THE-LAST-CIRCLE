@@ -21,6 +21,25 @@ namespace WarOfNyx.Gameplay.Effects
             if (weapon == null)
                 return root;
 
+            // Firearms: detailed one-mesh models (GunModels); the war axe likewise; other blades below.
+            if (weapon.IsRanged)
+            {
+                var gun = GunModels.Get(weapon, out muzzleLocal);
+                if (gun != null)
+                {
+                    MeshPart(root, "Gun", gun);
+                    return root;
+                }
+            }
+            if (weapon.id == WeaponCatalog.WarAxe)
+            {
+                MeshPart(root, "Axe", GunModels.Axe(AccentFor(weapon)));
+                var tip = new GameObject("TrailTip").transform;
+                tip.SetParent(root, false);
+                tip.localPosition = new Vector3(0f, 0.5f, 0.16f);
+                return root;
+            }
+
             var accent = AccentFor(weapon);
             var glow = accent * 1.5f;
             switch (weapon.id)
@@ -147,6 +166,16 @@ namespace WarOfNyx.Gameplay.Effects
             var tip = new GameObject("TrailTip").transform;
             tip.SetParent(root, false);
             tip.localPosition = new Vector3(0f, bladeStart + length * 0.92f, -curve * 0.85f);
+        }
+
+        private static void MeshPart(Transform root, string name, Mesh mesh)
+        {
+            var go = new GameObject(name);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = CharacterStyler.SharedMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            go.transform.SetParent(root, false);
         }
 
         private static void BladePart(Transform root, string name, Mesh mesh, float y, Color color, Color emission)

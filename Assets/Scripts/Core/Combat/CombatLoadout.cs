@@ -75,6 +75,12 @@ namespace WarOfNyx.Core.Combat
             return $"{killer} eliminated {victim} with {weapon}{(headshot ? " (HEADSHOT)" : string.Empty)}";
         }
 
+        /// <summary>A vehicle elimination with a driver to credit: run over, or caught in the blast of a vehicle they destroyed.</summary>
+        public static string VehicleElimination(string killer, string victim, string vehicle, bool explosion) =>
+            string.IsNullOrEmpty(killer) || killer == victim
+                ? Environmental(victim, DamageKind.Vehicle)
+                : explosion ? $"{killer} blew up {victim} with a {vehicle}" : $"{killer} ran over {victim} with a {vehicle}";
+
         /// <summary>Eliminations without a killer: the Nyx Circle (Phase 7), camping (Phase 8), falls.</summary>
         public static string Environmental(string victim, DamageKind cause)
         {
@@ -83,6 +89,7 @@ namespace WarOfNyx.Core.Combat
                 case DamageKind.Zone: return $"{victim} was consumed by the Nyx Circle";
                 case DamageKind.Camping: return $"{victim} was taken by the Nyx Hunt";
                 case DamageKind.Fall: return $"{victim} fell to their death";
+                case DamageKind.Vehicle: return $"{victim} was wrecked in a vehicle";
                 default: return $"{victim} was eliminated";
             }
         }

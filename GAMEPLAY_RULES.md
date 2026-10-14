@@ -62,6 +62,23 @@ Walk ≈ 1.8 m/s (gentle stick or the walk key) · Run 4 m/s (full stick) · Spr
 | Neon Pistol | Semi | 26 | 5 | 12 / 48 | 1.4 s | 20 → 50 (×0.55) | 90 m | ×1.6 | 1.2° / 0.35° | ×1.0 |
 | Storm Light SMG (from the loadout table) | Auto | 14 | 15 | 45 / 135 | 1.6 s | 12 → 35 (×0.45) | 70 m | ×1.4 | 2° / 0.8° | ×1.03 |
 
+**Arsenal expansion (2026-10-14): world loot only.** These weapons are never in starting kits; they are found in supply caches on the map. Their network ids are 11–17, added after the old ones, so the protocol version is 13.
+
+| Weapon | Rarity | Mode | Dmg | Rate (/s) | Mag / Reserve | Reload | Full dmg → min (m) | Max range | Headshot | Spread hip / aim | Move |
+|---|---|---|---:|---:|---|---:|---|---:|---:|---|---:|
+| Vortex LMG (rifle ammo) | Epic | Auto | 22 | 10 | 75 / 150 | 4.2 s | 35 → 90 (×0.6) | 160 m | ×1.4 | 2.2° / 0.6° | ×0.85 |
+| Arc Sniper (marksman ammo) | Legendary | Semi | 90 | 0.75 | 5 / 15 | 3.4 s | 120 → 350 (×0.85) | 400 m | ×2.5 | 4° / 0.02° | ×0.85 |
+| Talon Auto-Shotgun (shells) | Epic | Auto | 9 × 7 | 3.5 | 10 / 30 | 3.2 s | 5 → 15 (×0.2) | 25 m | ×1.2 | 5° / 4° | ×0.92 |
+| Rift Carbine (rifle ammo) | Uncommon | Auto | 20 | 11 | 30 / 90 | 1.9 s | 25 → 70 (×0.55) | 120 m | ×1.5 | 1.6° / 0.45° | ×0.98 |
+| Viper Revolver (light ammo) | Rare | Semi | 48 | 1.8 | 6 / 30 | 2.6 s | 20 → 60 (×0.6) | 100 m | ×1.8 | 1.4° / 0.25° | ×1.0 |
+| Pulse DMR (marksman ammo) | Rare | Semi | 40 | 2.5 | 15 / 45 | 2.4 s | 60 → 160 (×0.75) | 250 m | ×1.8 | 2.2° / 0.12° | ×0.92 |
+
+| Melee | Rarity | Dmg | Windup | Cooldown | Reach | Arc |
+|---|---|---:|---:|---:|---:|---:|
+| Nyx War Axe (blade combo) | Rare | 55 | 0.30 s | 0.90 s | 2.3 m | 90° |
+
+Every gun's sustained fire still outpaces its bloom recovery, so the spray rule above holds for them too (`VehicleAndLootTests.ArsenalExpansion_IsAppended_AndBalanced`). Every gun, old and new, has a detailed model (`GunModels`), its own shot sound and reload sound, and a support-hand grip point.
+
 **Accuracy pass (2026-10-14):** spread cones were 2–3× tighter, bloom grows slower (AR: +0.12° per shot up to +1.4°), and bullets are weighted toward the crosshair (the radius is uniform, not the area: half of all bullets land within half the cone). Tested: an AR hip spray puts over 45 % of rounds on a standing player at 20 m, an aimed spray over 45 % at 50 m; a long-range hip spray still misses most (`CombatRulesTests.Sprays_PutAGoodShareOfBulletsOnTarget`). Existing weapon assets are refreshed by setup (`WeaponCatalog.Version` 2).
 
 | Melee | Dmg | Windup | Cooldown | Reach | Arc |
@@ -134,6 +151,14 @@ Walk ≈ 1.8 m/s (gentle stick or the walk key) · Run 4 m/s (full stick) · Spr
 - Claims are **atomic on the server**: the first valid claim wins and nothing is ever duplicated. Capsules disappear after **90 s [T]** or when empty.
 - Taking: weapons fill an empty matching slot, otherwise SWAP replaces the active ranged weapon (or the melee weapon), and the old one goes back into the capsule. TAKE ALL only fills empty weapon slots. Ammo and medkits stack up to the carry limits, and the rest stays in the capsule. Armor is taken only if better (the old armor goes into the capsule). Reach 3 m (the server allows 3.75 m). Weapon and ammo pickups end spawn protection. *(Implemented: `LootContainer`, `InventoryRules`, `NetworkLootCrate`, `NetworkCombat.RPC_TakeLoot`.)*
 
+### Supply caches (world loot, offline)
+At the start of an offline match the authority scatters **supply caches** over the map: two per player, between 24 and 80. They are spread out on valid ground and never expire; a cache disappears when it is emptied.
+- Each cache holds one loaded weapon chosen by rarity: Common 30 %, Uncommon 27 %, Rare 22 %, Epic 14 %, Legendary 7 %. If a rarity has no weapon, the next lower rarity is used.
+- Ranged weapons come with their own ammunition (half the reserve, at least one magazine).
+- A cache may also hold medkits (35 % two Small, 15 % one Standard) and armour (18 %: Level 1, or occasionally Level 2).
+- Caches are opened and taken from exactly like elimination capsules, with the same rules for humans and bots. Bots go for them too.
+- The layout is deterministic per seed. *(Implemented: `WorldLoot`, `ScatterPlanner`, `OfflineMatch.SpawnWorldLoot`. Online supply caches wait for the Fusion SDK.)*
+
 ## 12. Victory (spec 21)
 - The last living competitor wins, decided by the server only.
 - **Tie policy (deterministic):** if everyone left dies in the same tick, the winner is (1) whoever had the most health at the start of that tick, then (2) most kills, then (3) most damage dealt, then (4) the lowest server-assigned player id.
@@ -179,3 +204,26 @@ Palette: background `#0B0B18`, purple `#8A2BE2`, cyan `#00E5FF`, crimson `#FF304
 
 ## 16. Map — NYX ISLAND: THE FALLEN REALM (spec 16)
 Seven POIs: Neon District, Crimson Temple, Shadow Forest, Iron Fortress, Phantom Docks, Eclipse Valley, NYX CORE (final-circle reactor). Built graybox first, then paths/spawns/cover, then art, lighting, VFX, optimization.
+
+## 17. Vehicles (offline; online waits for the Fusion SDK)
+The authority (the local match offline) decides who sits where, all damage and destruction; a client never claims a run-over or a crash.
+
+| Vehicle | Seats | Health | Top speed | Notes |
+|---|---:|---:|---:|---|
+| Nyx Buggy | 2 | 900 | 31 m/s (112 km/h) | Open roll cage: riders' heads and shoulders can be shot |
+| Raider Truck | 4 | 1600 | 26 m/s (94 km/h) | Armoured cab protects the two front seats; two exposed bed seats |
+| Scout Quad | 1 | 600 | 28 m/s (101 km/h) | Quickest off the line, fragile, rider fully exposed |
+
+- **Spawns:** about one vehicle per 70 m of starting-circle radius, between 3 and 14. They are parked on open, level ground. Buggies are the most common, then trucks, then quads.
+- **Getting in and out:** press **E / USE** within 3.6 m to take the first free seat (the driver's seat first). Press again to get out beside your seat. Bailing out above 8 m/s (29 km/h) hurts: 5 damage per m/s over that.
+- **Driving:** the move stick or WASD controls throttle (forward / back) and steering. Reverse throttle brakes first, then reverses. An empty vehicle holds its brake.
+  - Steering lock is reduced at speed, and cornering is capped at about 1.1 g so vehicles stay on their wheels.
+  - Vehicles flipped onto their roof or side right themselves after 2.5 s.
+  - The camera pulls back behind the vehicle (free look still works). Riders can't shoot or heal.
+- **Damage:**
+  - **Bullets** that hit the body damage the vehicle. Riders' exposed parts can still be hit.
+  - **Crashes** above 6 m/s damage the vehicle by 2.5 × (speed − 6)². Riders take 6 per m/s above 14 m/s.
+  - **Run-overs** happen above 4 m/s: 15 + 8 per m/s above 4 (lethal around 15 m/s). The driver gets the kill credit. Survivors are thrown clear, and the same vehicle can hit the same character at most once a second.
+- **Destruction:** at 0 health the vehicle explodes and leaves a burnt wreck that can't be driven. Riders are thrown out. Everyone within 6 m takes up to 70 damage (linear falloff). The last player to shoot the vehicle gets credit for the kills.
+- **Bots** hear running engines from 55 m. They do not drive yet.
+- *(Implemented: `VehicleRules`, `VehicleCatalog`, `OfflineVehicle`, `VehicleModels`, `OfflineMatch` vehicle authority; `VehicleAndLootTests`, `VehiclePlayModeTests`.)*

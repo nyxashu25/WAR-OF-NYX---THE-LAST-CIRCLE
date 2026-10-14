@@ -12,6 +12,7 @@ using WarOfNyx.Core.Items;
 using WarOfNyx.Core.Match;
 using WarOfNyx.Core.Movement;
 using WarOfNyx.Core.Offline;
+using WarOfNyx.Core.Vehicles;
 using WarOfNyx.Core.Zone;
 using WarOfNyx.Gameplay.Effects;
 
@@ -63,6 +64,8 @@ namespace WarOfNyx.Gameplay.Offline
         private readonly List<OfflineCombatant> _combatants = new List<OfflineCombatant>();
         private readonly Dictionary<int, OfflineCombatant> _byId = new Dictionary<int, OfflineCombatant>();
         private readonly List<OfflineLootCrate> _crates = new List<OfflineLootCrate>();
+        private readonly List<OfflineVehicle> _vehicles = new List<OfflineVehicle>();
+        private readonly Dictionary<long, float> _runOverAt = new Dictionary<long, float>();
         private readonly SoundEvent[] _sounds = new SoundEvent[SoundBufferSize];
         private readonly List<string> _pendingFeed = new List<string>();
 
@@ -85,11 +88,15 @@ namespace WarOfNyx.Gameplay.Offline
         public OfflineCombatant Human { get; private set; }
         public IReadOnlyList<OfflineCombatant> Combatants => _combatants;
         public IReadOnlyList<OfflineLootCrate> Crates => _crates;
+        public IReadOnlyList<OfflineVehicle> Vehicles => _vehicles;
         public MatchResolver Resolver => _resolver;
         public ZoneStage Stage { get; private set; }
         public bool ZoneActive => _zonePlan != null;
         public ZoneCircle CurrentCircle => ZoneActive ? Stage.CircleAt(Now) : new ZoneCircle(0f, 0f, 1e6f);
         public SoundEvent[] Sounds => _sounds;
+
+        /// <summary>Developer capture only: replaces the human driver's stick (x = steer, y = throttle).</summary>
+        internal Vector2? DevDriveInput;
         public int SoundCount { get; private set; }
         public bool Unlocked => Phase == OfflinePhase.Active;
         public float SimulationSpeed { get; set; } = 1f;
@@ -136,6 +143,11 @@ namespace WarOfNyx.Gameplay.Offline
             if (OfflineMatchRequest.IncludeHuman)
                 AppServices.Flow.TryStartSession(GameMode.OfflineBattleRoyale);
             SpawnEveryone(seed, OfflineMatchRequest.IncludeHuman);
+            if (Phase != OfflinePhase.Starting)
+            {
+                SpawnWorldLoot(seed);
+                SpawnVehicles(seed);
+            }
             // Same seed, same sky: time of day and weather are part of the match (visual only).
             World.WeatherSystem.Ensure().Begin(Core.Weather.Atmosphere.Plan(seed), 0f, seed);
             Debug.Log($"[WarOfNyx][Offline] Ghost Protocol: {(Human != null ? "1 human + " : string.Empty)}{BotCount} bots, {Difficulty}, seed {seed}.");
@@ -189,6 +201,65 @@ namespace WarOfNyx.Gameplay.Offline
             FightStartedAt = Now + CountdownSeconds;
             Stage = ZoneTimeline.Evaluate(_zonePlan, _zoneSettings, FightStartedAt, Now);
             AdvanceFlow(GameFlowState.Countdown);
+        }
+
+        /// <summary>Supply caches scattered over the map: every weapon, old and new, can be found (rarity-weighted).</summary>
+        private void SpawnWorldLoot(int seed)
+        {
+            var centre = _area.transform.position;
+            int count = WorldLoot.CacheCount(_combatants.Count);
+            float radius = _area.ZoneRadius * 0.95f;
+            float separation = Mathf.Max(10f, radius / Mathf.Sqrt(count) * 0.8f);
+            var spots = ScatterPlanner.Plan(count, centre.x, centre.z, radius, separation, unchecked(seed * 7 + 101), _area);
+            for (int i = 0; i < spots.Count; i++)
+            {
+                var contents = WorldLoot.Contents(seed, i, WeaponRegistry.Get, WeaponCatalog.All.Length);
+                var crate = OfflineLootCrate.SpawnCache(new Vector3(spots[i].X, spots[i].Y, spots[i].Z), contents);
+                if (crate == null)
+                    continue;
+                crate.transform.SetParent(transform, true);
+                _crates.Add(crate);
+            }
+            Debug.Log($"[WarOfNyx][Offline] {spots.Count} supply caches placed.");
+        }
+
+        /// <summary>Vehicles parked on open, level ground around the map (buggies most often, trucks and quads less).</summary>
+        private void SpawnVehicles(int seed)
+        {
+            var centre = _area.transform.position;
+            int count = VehicleRules.SpawnCount(_area.ZoneRadius);
+            float radius = _area.ZoneRadius * 0.9f;
+            var spots = ScatterPlanner.Plan(count, centre.x, centre.z, radius, Mathf.Max(35f, radius * 0.22f), unchecked(seed * 13 + 7), _area, VehicleRoom);
+            for (int i = 0; i < spots.Count; i++)
+            {
+                int type = VehicleRules.TypeFor(seed, i);
+                int paint = (int)((uint)(seed + i * 7) % VehicleModels.PaintCount);
+                SpawnVehicle(type, paint, new Vector3(spots[i].X, spots[i].Y, spots[i].Z), spots[i].Yaw);
+            }
+            Debug.Log($"[WarOfNyx][Offline] {spots.Count} vehicles parked.");
+        }
+
+        /// <summary>Places a vehicle the match owns (only the match's vehicles can be entered).</summary>
+        public OfflineVehicle SpawnVehicle(int type, int paint, Vector3 ground, float yaw)
+        {
+            var vehicle = OfflineVehicle.Spawn(this, type, paint, ground, yaw);
+            vehicle.transform.SetParent(transform, true);
+            _vehicles.Add(vehicle);
+            return vehicle;
+        }
+
+        /// <summary>Room for a vehicle: nothing in a 3.4 x 2.2 x 5.6 m box above the ground, and the ground roughly level.</summary>
+        private static bool VehicleRoom(float x, float y, float z)
+        {
+            if (Physics.CheckBox(new Vector3(x, y + 1.4f, z), new Vector3(1.7f, 1.1f, 2.8f), Quaternion.identity, EnvironmentMask, QueryTriggerInteraction.Ignore))
+                return false;
+            for (int i = 0; i < 4; i++)
+            {
+                var corner = new Vector3(x + (i % 2 == 0 ? -1.5f : 1.5f), y + 3f, z + (i < 2 ? -2.5f : 2.5f));
+                if (!Physics.Raycast(corner, Vector3.down, out var hit, 6f, EnvironmentMask, QueryTriggerInteraction.Ignore) || Mathf.Abs(hit.point.y - y) > 0.5f)
+                    return false;
+            }
+            return true;
         }
 
         private static string PlayerName()
@@ -254,12 +325,19 @@ namespace WarOfNyx.Gameplay.Offline
                     move = Core.Networking.InputCodec.Neutral(move.Yaw, move.Pitch);
                     combat = default;
                 }
+                // The driver's stick is the throttle (forward / back) and the steering (left / right).
+                if (c.Driving)
+                {
+                    var stick = c == Human && DevDriveInput.HasValue ? DevDriveInput.Value : new Vector2(move.MoveX, move.MoveY);
+                    c.Vehicle.SetInput(Unlocked ? stick.y : 0f, Unlocked ? stick.x : 0f, false);
+                }
                 c.Simulate(move, combat, Unlocked, Now, TickSeconds, _tick, circle, zoneLive, _zoneSettings);
             }
 
             if (Unlocked)
             {
                 EnvironmentPass(circle, zoneLive);
+                VehiclePass();
                 ResolveResults();
                 ExpireCrates();
             }
@@ -377,14 +455,21 @@ namespace WarOfNyx.Gameplay.Offline
             }
         }
 
-        private void HandleElimination(OfflineCombatant victim, OfflineCombatant killer, DamageKind cause, short weaponId, bool headshot)
+        private void HandleElimination(OfflineCombatant victim, OfflineCombatant killer, DamageKind cause, short weaponId, bool headshot,
+            OfflineVehicle vehicle = null, bool explosion = false)
         {
             _resolver?.RecordElimination(victim.Id, _tick, Now, killer != null ? killer.Id : -1, cause);
             _hunt?.Remove(victim.Id); // any beacon disappears
+            // A rider falls out beside their seat (the capsule lands there, not on the roof).
+            if (victim.Vehicle != null)
+                LeaveVehicle(victim);
 
-            string text = killer != null
-                ? CombatText.Elimination(killer.DisplayName, victim.DisplayName, WeaponRegistry.DisplayName(weaponId), headshot)
-                : CombatText.Environmental(victim.DisplayName, cause);
+            string text = cause == DamageKind.Vehicle
+                ? CombatText.VehicleElimination(killer != null ? killer.DisplayName : null, victim.DisplayName,
+                    vehicle != null ? vehicle.Stats.DisplayName : "vehicle", explosion)
+                : killer != null
+                    ? CombatText.Elimination(killer.DisplayName, victim.DisplayName, WeaponRegistry.DisplayName(weaponId), headshot)
+                    : CombatText.Environmental(victim.DisplayName, cause);
             Feed?.Invoke(text, victim == Human || killer == Human);
             string notice = killer != null && _notices != null ? _notices.OnElimination(killer.Id, victim.Id, Now) : null;
             if (notice != null)
@@ -404,6 +489,192 @@ namespace WarOfNyx.Gameplay.Offline
                 crate.transform.SetParent(transform, true);
                 _crates.Add(crate);
             }
+        }
+
+        // ------------------------------------------------------------------ vehicles (the match is the authority)
+
+        public OfflineVehicle NearestVehicle(Vector3 position, float range)
+        {
+            OfflineVehicle best = null;
+            float bestSqr = range * range;
+            foreach (var v in _vehicles)
+            {
+                if (v == null || v.Destroyed)
+                    continue;
+                var d = v.transform.position - position;
+                d.y = 0f;
+                if (d.sqrMagnitude <= bestSqr)
+                {
+                    bestSqr = d.sqrMagnitude;
+                    best = v;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Get in (first free seat; the driver's seat first). Null on success, otherwise the reason.</summary>
+        public string TryEnterVehicle(OfflineCombatant c, OfflineVehicle v)
+        {
+            if (c == null || v == null || !_vehicles.Contains(v))
+                return "That vehicle is gone.";
+            if (!Unlocked)
+                return "Wait for the fight to start.";
+            var d = v.transform.position - c.Feet;
+            d.y = 0f;
+            int seat = v.FreeSeat();
+            string reason = VehicleRules.CanEnter(c.Alive, c.Vehicle != null, v.Destroyed, d.magnitude, seat);
+            if (reason != null)
+                return reason;
+            v.SetOccupant(seat, c);
+            c.Vehicle = v;
+            c.Seat = seat;
+            HealingRules.Interrupt(ref c.Heal);
+            WeaponRules.CancelReload(ref c.Slots[c.ActiveSlot]);
+            c.PlaceInSeat(v.SeatPosition(seat) - v.transform.up * OfflineVehicle.CharacterSeatDrop, v.transform.rotation);
+            return null;
+        }
+
+        /// <summary>Get out beside the seat. Bailing out above 8 m/s hurts.</summary>
+        public string TryExitVehicle(OfflineCombatant c)
+        {
+            if (c == null || c.Vehicle == null)
+                return "Not in a vehicle.";
+            float speed = c.Vehicle.Velocity.magnitude;
+            LeaveVehicle(c);
+            if (speed > 8f && c.Alive)
+            {
+                var result = c.ReceiveDamage((speed - 8f) * 5f, DamageKind.Fall, null, WeaponCatalog.NoWeapon, c.Feet, Now);
+                if (result.Killed)
+                    HandleElimination(c, null, DamageKind.Fall, WeaponCatalog.NoWeapon, false);
+            }
+            return null;
+        }
+
+        private void LeaveVehicle(OfflineCombatant c)
+        {
+            var v = c.Vehicle;
+            if (v == null)
+                return;
+            var exit = v.ExitPosition(c.Seat);
+            v.SetOccupant(c.Seat, null);
+            c.Vehicle = null;
+            c.Seat = -1;
+            c.Movement.Teleport(exit, v.Yaw);
+            if (!c.Alive)
+                c.Movement.Controller.enabled = false;
+        }
+
+        /// <summary>Bullets that hit a vehicle damage it (the shooter is remembered for explosion credit).</summary>
+        public void ApplyVehicleDamage(OfflineCombatant attacker, OfflineVehicle v, float amount)
+        {
+            if (v == null || v.Destroyed || amount <= 0f || !Unlocked)
+                return;
+            if (attacker != null)
+                v.LastAttacker = attacker;
+            v.TakeDamage(amount);
+            if (v.Health <= 0f)
+                DestroyVehicle(v);
+        }
+
+        /// <summary>A collision reported by the vehicle's physics: the vehicle and its riders take crash damage.</summary>
+        internal void VehicleCrashed(OfflineVehicle v, float impact)
+        {
+            if (!Unlocked || v.Destroyed)
+                return;
+            float occupantDamage = VehicleRules.OccupantCrashDamage(impact);
+            if (occupantDamage > 0f)
+                foreach (var o in v.Occupants)
+                {
+                    if (o == null || !o.Alive)
+                        continue;
+                    var result = o.ReceiveDamage(occupantDamage, DamageKind.Vehicle, null, WeaponCatalog.NoWeapon, v.transform.position, Now);
+                    if (o == Human && result.Applied > 0f)
+                        HumanDamaged?.Invoke(result.Applied, v.transform.position, false);
+                    if (result.Killed)
+                        HandleElimination(o, null, DamageKind.Vehicle, WeaponCatalog.NoWeapon, false, v);
+                }
+            v.TakeDamage(VehicleRules.CrashDamage(impact));
+            if (v.Health <= 0f)
+                DestroyVehicle(v);
+        }
+
+        private void DestroyVehicle(OfflineVehicle v)
+        {
+            var centre = v.Centre;
+            var credit = v.LastAttacker;
+            v.MarkDestroyed();
+            VehicleExplosion.Play(centre);
+            EmitSound(SoundKind.Explosion, centre, credit != null ? credit.Id : -1);
+            Feed?.Invoke($"{v.Stats.DisplayName} destroyed{(credit != null ? " by " + credit.DisplayName : string.Empty)}", credit == Human);
+            // Riders are thrown out, then everyone near the blast is hurt (riders take the full blast).
+            foreach (var o in v.Occupants)
+                if (o != null)
+                    LeaveVehicle(o);
+            foreach (var c in _combatants)
+            {
+                if (!c.Alive)
+                    continue;
+                float damage = VehicleRules.ExplosionDamageAt(Vector3.Distance(c.Chest, centre) - 1f);
+                if (damage <= 0f)
+                    continue;
+                var result = c.ReceiveDamage(damage, DamageKind.Vehicle, credit, WeaponCatalog.NoWeapon, centre, Now);
+                AfterVehicleHit(credit, c, result, v, explosion: true);
+            }
+        }
+
+        /// <summary>Run-overs and engine noise, once per tick.</summary>
+        private void VehiclePass()
+        {
+            for (int i = 0; i < _vehicles.Count; i++)
+            {
+                var v = _vehicles[i];
+                if (v == null || v.Destroyed)
+                    continue;
+                if (v.Driver != null && _tick % 30 == 0)
+                    EmitSound(SoundKind.Engine, v.transform.position, v.Driver.Id);
+                var velocity = v.Velocity;
+                if (velocity.magnitude < VehicleRules.RunOverMinSpeed)
+                    continue;
+                foreach (var c in _combatants)
+                {
+                    if (!c.Alive || c.Vehicle != null || !v.Overlaps(c.Feet + Vector3.up * 0.6f, OfflineCombatant.BodyRadius))
+                        continue;
+                    long key = (long)i * 100000 + c.Id;
+                    if (_runOverAt.TryGetValue(key, out float last) && Now - last < VehicleRules.RunOverCooldown)
+                        continue;
+                    _runOverAt[key] = Now;
+                    float damage = VehicleRules.RunOverDamage(velocity.magnitude);
+                    var result = c.ReceiveDamage(damage, DamageKind.Vehicle, v.Driver, WeaponCatalog.NoWeapon, v.transform.position, Now);
+                    AfterVehicleHit(v.Driver, c, result, v, explosion: false);
+                    // Survivors are thrown clear of the vehicle.
+                    if (c.Alive)
+                    {
+                        var away = Vector3.ProjectOnPlane(c.Feet - v.transform.position, Vector3.up).normalized;
+                        var side = Vector3.Dot(away, v.transform.right) >= 0f ? v.transform.right : -v.transform.right;
+                        c.Movement.Teleport(c.Feet + side * (v.Stats.Width * 0.5f + 1f), c.Yaw);
+                    }
+                }
+            }
+        }
+
+        private void AfterVehicleHit(OfflineCombatant attacker, OfflineCombatant victim, in DamageResult result, OfflineVehicle v, bool explosion)
+        {
+            if (result.Applied <= 0f)
+                return;
+            if (victim == Human)
+                HumanDamaged?.Invoke(result.Applied, v.transform.position, false);
+            if (attacker != null && attacker != victim)
+            {
+                attacker.DamageDealt += result.Applied;
+                if (attacker == Human)
+                    HumanHit?.Invoke(victim, false, result.Killed);
+            }
+            if (!result.Killed)
+                return;
+            var killer = attacker != victim ? attacker : null;
+            if (killer != null)
+                killer.Kills++;
+            HandleElimination(victim, killer, DamageKind.Vehicle, WeaponCatalog.NoWeapon, false, v, explosion);
         }
 
         // ------------------------------------------------------------------ shared queries for controllers and combatants

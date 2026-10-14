@@ -38,10 +38,13 @@ namespace WarOfNyx.Settings
 
             // Phase 10 visuals: the cel-shader outline and post-processing are skipped on Low (mobile cost).
             Shader.SetGlobalFloat(OutlineDisableId, tier == GraphicsQualityTier.Low ? 1f : 0f);
+            // Character fabric / leather / metal micro-patterns are skipped on Low as well.
+            Shader.SetGlobalFloat(SurfaceDetailOffId, tier == GraphicsQualityTier.Low ? 1f : 0f);
             TierChanged?.Invoke(tier);
         }
 
         private static readonly int OutlineDisableId = Shader.PropertyToID("_NyxOutlineDisable");
+        private static readonly int SurfaceDetailOffId = Shader.PropertyToID("_NyxSurfaceDetailOff");
 
         /// <summary>Raised after a tier is applied (post-processing volumes listen to it).</summary>
         public static event Action<GraphicsQualityTier> TierChanged;

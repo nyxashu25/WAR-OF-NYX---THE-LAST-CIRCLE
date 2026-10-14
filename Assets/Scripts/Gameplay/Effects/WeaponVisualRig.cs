@@ -46,6 +46,13 @@ namespace WarOfNyx.Gameplay.Effects
         public Transform Hand => _hand;
         public WeaponStats Weapon { get; private set; }
         public bool Aiming => _aiming;
+
+        /// <summary>Hides the held weapon (driving); the weapon itself is unchanged.</summary>
+        public void SetHidden(bool hidden)
+        {
+            if (_model != null && _model.gameObject.activeSelf == hidden)
+                _model.gameObject.SetActive(!hidden);
+        }
         public bool Healing => _healing;
         /// <summary>Recoil kick in degrees (decays quickly).</summary>
         public float Kick => _kick;

@@ -46,7 +46,7 @@ Code written: **all 15 phases (1–14 and 9G)**. What remains needs the owner: P
 Scenes `Bootstrap`, `MainMenu`, `PracticeArena`, `MatchLobby`, `BattleArena` (+NavMesh). Prefabs `PlayerPlaceholder`; Fusion-only `Resources/WarOfNyx/NetworkPlayer` (with hitboxes), `MatchController`, `LootCrate`. Assets `MovementConfig`, `GameConfig`, `FX_Additive.mat`, **`ScriptableObjects/Weapons/*.asset` + `Resources/WarOfNyx/WeaponDatabase.asset`**, URP assets, graybox materials.
 
 ## Versions
-Unity 6000.3.26f1 · URP 17.3.0 · Input System 1.20.0 · AI Navigation 2.0.15 · Test Framework 1.6.0 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **12**.
+Unity 6000.3.26f1 · URP 17.3.0 · Input System 1.20.0 · AI Navigation 2.0.15 · Test Framework 1.6.0 · uGUI 2.0.0 · Photon Fusion 2.1.3 Stable (to install) · `NetworkProtocol.Version` = **13** (13: weapon ids 11-17, arsenal expansion).
 
 ## Key decisions (cumulative, newest last)
 1. Unity 6.3 LTS + Fusion 2.1.3. Rules in pure C# shared by server, prediction, offline simulation and bots. Online isolated behind `WON_FUSION`.

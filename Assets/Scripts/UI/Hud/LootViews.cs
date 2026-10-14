@@ -72,7 +72,7 @@ namespace WarOfNyx.UI.Hud
             $"YOU: [1] {Display(slots[0])}  [2] {Display(slots[1])}  [3] {Display(slots[2])}\n" +
             $"Armor L{inventory.ArmorLevel}   Medkits S{inventory.SmallMedkits} M{inventory.StandardMedkits} L{inventory.AdvancedMedkits}   " +
             $"Ammo L{inventory.LightAmmo} R{inventory.RifleAmmo} S{inventory.ShellAmmo} M{inventory.MarksmanAmmo}   " +
-            $"Capsule closes in {(int)Math.Ceiling(Math.Max(0f, secondsLeft))}s";
+            (float.IsInfinity(secondsLeft) ? "Supply cache" : $"Capsule closes in {(int)Math.Ceiling(Math.Max(0f, secondsLeft))}s");
 
         private static string Display(in WeaponState s) => s.IsEmptySlot ? "-" : WeaponRegistry.DisplayName(s.WeaponId);
     }

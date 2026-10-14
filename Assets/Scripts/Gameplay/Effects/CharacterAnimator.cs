@@ -28,6 +28,16 @@ namespace WarOfNyx.Gameplay.Effects
         /// <summary>Head turn while free-looking (degrees, + = right); the head follows the camera within its range.</summary>
         public float LookYaw { get; set; }
 
+        /// <summary>Riding a vehicle: the seated pose replaces the gait (set by the owner).</summary>
+        public bool Seated { get; set; }
+
+        /// <summary>Seated: where the feet rest, relative to the character root (height, forward) in metres.</summary>
+        public Vector2 SeatFoot { get; set; } = new Vector2(0.8f, 0.55f);
+
+        /// <summary>Seated driver: world positions of the hands on the steering wheel / handlebars (null = hands on the knees).</summary>
+        public Vector3? HandTargetL { get; set; }
+        public Vector3? HandTargetR { get; set; }
+
         /// <summary>A foot touched the ground: side (-1 left, +1 right) and intensity (0.2 crouch-walk … 0.95 sprint).</summary>
         public event System.Action<int, float> FootContact;
 
@@ -84,6 +94,13 @@ namespace WarOfNyx.Gameplay.Effects
 
             var frame = _body.transform;
 
+            if (Seated)
+            {
+                PoseSeated(frame);
+                _hasLast = false; // no velocity spike when stepping out
+                return;
+            }
+
             // ---- Motion (from real position changes: works for every kind of character)
             var position = transform.position;
             var worldVelocity = _hasLast ? (position - _lastPosition) / dt : Vector3.zero;
@@ -136,6 +153,34 @@ namespace WarOfNyx.Gameplay.Effects
         }
 
         // ------------------------------------------------------------------ body
+
+        /// <summary>Seated in a vehicle: hips on the seat, legs bent to the floor or foot pegs, hands on the wheel.</summary>
+        private void PoseSeated(Transform frame)
+        {
+            if (_router != null && _router.enabled)
+            {
+                AimPitch = _router.Pitch;
+                LookYaw = _router.FreeLookYaw;
+            }
+            _body.Pelvis.localPosition = new Vector3(0f, _body.PelvisRestHeight, -0.04f);
+            _body.Pelvis.localRotation = Quaternion.Euler(-6f, 0f, 0f);
+            _body.Spine.localRotation = Quaternion.Euler(4f + Mathf.Clamp(AimPitch, -40f, 40f) * 0.15f, 0f, 0f);
+            float look = Mathf.Clamp(LookYaw, -80f, 80f);
+            _body.Head.localRotation = Quaternion.Euler(Mathf.Clamp(AimPitch, -50f, 50f) * 0.4f, look * 0.8f, 0f);
+
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var foot = frame.TransformPoint(new Vector3(side * 0.17f, SeatFoot.x, SeatFoot.y));
+                var kneeUp = frame.TransformDirection(new Vector3(side * 0.15f, 1f, 1f));
+                Ik.SolveTwoBone(_body.Thigh(side), _body.Shin(side), CharacterBody.ThighLength, CharacterBody.ShinLength, foot, kneeUp);
+                _body.Foot(side).rotation = frame.rotation;
+
+                var target = side < 0 ? HandTargetL : HandTargetR;
+                var hand = target ?? frame.TransformPoint(new Vector3(side * 0.2f, _body.PelvisRestHeight + 0.05f, 0.32f));
+                var elbow = frame.TransformDirection(new Vector3(side * 1f, -0.8f, -0.3f));
+                Ik.SolveTwoBone(_body.UpperArm(side), _body.Forearm(side), CharacterBody.UpperArmLength, CharacterBody.ForearmLength, hand, elbow);
+            }
+        }
 
         private void PosePelvis(float stride, float bobAmp, float spin, float lunge, Vector3 moveDir)
         {
@@ -237,7 +282,7 @@ namespace WarOfNyx.Gameplay.Effects
                 return new Pose { Position = pos, Rotation = BladeRotation(dir, Vector3.down), Valid = true };
             }
 
-            bool pistol = weapon.id == WeaponCatalog.NeonPistol;
+            bool pistol = weapon.id == WeaponCatalog.NeonPistol || weapon.id == WeaponCatalog.ViperRevolver;
             var hip = pistol ? new Vector3(0.13f, 1.3f, 0.42f) : new Vector3(0.17f, 1.29f, 0.3f);
             var ads = pistol ? new Vector3(0.09f, 1.43f, 0.48f) : new Vector3(0.12f, 1.43f, 0.34f);
             var p = Vector3.Lerp(hip, ads, _aimBlend);
@@ -296,7 +341,13 @@ namespace WarOfNyx.Gameplay.Effects
                 return new Vector3(0f, -0.15f, 0.15f); // at the magazine
             switch (weapon.id)
             {
-                case WeaponCatalog.NeonPistol: return new Vector3(-0.03f, -0.07f, -0.01f);
+                case WeaponCatalog.NeonPistol:
+                case WeaponCatalog.ViperRevolver: return new Vector3(-0.03f, -0.07f, -0.01f);
+                case WeaponCatalog.VortexLmg: return new Vector3(0f, -0.05f, 0.42f);
+                case WeaponCatalog.ArcSniper: return new Vector3(0f, -0.05f, 0.44f);
+                case WeaponCatalog.PulseDmr: return new Vector3(0f, -0.05f, 0.42f);
+                case WeaponCatalog.TalonAutoShotgun: return new Vector3(0f, -0.04f, 0.38f);
+                case WeaponCatalog.RiftCarbine: return new Vector3(0f, -0.05f, 0.34f);
                 case WeaponCatalog.ShadowSmg:
                 case WeaponCatalog.StormLightSmg: return new Vector3(0f, -0.06f, 0.2f);
                 case WeaponCatalog.CrimsonShotgun: return new Vector3(0f, -0.07f, 0.42f);

@@ -84,6 +84,14 @@ namespace WarOfNyx.UI.Hud
             _ammoText.color = ranged && magazine == 0 && reloadProgress <= 0f ? NyxPalette.Crimson : NyxPalette.TextPrimary;
         }
 
+        /// <summary>Driving: the vehicle name and speed replace the weapon line; the second line shows its health.</summary>
+        public void SetVehicle(string vehicleName, int kmh, float health, float maxHealth)
+        {
+            _weaponText.text = $"{vehicleName.ToUpperInvariant()}   {kmh} KM/H";
+            _ammoText.text = $"VEHICLE {Mathf.CeilToInt(health)} / {Mathf.CeilToInt(maxHealth)}";
+            _ammoText.color = health < maxHealth * 0.3f ? NyxPalette.Crimson : NyxPalette.TextPrimary;
+        }
+
         public void SetSlots(string slot1, string slot2, string slot3, int activeSlot)
         {
             string Mark(int i, string n) => string.IsNullOrEmpty(n) ? $"[{i + 1}] -" : (i == activeSlot ? $"<b>[{i + 1}] {n}</b>" : $"[{i + 1}] {n}");

@@ -79,6 +79,19 @@ namespace WarOfNyx.Characters
         }
 
         /// <summary>
+        /// Rides a vehicle seat: the controller is off (the vehicle carries the character) and the state keeps the
+        /// vehicle's heading. Called every frame while seated; <see cref="Teleport"/> steps out.
+        /// </summary>
+        public void Seat(Vector3 position, Quaternion rotation)
+        {
+            if (_controller.enabled)
+                _controller.enabled = false;
+            transform.SetPositionAndRotation(position, rotation);
+            _state = MovementState.Initial(rotation.eulerAngles.y);
+            _grounded = true;
+        }
+
+        /// <summary>
         /// Rolls the character back to a stored simulation state (networked prediction:
         /// called at the start of every tick, including re-simulated ticks, before <see cref="Simulate"/>).
         /// </summary>

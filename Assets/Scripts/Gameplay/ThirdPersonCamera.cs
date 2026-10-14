@@ -45,6 +45,18 @@ namespace WarOfNyx.Gameplay
         private Vector3 _smoothedPivot;
         private float _shake;
         private float _shakeTarget;
+        private float _vehicleBlend;
+        private bool _vehicleView;
+
+        /// <summary>Colliders under this root (the vehicle the player sits in) never push the camera in.</summary>
+        public Transform IgnoreRoot { get; set; }
+
+        /// <summary>Driving: a higher pivot, a longer pull-back and no shoulder offset, eased in and out.</summary>
+        public void SetVehicleView(bool on, Transform vehicle)
+        {
+            _vehicleView = on;
+            IgnoreRoot = on ? vehicle : null;
+        }
 
         public Transform Target => _target;
 
@@ -81,8 +93,10 @@ namespace WarOfNyx.Gameplay
             bool aiming = _input != null && _input.AimHeld;
             bool lowStance = _movement != null && _movement.State.IsLowStance;
 
-            _aimBlend = Mathf.MoveTowards(_aimBlend, aiming ? 1f : 0f, dt * zoomSharpness * 0.5f);
-            _pivotHeight = Mathf.Lerp(_pivotHeight, lowStance ? pivotHeightCrouched : pivotHeightStanding, 1f - Mathf.Exp(-10f * dt));
+            _aimBlend = Mathf.MoveTowards(_aimBlend, aiming && !_vehicleView ? 1f : 0f, dt * zoomSharpness * 0.5f);
+            _vehicleBlend = Mathf.MoveTowards(_vehicleBlend, _vehicleView ? 1f : 0f, dt * 2.5f);
+            float pivotTarget = (lowStance ? pivotHeightCrouched : pivotHeightStanding) + 0.9f * _vehicleBlend;
+            _pivotHeight = Mathf.Lerp(_pivotHeight, pivotTarget, 1f - Mathf.Exp(-10f * dt));
 
             // Follow the pivot with light smoothing on the vertical axis only, so horizontal aim stays crisp.
             var rawPivot = _target.position + Vector3.up * _pivotHeight;
@@ -107,8 +121,8 @@ namespace WarOfNyx.Gameplay
             var rotation = Quaternion.Euler(pitch, yaw, 0f);
 
             // The shoulder point sits beside the pivot; pull back from there.
-            var shoulder = pivot + rotation * shoulderOffset;
-            float wanted = Mathf.Lerp(distance, aimDistance, _aimBlend);
+            var shoulder = pivot + rotation * (shoulderOffset * (1f - _vehicleBlend));
+            float wanted = Mathf.Lerp(Mathf.Lerp(distance, aimDistance, _aimBlend), 7f, _vehicleBlend);
             float allowed = CollisionDistance(pivot, shoulder, rotation * Vector3.back, wanted);
 
             // Pull in instantly when blocked, ease back out when clear (prevents clipping and popping).
@@ -152,7 +166,7 @@ namespace WarOfNyx.Gameplay
             for (int i = 0; i < count; i++)
             {
                 var hit = _hits[i];
-                if (hit.collider == null || hit.collider.transform.IsChildOf(_target))
+                if (hit.collider == null || hit.collider.transform.IsChildOf(_target) || (IgnoreRoot != null && hit.collider.transform.IsChildOf(IgnoreRoot)))
                     continue;
                 // distance 0 means the sphere started overlapping; treat as fully blocked.
                 if (hit.distance < nearest)

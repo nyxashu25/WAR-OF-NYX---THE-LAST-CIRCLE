@@ -51,6 +51,7 @@ namespace WarOfNyx.Gameplay.Offline
         private bool _bound;
         private bool _paused;
         private OfflineLootCrate _nearby;
+        private OfflineVehicle _nearbyVehicle;
         private OfflineLootCrate _open;
         private OfflineCombatant _spectating;
         private int _spectateIndex = -1;
@@ -209,11 +210,28 @@ namespace WarOfNyx.Gameplay.Offline
             int spare = ranged ? me.Inventory.GetAmmo(weapon.ammoType) : 0;
             _hud.SetVitals(me.Health.Health, me.Health.MaxHealth);
             _blood?.SetHealth(me.Health.Health, me.Health.MaxHealth, me.Alive);
-            _hud.SetWeapon(weapon != null ? weapon.displayName : "Unarmed", ranged, state.Magazine, spare,
-                weapon != null ? WeaponRules.ReloadProgress(state, weapon, now) : 0f);
             var inv = me.Inventory;
-            _hud.SetInventory($"ARMOR L{inv.ArmorLevel}     MEDKITS  S{inv.SmallMedkits}  M{inv.StandardMedkits}  L{inv.AdvancedMedkits}     " +
-                              (ranged ? AmmoInfo.DisplayName(weapon.ammoType).ToUpperInvariant() + " " + spare : string.Empty));
+            var vehicle = me.Alive ? me.Vehicle : null;
+            if (vehicle != null)
+            {
+                // Driving: speed and vehicle health replace the weapon readout.
+                _hud.SetVehicle(vehicle.Stats.DisplayName, vehicle.Kmh, vehicle.Health, vehicle.Stats.MaxHealth);
+                _hud.SetInventory(me.Driving ? "W/S THROTTLE   A/D STEER   (stick on touch)" : "PASSENGER");
+            }
+            else
+            {
+                _hud.SetWeapon(weapon != null ? weapon.displayName : "Unarmed", ranged, state.Magazine, spare,
+                    weapon != null ? WeaponRules.ReloadProgress(state, weapon, now) : 0f);
+                _hud.SetInventory($"ARMOR L{inv.ArmorLevel}     MEDKITS  S{inv.SmallMedkits}  M{inv.StandardMedkits}  L{inv.AdvancedMedkits}     " +
+                                  (ranged ? AmmoInfo.DisplayName(weapon.ammoType).ToUpperInvariant() + " " + spare : string.Empty));
+            }
+            if (_camera != null && _spectating == null)
+            {
+                _camera.SetVehicleView(vehicle != null, vehicle != null ? vehicle.transform : null);
+                // The camera swings in behind a moving vehicle unless the player is looking around.
+                if (vehicle != null && me.Router != null && !me.Router.FreeLooking && Mathf.Abs(vehicle.Speed) > 4f)
+                    me.Router.SetAim(Mathf.MoveTowardsAngle(me.Router.Yaw, vehicle.Yaw, 70f * Time.deltaTime), me.Router.Pitch);
+            }
             _hud.SetHealing(HealingRules.Progress(me.Heal, now), Medkits.DisplayName(me.Heal.Type));
             _hud.SetSlots(WeaponRegistry.DisplayName(me.Slots[0].WeaponId), WeaponRegistry.DisplayName(me.Slots[1].WeaponId),
                 WeaponRegistry.DisplayName(me.Slots[2].WeaponId), me.ActiveSlot);
@@ -221,7 +239,7 @@ namespace WarOfNyx.Gameplay.Offline
             float spread = ranged ? WeaponRules.CurrentSpread(state, weapon, now, me.Router.AimHeld) : 0.5f;
             // Hidden while free-looking: shots still go where the character aims, not where the camera looks.
             bool freeLook = me.Router != null && me.Router.FreeLookActive;
-            _hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, me.Alive && _spectating == null && !freeLook);
+            _hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, me.Alive && _spectating == null && !freeLook && vehicle == null);
 
             if (!me.Alive)
             {
@@ -313,13 +331,24 @@ namespace WarOfNyx.Gameplay.Offline
         {
             if (me == null)
                 return;
-            _nearby = me.Alive ? _match.NearestCrate(me.Feet, OfflineLootCrate.InteractRange) : null;
+            bool riding = me.Vehicle != null;
+            _nearby = me.Alive && !riding ? _match.NearestCrate(me.Feet, OfflineLootCrate.InteractRange) : null;
+            _nearbyVehicle = me.Alive && !riding && _nearby == null ? _match.NearestVehicle(me.Feet, Core.Vehicles.VehicleRules.EnterRange) : null;
             if (_open != null && (_open != _nearby || !me.Alive))
                 CloseLoot();
             string key = Application.isMobilePlatform ? "USE" : "E";
-            _hud.SetPrompt(_nearby != null && _open == null
-                ? $"[{key}] OPEN LOOT - {_nearby.OwnerName}  ({Mathf.CeilToInt(_nearby.SecondsLeft(now))}s)"
-                : string.Empty);
+            string prompt = string.Empty;
+            if (riding && me.Alive)
+                prompt = $"[{key}] EXIT {me.Vehicle.Stats.DisplayName.ToUpperInvariant()}";
+            else if (_nearby != null && _open == null)
+                prompt = _nearby.IsCache
+                    ? $"[{key}] OPEN SUPPLY CACHE"
+                    : $"[{key}] OPEN LOOT - {_nearby.OwnerName}  ({Mathf.CeilToInt(_nearby.SecondsLeft(now))}s)";
+            else if (_nearbyVehicle != null)
+                prompt = _nearbyVehicle.FreeSeat() < 0
+                    ? $"{_nearbyVehicle.Stats.DisplayName.ToUpperInvariant()} - NO FREE SEAT"
+                    : $"[{key}] {(_nearbyVehicle.FreeSeat() == 0 ? "DRIVE" : "RIDE IN")} {_nearbyVehicle.Stats.DisplayName.ToUpperInvariant()}";
+            _hud.SetPrompt(prompt);
             if (_open != null)
             {
                 LootViews.Build(i => _open.Contents[i], me.Slots, me.ActiveSlot, me.Inventory, _entries);
@@ -334,10 +363,22 @@ namespace WarOfNyx.Gameplay.Offline
                 return;
             if (_open != null)
                 CloseLoot();
+            else if (_match.Human.Vehicle != null)
+            {
+                string reason = _match.TryExitVehicle(_match.Human);
+                if (reason != null)
+                    _hud.ShowMessage(reason);
+            }
+            else if (_nearby == null && _nearbyVehicle != null && _match.Human.Alive)
+            {
+                string reason = _match.TryEnterVehicle(_match.Human, _nearbyVehicle);
+                if (reason != null)
+                    _hud.ShowMessage(reason);
+            }
             else if (_nearby != null && _match.Human.Alive)
             {
                 _open = _nearby;
-                _loot.Open(_open.OwnerName.ToUpperInvariant() + " - LOOT CAPSULE");
+                _loot.Open(_open.IsCache ? "SUPPLY CACHE" : _open.OwnerName.ToUpperInvariant() + " - LOOT CAPSULE");
                 _match.Human.Router.InputEnabled = false;
                 UpdateCursor();
             }

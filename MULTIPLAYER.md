@@ -141,3 +141,7 @@ The server validates every command. It enforces speed and teleport limits, fire 
 - Offline matches never create a Photon session, never contact a server and never need the internet (spec 38.14). `OfflineMatch` is the local authority; the same Core rules (movement, weapons, melee, health, healing, inventory and loot claims, circle, Nyx Hunt, match resolver) run there as on the dedicated server.
 - Shared code between modes: everything in `WarOfNyx.Core`, plus `LootClaims` (now used by both `NetworkCombat.RPC_TakeLoot` and the offline match), `LootViews` (loot panel rows) and `LootCapsuleVisual`.
 - Online matches are never filled with bots (spec 38.2). Bots exist only in the offline scene.
+
+## Arsenal expansion and vehicles (2026-10-14)
+- `NetworkProtocol.Version` = **13**: weapon ids 11-17 were added (Vortex LMG, Arc Sniper, Talon Auto-Shotgun, Rift Carbine, Viper Revolver, Pulse DMR, Nyx War Axe). Old ids are unchanged, but a version 12 build would not know the new ones, so the two must not be matched.
+- Vehicles and supply caches are **offline only** for now. Online, they need a server-authoritative `NetworkVehicle`: the server owns the seats, physics, run-overs, crashes and explosions, and clients only send stick input. That needs the Photon Fusion SDK. The rules they would share are already in Core: `VehicleRules`, `VehicleCatalog`, `WorldLoot`.

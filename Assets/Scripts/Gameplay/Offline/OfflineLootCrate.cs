@@ -22,6 +22,21 @@ namespace WarOfNyx.Gameplay.Offline
         public float ExpiresAt { get; private set; }
         public float SecondsLeft(float now) => Mathf.Max(0f, ExpiresAt - now);
 
+        /// <summary>A supply cache placed on the map at the start (never expires; gone when emptied).</summary>
+        public bool IsCache { get; private set; }
+
+        public static OfflineLootCrate SpawnCache(Vector3 ground, LootContainer contents)
+        {
+            var crate = Spawn(ground + Vector3.up * 0.3f, contents, "Supply cache", 0f);
+            if (crate != null)
+            {
+                crate.IsCache = true;
+                crate.ExpiresAt = float.PositiveInfinity;
+                crate.gameObject.name = "SupplyCache";
+            }
+            return crate;
+        }
+
         public static OfflineLootCrate Spawn(Vector3 deathPosition, LootContainer contents, string ownerName, float now)
         {
             if (contents == null || contents.IsEmpty)

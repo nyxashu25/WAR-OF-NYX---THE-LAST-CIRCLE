@@ -10,6 +10,8 @@ namespace WarOfNyx.Core.Combat
         Camping = 3,
         Fall = 4,
         Environment = 5,
+        /// <summary>Run over, crashed, or caught in a vehicle explosion (the authority applies it; armour does not reduce it).</summary>
+        Vehicle = 6,
     }
 
     public enum DamageBlockReason : byte

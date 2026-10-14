@@ -9,8 +9,8 @@ namespace WarOfNyx.Gameplay.Effects
     /// (<see cref="CharacterBody"/>) whose parts are the procedural meshes of <see cref="CharacterModels"/>
     /// (anatomy, face, hair, outfit and gear per character), cloth chains (<see cref="ClothDynamics"/>), blinking
     /// eyes (<see cref="FaceAnimator"/>), and the procedural animator and movement sounds on the character root.
-    /// One renderer per body part (vertex-coloured, WarOfNyx/NyxToonVC), so a detailed character stays cheap.
-    /// Hit shapes are unchanged (they live on the character root, the same for every character).
+    /// One renderer per body part and detail level (vertex-coloured, WarOfNyx/NyxToonVC); a LODGroup swaps the close-up
+    /// model (LOD 0) for lighter ones with distance, so 24 detailed characters stay affordable. Hit shapes are unchanged (they live on the character root, the same for every character).
     /// </summary>
     public static class CharacterStyler
     {
@@ -18,6 +18,9 @@ namespace WarOfNyx.Gameplay.Effects
         public const string MaterialResource = "WarOfNyx/NyxToonVC";
 
         private static Material _material;
+
+        /// <summary>The vertex-colour material shared by characters, detailed guns and vehicles.</summary>
+        public static Material SharedMaterial => Material;
 
         private static Material Material
         {
@@ -52,6 +55,13 @@ namespace WarOfNyx.Gameplay.Effects
             }
 
             var model = CharacterModels.Get(look);
+            var levels = new CharacterModel[CharacterModels.LodCount];
+            var lodRenderers = new List<Renderer>[CharacterModels.LodCount];
+            for (int lod = 0; lod < levels.Length; lod++)
+            {
+                levels[lod] = CharacterModels.Get(look, lod);
+                lodRenderers[lod] = new List<Renderer>();
+            }
             var shape = model.Shape;
             var root = new GameObject(StyledRootName).transform;
             root.SetParent(visualRoot, false);
@@ -64,8 +74,9 @@ namespace WarOfNyx.Gameplay.Effects
                 joint.SetParent(parent, false);
                 joint.localPosition = localPosition;
                 joints[name] = joint;
-                if (model.Meshes.TryGetValue(name, out var mesh))
-                    Attach(joint, mesh);
+                for (int lod = 0; lod < levels.Length; lod++)
+                    if (levels[lod].Meshes.TryGetValue(name, out var mesh))
+                        lodRenderers[lod].Add(Attach(joint, mesh, lod));
                 return joint;
             }
 
@@ -111,6 +122,16 @@ namespace WarOfNyx.Gameplay.Effects
 
             root.gameObject.AddComponent<FaceAnimator>().Bind(eyes);
 
+            // Detail levels by screen height (a 1.8 m character, 60° view): LOD 0 within ~10 m, LOD 1 to ~35 m, then LOD 2.
+            var group = root.gameObject.AddComponent<LODGroup>();
+            group.SetLODs(new[]
+            {
+                new LOD(LodScreenHeights[0], lodRenderers[0].ToArray()),
+                new LOD(LodScreenHeights[1], lodRenderers[1].ToArray()),
+                new LOD(LodScreenHeights[2], lodRenderers[2].ToArray()),
+            });
+            group.RecalculateBounds();
+
             // The animator and movement sounds live on the character root and find this body, the movement and the weapon rig.
             var character = visualRoot.parent != null ? visualRoot.parent : visualRoot;
             if (character.GetComponent<CharacterAnimator>() == null)
@@ -119,9 +140,12 @@ namespace WarOfNyx.Gameplay.Effects
                 character.gameObject.AddComponent<CharacterAudio>();
         }
 
-        private static void Attach(Transform joint, Mesh mesh)
+        /// <summary>Screen-height thresholds of the three detail levels (the last one is the cull height).</summary>
+        public static readonly float[] LodScreenHeights = { 0.15f, 0.045f, 0.0015f };
+
+        private static Renderer Attach(Transform joint, Mesh mesh, int lod)
         {
-            var go = new GameObject("Mesh");
+            var go = new GameObject(lod == 0 ? "Mesh" : "Mesh_LOD" + lod);
             go.transform.SetParent(joint, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
@@ -129,6 +153,7 @@ namespace WarOfNyx.Gameplay.Effects
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
             renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            return renderer;
         }
     }
 }

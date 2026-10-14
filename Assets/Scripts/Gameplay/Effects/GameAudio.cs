@@ -264,6 +264,18 @@ namespace WarOfNyx.Gameplay.Effects
                     return new Profile { Crack = 1f, BodyCutoff = 2600f, BodyTau = 0.11f, ThumpHz = 52f, Thump = 0.95f, Tail = 0.5f, TailTau = 0.9f, Length = 1.4f, MechAt = 0.55f, Mech = 3 };
                 case WeaponCatalog.NeonPistol:
                     return new Profile { Crack = 0.85f, BodyCutoff = 3700f, BodyTau = 0.05f, ThumpHz = 140f, Thump = 0.45f, Tail = 0.18f, TailTau = 0.3f, Length = 0.5f, MechAt = 0.025f, Mech = 1 };
+                case WeaponCatalog.VortexLmg:
+                    return new Profile { Crack = 0.95f, BodyCutoff = 2800f, BodyTau = 0.08f, ThumpHz = 75f, Thump = 0.8f, Tail = 0.35f, TailTau = 0.55f, Length = 0.7f };
+                case WeaponCatalog.ArcSniper:
+                    return new Profile { Crack = 1f, BodyCutoff = 2200f, BodyTau = 0.14f, ThumpHz = 45f, Thump = 1f, Tail = 0.6f, TailTau = 1.1f, Length = 1.7f, MechAt = 0.6f, Mech = 3 };
+                case WeaponCatalog.TalonAutoShotgun:
+                    return new Profile { Crack = 0.6f, BodyCutoff = 1900f, BodyTau = 0.1f, ThumpHz = 62f, Thump = 0.9f, Tail = 0.35f, TailTau = 0.5f, Length = 0.9f };
+                case WeaponCatalog.RiftCarbine:
+                    return new Profile { Crack = 0.85f, BodyCutoff = 3400f, BodyTau = 0.055f, ThumpHz = 100f, Thump = 0.55f, Tail = 0.24f, TailTau = 0.4f, Length = 0.55f };
+                case WeaponCatalog.ViperRevolver:
+                    return new Profile { Crack = 0.9f, BodyCutoff = 2400f, BodyTau = 0.09f, ThumpHz = 70f, Thump = 0.85f, Tail = 0.4f, TailTau = 0.7f, Length = 1f };
+                case WeaponCatalog.PulseDmr:
+                    return new Profile { Crack = 1f, BodyCutoff = 3000f, BodyTau = 0.09f, ThumpHz = 65f, Thump = 0.8f, Tail = 0.4f, TailTau = 0.7f, Length = 1f };
                 case WeaponCatalog.StormBurstRifle:
                     return new Profile { Crack = 0.95f, BodyCutoff = 3600f, BodyTau = 0.06f, ThumpHz = 95f, Thump = 0.6f, Tail = 0.28f, TailTau = 0.45f, Length = 0.6f };
                 default: // NX-7 assault rifle and unknown rifles
@@ -435,7 +447,16 @@ namespace WarOfNyx.Gameplay.Effects
                     s.Click(r * 0.86f, 3200f, 0.6f, 0.003f);                    // slide release
                     s.Ring(r * 0.86f, new[] { 1700f, 2900f, 4100f }, 0.1f, 0.03f);
                     break;
+                case WeaponCatalog.ViperRevolver:
+                    s.Click(0.05f, 2100f, 0.5f, 0.004f);                        // cylinder swings out
+                    for (int k = 0; k < 6; k++)
+                        s.Click(0.2f + k * 0.025f, 4200f, 0.25f, 0.002f);       // empty cases fall
+                    s.Noise(r * 0.55f, 0.06f, 0.3f, 0.01f, 0.03f, 3000f, 800f); // speed loader
+                    s.Click(r * 0.85f, 2400f, 0.65f, 0.005f);                   // cylinder closes
+                    s.Ring(r * 0.85f, new[] { 1500f, 2600f, 3900f }, 0.1f, 0.04f);
+                    break;
                 case WeaponCatalog.PhantomMarksman:
+                case WeaponCatalog.ArcSniper:
                     s.Click(0.05f, 2300f, 0.4f, 0.004f);                        // bolt up and back
                     s.Noise(0.1f, 0.1f, 0.25f, 0.02f, 0.05f, 3000f, 700f);
                     MagOut(0.3f);

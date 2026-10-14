@@ -13,6 +13,8 @@ namespace WarOfNyx.Core.Bots
         Footsteps = 3,
         Reload = 4,
         Explosion = 5,
+        /// <summary>A running vehicle engine (heard from 55 m).</summary>
+        Engine = 6,
     }
 
     public struct SoundEvent
@@ -59,6 +61,7 @@ namespace WarOfNyx.Core.Bots
                 case SoundKind.Footsteps: return 12f;
                 case SoundKind.Reload: return 8f;
                 case SoundKind.Explosion: return 100f;
+                case SoundKind.Engine: return 55f;
                 default: return 10f;
             }
         }

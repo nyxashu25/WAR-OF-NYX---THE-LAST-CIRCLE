@@ -20,18 +20,65 @@ namespace WarOfNyx.Gameplay.Effects
     }
 
     /// <summary>
-    /// Procedural mesh building for detailed PLACEHOLDER characters and gear: smooth lofts (torso, limbs,
-    /// boots, sleeves, scabbards), sculptable ellipsoids (heads, muscles, armour), tapered Bezier strands
-    /// (hair), flat ribbons (scarves, coat tails, straps), discs (eyes, emblems), boxes (pouches, plates) and
-    /// rings (belts, collars). Every vertex carries a colour (rgb) and a glow amount (1 - alpha) for
-    /// WarOfNyx/NyxToonVC, so one mesh per body part holds a whole outfit. Smooth grid normals.
+    /// Surface material ids read by WarOfNyx/NyxToonVC (mesh uv2.x): each one has its own lighting
+    /// (specular, sheen, reflections, hair highlights) and, for fabrics, a woven micro-pattern.
+    /// </summary>
+    public static class Surf
+    {
+        public const float Cloth = 0f;     // plain matte cloth with a soft sheen
+        public const float Skin = 1f;      // warm, soft shadow edge
+        public const float Fabric = 2f;    // woven fabric: pattern from Weave
+        public const float Leather = 3f;   // grain + glossy highlight
+        public const float Metal = 4f;     // brushed metal, tinted reflections
+        public const float Polymer = 5f;   // hard armour plate with a clear coat
+        public const float Hair = 6f;      // anisotropic (strand-direction) highlight bands
+        public const float Carbon = 7f;    // carbon-fibre twill under a clear coat
+        public const float Rubber = 8f;    // dull soles, grips
+        public const float Fur = 9f;       // soft, strand-direction sheen
+        public const float Circuit = 10f;  // glowing lines with light flowing along them
+        public const float Eye = 11f;      // wet, very glossy
+        public const float Gold = 12f;     // polished metal (brass, gold)
+        public const float Lacquer = 13f;  // glossy paint (scabbard)
+    }
+
+    /// <summary>Woven micro-patterns for <see cref="Surf.Fabric"/> (mesh uv2.w).</summary>
+    public static class Weave
+    {
+        public const float Ripstop = 0f;   // tactical grid
+        public const float Twill = 1f;     // diagonal ribs (trousers, coats)
+        public const float Rib = 2f;       // knit ribs (cuffs, undersuits)
+        public const float Quilt = 3f;     // stitched diamond padding
+        public const float Hex = 4f;       // hex mesh (bodysuits)
+        public const float Plain = 5f;     // fine plain weave
+    }
+
+    /// <summary>
+    /// Procedural mesh building for detailed PLACEHOLDER characters and gear: smooth lofts and resampled surfaces
+    /// with folds (torso, limbs, sleeves), sculptable ellipsoids (heads, muscles, armour), bevelled boxes (pouches,
+    /// plates), tubes (cables, pistons), tapered Bezier strands (hair), flat ribbons (scarves, straps), discs and
+    /// rings. Every vertex carries a colour (rgb) and a glow amount (1 - alpha), and in uv2 its surface material
+    /// (<see cref="Surf"/>), ambient occlusion, outline weight and weave pattern, for WarOfNyx/NyxToonVC. uv0 is in
+    /// metres along the surface (fabric patterns keep their real size); tangents follow the length of each shape
+    /// (strand direction for hair highlights). <see cref="Resolution"/> scales the segment counts (detail levels).
     /// </summary>
     public sealed class MeshKit
     {
         private readonly List<Vector3> _v = new List<Vector3>();
         private readonly List<Vector3> _n = new List<Vector3>();
         private readonly List<Color> _c = new List<Color>();
+        private readonly List<Vector2> _uv = new List<Vector2>();
+        private readonly List<Vector4> _surf = new List<Vector4>();
+        private readonly List<Vector4> _tan = new List<Vector4>();
         private readonly List<int> _t = new List<int>();
+
+        /// <summary>Surface material for the shapes that follow (sticky until changed).</summary>
+        public float Material = Surf.Cloth;
+        /// <summary>Weave pattern for fabric (sticky).</summary>
+        public float Pattern = Weave.Plain;
+        /// <summary>Outline weight for the shapes that follow: 0 for tiny details (stitches, rivets) so they stay crisp.</summary>
+        public float Outline = 1f;
+        /// <summary>Segment-count multiplier (detail level): 1 = normal, &gt; 1 smoother, &lt; 1 cheaper.</summary>
+        public float Resolution = 1f;
 
         public int VertexCount => _v.Count;
 
@@ -44,14 +91,56 @@ namespace WarOfNyx.Gameplay.Effects
 
         public static Matrix4x4 At(Vector3 position, Vector3 euler = default) => Matrix4x4.TRS(position, Quaternion.Euler(euler), Vector3.one);
 
+        /// <summary>Sets the material (and weave) for the shapes that follow.</summary>
+        public MeshKit Use(float surface, float pattern = Weave.Plain, float outline = 1f)
+        {
+            Material = surface;
+            Pattern = pattern;
+            Outline = outline;
+            return this;
+        }
+
+        /// <summary>A segment count scaled by <see cref="Resolution"/>.</summary>
+        public int Res(int n, int min = 3) => Mathf.Max(min, Mathf.RoundToInt(n * Resolution));
+
+        private void Add(Vector3 position, Vector3 normal, Color color, Vector2 uv, Vector4 tangent, float ao = 1f, Vector2? material = null)
+        {
+            _v.Add(position);
+            _n.Add(normal);
+            _c.Add(color);
+            _uv.Add(uv);
+            _tan.Add(tangent);
+            var mat = material ?? new Vector2(Material, Pattern);
+            _surf.Add(new Vector4(mat.x, Mathf.Clamp01(ao), Outline, mat.y));
+        }
+
+        private static Vector4 TangentOf(Vector3 along, Vector3 across, Vector3 normal)
+        {
+            var t = Vector3.ProjectOnPlane(along, normal);
+            if (t.sqrMagnitude < 1e-12f)
+                t = Vector3.ProjectOnPlane(Vector3.up, normal);
+            if (t.sqrMagnitude < 1e-12f)
+                t = Vector3.ProjectOnPlane(Vector3.right, normal);
+            t.Normalize();
+            float w = Vector3.Dot(Vector3.Cross(normal, t), across) >= 0f ? 1f : -1f;
+            return new Vector4(t.x, t.y, t.z, w);
+        }
+
         // ------------------------------------------------------------------ core: a grid of points with smooth normals
 
-        /// <summary>Triangulates a rows x cols grid (cols wrap when <paramref name="wrap"/>), smooth normals from neighbours.</summary>
-        public void Grid(Vector3[,] p, Func<int, int, Color> color, bool wrap, Matrix4x4 m, bool flip = false)
+        /// <summary>
+        /// Triangulates a rows x cols grid (cols wrap when <paramref name="wrap"/>; the seam column is duplicated so the
+        /// metre-based uvs stay continuous), smooth normals from neighbours, tangents along the rows' direction.
+        /// </summary>
+        public void Grid(Vector3[,] p, Func<int, int, Color> color, bool wrap, Matrix4x4 m, bool flip = false, Func<int, int, float> ao = null,
+            Func<int, int, Vector2> material = null)
         {
             int rows = p.GetLength(0), cols = p.GetLength(1);
             var normalMatrix = m.inverse.transpose;
-            int start = _v.Count;
+            int outCols = wrap ? cols + 1 : cols;
+            var normals = new Vector3[rows, cols];
+            var tangents = new Vector3[rows, cols];
+            var acrosses = new Vector3[rows, cols];
             for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++)
             {
@@ -65,16 +154,36 @@ namespace WarOfNyx.Gameplay.Effects
                     n = Vector3.Cross(p[r, cNext] - p[r, c], p[Mathf.Min(rows - 1, r + 1), c] - p[Mathf.Max(0, r - 1), c]);
                 if (flip)
                     n = -n;
-                _v.Add(m.MultiplyPoint3x4(p[r, c]));
-                _n.Add(normalMatrix.MultiplyVector(n).normalized);
-                _c.Add(color(r, c));
+                normals[r, c] = n;
+                tangents[r, c] = dv.sqrMagnitude > 1e-12f ? dv : Vector3.Cross(n, du);
+                acrosses[r, c] = du;
             }
-            int segs = wrap ? cols : cols - 1;
+
+            // Metre uvs: u along each row (around), v along each column (length).
+            var u = new float[rows, outCols];
+            var v = new float[rows, outCols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 1; c < outCols; c++)
+                    u[r, c] = u[r, c - 1] + Vector3.Distance(m.MultiplyPoint3x4(p[r, c % cols]), m.MultiplyPoint3x4(p[r, c - 1]));
+            for (int c = 0; c < outCols; c++)
+                for (int r = 1; r < rows; r++)
+                    v[r, c] = v[r - 1, c] + Vector3.Distance(m.MultiplyPoint3x4(p[r, c % cols]), m.MultiplyPoint3x4(p[r - 1, c % cols]));
+
+            int start = _v.Count;
+            for (int r = 0; r < rows; r++)
+            for (int c = 0; c < outCols; c++)
+            {
+                int cc = c % cols;
+                var n = normalMatrix.MultiplyVector(normals[r, cc]).normalized;
+                var tangent = TangentOf(m.MultiplyVector(tangents[r, cc]), m.MultiplyVector(acrosses[r, cc]), n);
+                Add(m.MultiplyPoint3x4(p[r, cc]), n, color(r, cc), new Vector2(u[r, c], v[r, c]), tangent, ao != null ? ao(r, cc) : 1f,
+                    material != null ? material(r, cc) : (Vector2?)null);
+            }
+            int segs = outCols - 1;
             for (int r = 0; r < rows - 1; r++)
             for (int c = 0; c < segs; c++)
             {
-                int c2 = (c + 1) % cols;
-                int a = start + r * cols + c, b = start + r * cols + c2, d = start + (r + 1) * cols + c, e = start + (r + 1) * cols + c2;
+                int a = start + r * outCols + c, b = start + r * outCols + c + 1, d = start + (r + 1) * outCols + c, e = start + (r + 1) * outCols + c + 1;
                 Triangle(a, d, b);
                 Triangle(b, d, e);
             }
@@ -102,15 +211,18 @@ namespace WarOfNyx.Gameplay.Effects
         private void Fan(Vector3 centre, IList<Vector3> rim, Vector3 normal, Color color, Matrix4x4 m)
         {
             var nm = m.inverse.transpose;
+            var n = nm.MultiplyVector(normal).normalized;
+            var axisU = Vector3.ProjectOnPlane(rim[0] - centre, normal).normalized;
+            if (axisU.sqrMagnitude < 0.5f)
+                axisU = Vector3.ProjectOnPlane(Vector3.right, normal).normalized;
+            var axisV = Vector3.Cross(normal, axisU);
+            var tangent = TangentOf(m.MultiplyVector(axisV), m.MultiplyVector(axisU), n);
             int c0 = _v.Count;
-            _v.Add(m.MultiplyPoint3x4(centre));
-            _n.Add(nm.MultiplyVector(normal).normalized);
-            _c.Add(color);
+            Add(m.MultiplyPoint3x4(centre), n, color, Vector2.zero, tangent);
             for (int i = 0; i < rim.Count; i++)
             {
-                _v.Add(m.MultiplyPoint3x4(rim[i]));
-                _n.Add(nm.MultiplyVector(normal).normalized);
-                _c.Add(color);
+                var d = rim[i] - centre;
+                Add(m.MultiplyPoint3x4(rim[i]), n, color, new Vector2(Vector3.Dot(d, axisU), Vector3.Dot(d, axisV)), tangent);
             }
             for (int i = 0; i < rim.Count; i++)
             {
@@ -126,7 +238,7 @@ namespace WarOfNyx.Gameplay.Effects
 
         /// <summary>
         /// Smooth tube through elliptical rings (bottom to top, along +Y in part space), optional caps.
-        /// <paramref name="color"/> gets (ring index, side index) for stripes and panels.
+        /// <paramref name="color"/> gets (ring index, side index) for stripes and panels; the side count is used as given.
         /// </summary>
         public void Loft(IList<Ring> rings, int sides, Func<int, int, Color> color, Matrix4x4 m, bool capBottom = true, bool capTop = true)
         {
@@ -147,6 +259,103 @@ namespace WarOfNyx.Gameplay.Effects
         public void Loft(IList<Ring> rings, int sides, Color color, Matrix4x4 m, bool capBottom = true, bool capTop = true) =>
             Loft(rings, sides, (_, __) => color, m, capBottom, capTop);
 
+        /// <summary>
+        /// Smooth surface of revolution for clothing and anatomy: the rings are resampled every <paramref name="step"/>
+        /// metres (Catmull-Rom, 0 = as given), the side count scales with <see cref="Resolution"/>, and an optional radial
+        /// <paramref name="displace"/>(y, angle) carves folds, pleats, quilting and panel grooves (deeper = darker: baked
+        /// occlusion). Colour by (y, angle in degrees: 0 = front +Z, 90 = right +X, ±180 = back); an optional
+        /// <paramref name="material"/>(y, angle) = (Surf, Weave) mixes materials in one surface (panels are flat-shaded per triangle).
+        /// </summary>
+        public void Surface(IList<Ring> rings, int sides, Func<float, float, Color> color, Matrix4x4 m, float step = 0f,
+            Func<float, float, float> displace = null, bool capBottom = false, bool capTop = false, float occlusion = 28f,
+            Func<float, float, Vector2> material = null)
+        {
+            var rs = step > 0f ? Resample(rings, step / Mathf.Max(0.5f, Resolution)) : rings;
+            int n = Res(sides, 6);
+            var p = new Vector3[rs.Count, n];
+            var ao = new float[rs.Count, n];
+            var cols = new Color[rs.Count, n];
+            var mats = material != null ? new Vector2[rs.Count, n] : null;
+            for (int r = 0; r < rs.Count; r++)
+            for (int s = 0; s < n; s++)
+            {
+                float a = s * Mathf.PI * 2f / n;
+                var ring = rs[r];
+                var outward = new Vector3(Mathf.Sin(a) / Mathf.Max(1e-4f, ring.Rx), 0f, Mathf.Cos(a) / Mathf.Max(1e-4f, ring.Rz)).normalized;
+                float d = displace != null ? displace(ring.Y, a * Mathf.Rad2Deg) : 0f;
+                p[r, s] = new Vector3(ring.X + Mathf.Sin(a) * ring.Rx, ring.Y, ring.Z + Mathf.Cos(a) * ring.Rz) + outward * d;
+                ao[r, s] = 1f + Mathf.Min(0f, d) * occlusion;
+                float deg = Mathf.Repeat(a * Mathf.Rad2Deg + 180f, 360f) - 180f;
+                cols[r, s] = color(ring.Y, deg);
+                if (mats != null)
+                    mats[r, s] = material(ring.Y, deg);
+            }
+            Grid(p, (r, s) => cols[r, s], wrap: true, m, ao: (r, s) => ao[r, s], material: mats != null ? (r, s) => mats[r, s] : (Func<int, int, Vector2>)null);
+            if (capBottom)
+                Cap(p, 0, rs[0], Vector3.down, cols[0, 0], m);
+            if (capTop)
+                Cap(p, rs.Count - 1, rs[rs.Count - 1], Vector3.up, cols[rs.Count - 1, 0], m);
+        }
+
+        public void Surface(IList<Ring> rings, int sides, Color color, Matrix4x4 m, float step = 0f, Func<float, float, float> displace = null,
+            bool capBottom = false, bool capTop = false) =>
+            Surface(rings, sides, (_, __) => color, m, step, displace, capBottom, capTop);
+
+        /// <summary>Catmull-Rom resampling of a ring profile: one ring every <paramref name="step"/> metres of height.</summary>
+        public static List<Ring> Resample(IList<Ring> rings, float step)
+        {
+            var result = new List<Ring>();
+            if (rings.Count < 2 || step <= 0f)
+            {
+                result.AddRange(rings);
+                return result;
+            }
+            float CR(float p0, float p1, float p2, float p3, float t) =>
+                0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t * t + (-p0 + 3f * p1 - 3f * p2 + p3) * t * t * t);
+            for (int i = 0; i < rings.Count - 1; i++)
+            {
+                var r0 = rings[Mathf.Max(0, i - 1)];
+                var r1 = rings[i];
+                var r2 = rings[i + 1];
+                var r3 = rings[Mathf.Min(rings.Count - 1, i + 2)];
+                int pieces = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(r2.Y - r1.Y) / step));
+                for (int k = 0; k < pieces; k++)
+                {
+                    float t = k / (float)pieces;
+                    result.Add(new Ring(Mathf.Lerp(r1.Y, r2.Y, t),
+                        Mathf.Max(0f, CR(r0.Rx, r1.Rx, r2.Rx, r3.Rx, t)), Mathf.Max(0f, CR(r0.Rz, r1.Rz, r2.Rz, r3.Rz, t)),
+                        CR(r0.X, r1.X, r2.X, r3.X, t), CR(r0.Z, r1.Z, r2.Z, r3.Z, t)));
+                }
+            }
+            result.Add(rings[rings.Count - 1]);
+            return result;
+        }
+
+        /// <summary>A ring of <paramref name="rings"/> at height <paramref name="y"/> (linear), for placing details on a surface.</summary>
+        public static Ring RingAt(IList<Ring> rings, float y)
+        {
+            if (y <= rings[0].Y)
+                return rings[0];
+            for (int i = 0; i < rings.Count - 1; i++)
+            {
+                if (y > rings[i + 1].Y)
+                    continue;
+                float t = Mathf.InverseLerp(rings[i].Y, rings[i + 1].Y, y);
+                return new Ring(y, Mathf.Lerp(rings[i].Rx, rings[i + 1].Rx, t), Mathf.Lerp(rings[i].Rz, rings[i + 1].Rz, t),
+                    Mathf.Lerp(rings[i].X, rings[i + 1].X, t), Mathf.Lerp(rings[i].Z, rings[i + 1].Z, t));
+            }
+            return rings[rings.Count - 1];
+        }
+
+        /// <summary>Point on a ring profile's surface at height y and angle (degrees, 0 = front), lifted <paramref name="lift"/> metres outward.</summary>
+        public static Vector3 OnRings(IList<Ring> rings, float y, float angle, float lift = 0f)
+        {
+            var ring = RingAt(rings, y);
+            float a = angle * Mathf.Deg2Rad;
+            var outward = new Vector3(Mathf.Sin(a) / Mathf.Max(1e-4f, ring.Rx), 0f, Mathf.Cos(a) / Mathf.Max(1e-4f, ring.Rz)).normalized;
+            return new Vector3(ring.X + Mathf.Sin(a) * ring.Rx, y, ring.Z + Mathf.Cos(a) * ring.Rz) + outward * lift;
+        }
+
         private void Cap(Vector3[,] p, int row, Ring ring, Vector3 normal, Color color, Matrix4x4 m)
         {
             int sides = p.GetLength(1);
@@ -158,9 +367,11 @@ namespace WarOfNyx.Gameplay.Effects
             Fan(new Vector3(ring.X, ring.Y, ring.Z), rim, normal, color, m);
         }
 
-        /// <summary>Ellipsoid (lat x lon grid) with an optional sculpting function on the unit-sphere direction.</summary>
+        /// <summary>Ellipsoid (lat x lon grid, scaled by <see cref="Resolution"/>) with an optional sculpting function on the unit-sphere direction.</summary>
         public void Ellipsoid(Vector3 radii, int lat, int lon, Func<Vector3, Color> color, Matrix4x4 m, Func<Vector3, Vector3> sculpt = null)
         {
+            lat = Res(lat, 4);
+            lon = Res(lon, 6);
             var p = new Vector3[lat + 1, lon];
             var dirs = new Vector3[lat + 1, lon];
             for (int i = 0; i <= lat; i++)
@@ -192,12 +403,13 @@ namespace WarOfNyx.Gameplay.Effects
                 var centre = Vector3.Scale(n, h);
                 var du = Vector3.Scale(u, h);
                 var dv = Vector3.Scale(v, h);
-                foreach (var q in new[] { centre - du - dv, centre + du - dv, centre + du + dv, centre - du + dv })
-                {
-                    _v.Add(m.MultiplyPoint3x4(q));
-                    _n.Add(nm.MultiplyVector(n).normalized);
-                    _c.Add(color);
-                }
+                var wn = nm.MultiplyVector(n).normalized;
+                var tangent = TangentOf(m.MultiplyVector(v), m.MultiplyVector(u), wn);
+                float su = du.magnitude, sv = dv.magnitude;
+                var corners = new[] { centre - du - dv, centre + du - dv, centre + du + dv, centre - du + dv };
+                var uvs = new[] { new Vector2(-su, -sv), new Vector2(su, -sv), new Vector2(su, sv), new Vector2(-su, sv) };
+                for (int i = 0; i < 4; i++)
+                    Add(m.MultiplyPoint3x4(corners[i]), wn, color, uvs[i], tangent);
                 // Front faces outward (normal = cross(v1 - v0, v2 - v0)).
                 Triangle(s, s + 1, s + 2);
                 Triangle(s, s + 2, s + 3);
@@ -210,9 +422,89 @@ namespace WarOfNyx.Gameplay.Effects
             Face(Vector3.back, Vector3.right, Vector3.up);
         }
 
+        /// <summary>
+        /// Box with rounded (bevelled) edges and corners: hard-surface parts catch a highlight along every edge.
+        /// Falls back to a plain box at low <see cref="Resolution"/>.
+        /// </summary>
+        public void RoundBox(Vector3 size, float radius, Color color, Matrix4x4 m)
+        {
+            var h = size * 0.5f;
+            float r = Mathf.Min(radius, Mathf.Min(h.x, Mathf.Min(h.y, h.z)) * 0.95f);
+            if (Resolution < 0.6f || r < 2e-4f)
+            {
+                Box(size, color, m);
+                return;
+            }
+            // Two bevel steps only on large parts at high detail; small parts read the same with one.
+            int steps = Resolution >= 1.2f && Mathf.Max(size.x, Mathf.Max(size.y, size.z)) > 0.06f ? 2 : 1;
+            var inner = h - Vector3.one * r;
+            var nm = m.inverse.transpose;
+            float[] Axis(float half)
+            {
+                var list = new List<float>();
+                for (int i = 0; i <= steps; i++)
+                    list.Add(-half + r * i / steps);
+                for (int i = 0; i <= steps; i++)
+                    list.Add(half - r + r * i / steps);
+                return list.ToArray();
+            }
+            void Face(Vector3 n, Vector3 u, Vector3 v)
+            {
+                float hu = Mathf.Abs(Vector3.Dot(h, u)), hv = Mathf.Abs(Vector3.Dot(h, v)), hn = Mathf.Abs(Vector3.Dot(h, n));
+                var au = Axis(hu);
+                var av = Axis(hv);
+                int start = _v.Count;
+                for (int i = 0; i < av.Length; i++)
+                for (int j = 0; j < au.Length; j++)
+                {
+                    var q = n * hn + u * au[j] + v * av[i];
+                    var clamped = new Vector3(Mathf.Clamp(q.x, -inner.x, inner.x), Mathf.Clamp(q.y, -inner.y, inner.y), Mathf.Clamp(q.z, -inner.z, inner.z));
+                    var dir = q - clamped;
+                    dir = dir.sqrMagnitude > 1e-12f ? dir.normalized : n;
+                    var pos = clamped + dir * r;
+                    var wn = nm.MultiplyVector(dir).normalized;
+                    Add(m.MultiplyPoint3x4(pos), wn, color, new Vector2(au[j], av[i]), TangentOf(m.MultiplyVector(v), m.MultiplyVector(u), wn));
+                }
+                int w = au.Length;
+                for (int i = 0; i < av.Length - 1; i++)
+                for (int j = 0; j < w - 1; j++)
+                {
+                    int a = start + i * w + j, b = a + 1, c = a + w, d = c + 1;
+                    Triangle(a, b, d);
+                    Triangle(a, d, c);
+                }
+            }
+            Face(Vector3.right, Vector3.forward, Vector3.up);
+            Face(Vector3.left, Vector3.back, Vector3.up);
+            Face(Vector3.up, Vector3.right, Vector3.forward);
+            Face(Vector3.down, Vector3.right, Vector3.back);
+            Face(Vector3.forward, Vector3.left, Vector3.up);
+            Face(Vector3.back, Vector3.right, Vector3.up);
+        }
+
+        /// <summary>A small flat quad lying on a surface (stitches, scratches, tacks): 4 vertices facing <paramref name="normal"/>.</summary>
+        public void Dash(Vector3 a, Vector3 b, Vector3 normal, float width, Color color, Matrix4x4 m)
+        {
+            var dir = b - a;
+            float len = dir.magnitude;
+            var across = Vector3.Cross(normal, dir).normalized * (width * 0.5f);
+            if (len < 1e-6f || across.sqrMagnitude < 1e-12f)
+                return;
+            var n = m.inverse.transpose.MultiplyVector(normal).normalized;
+            var tangent = TangentOf(m.MultiplyVector(dir), m.MultiplyVector(across), n);
+            int s = _v.Count;
+            Add(m.MultiplyPoint3x4(a - across), n, color, new Vector2(0f, 0f), tangent);
+            Add(m.MultiplyPoint3x4(a + across), n, color, new Vector2(width, 0f), tangent);
+            Add(m.MultiplyPoint3x4(b + across), n, color, new Vector2(width, len), tangent);
+            Add(m.MultiplyPoint3x4(b - across), n, color, new Vector2(0f, len), tangent);
+            Triangle(s, s + 1, s + 2);
+            Triangle(s, s + 2, s + 3);
+        }
+
         /// <summary>Flat ellipse facing part-space +Z (eyes, emblems, buttons).</summary>
         public void Disc(float rx, float ry, int segments, Color color, Matrix4x4 m)
         {
+            segments = Res(segments, 5);
             var rim = new Vector3[segments];
             for (int i = 0; i < segments; i++)
             {
@@ -225,6 +517,8 @@ namespace WarOfNyx.Gameplay.Effects
         /// <summary>Ring (torus) around part-space +Y: belts, collars, cuffs, bands.</summary>
         public void Torus(float majorX, float majorZ, float minor, int segments, int sides, Color color, Matrix4x4 m)
         {
+            segments = Res(segments, 6);
+            sides = Res(sides, 3);
             var p = new Vector3[segments + 1, sides];
             for (int i = 0; i <= segments; i++)
             {
@@ -255,6 +549,7 @@ namespace WarOfNyx.Gameplay.Effects
             int stations = 7, Vector3? side = null)
         {
             const int sides = 6;
+            stations = Res(stations, 3);
             var p = new Vector3[stations + 1, sides];
             var refSide = side ?? Vector3.right;
             for (int i = 0; i <= stations; i++)
@@ -274,6 +569,27 @@ namespace WarOfNyx.Gameplay.Effects
                 }
             }
             Grid(p, (r, _) => Color.Lerp(root, tip, r / (float)stations), wrap: true, m);
+        }
+
+        /// <summary>Round tube of constant radius along a polyline (cables, hoses, piping, pistons), parallel-transported frames.</summary>
+        public void Tube(IList<Vector3> path, float radius, Color color, Matrix4x4 m, int sides = 8)
+        {
+            sides = Res(sides, 4);
+            var p = new Vector3[path.Count, sides];
+            var first = (path[1] - path[0]).normalized;
+            var normal = Vector3.Cross(first, Mathf.Abs(first.y) < 0.9f ? Vector3.up : Vector3.right).normalized;
+            for (int i = 0; i < path.Count; i++)
+            {
+                var tangent = (path[Mathf.Min(path.Count - 1, i + 1)] - path[Mathf.Max(0, i - 1)]).normalized;
+                normal = Vector3.ProjectOnPlane(normal, tangent).normalized;
+                var binormal = Vector3.Cross(tangent, normal);
+                for (int j = 0; j < sides; j++)
+                {
+                    float a = j * Mathf.PI * 2f / sides;
+                    p[i, j] = path[i] + (normal * Mathf.Cos(a) + binormal * Mathf.Sin(a)) * radius;
+                }
+            }
+            Grid(p, (_, __) => color, wrap: true, m);
         }
 
         /// <summary>A flat band (thickness <paramref name="thickness"/>) along a polyline: scarf tails, straps, coat panels.</summary>
@@ -301,6 +617,9 @@ namespace WarOfNyx.Gameplay.Effects
             mesh.SetVertices(_v);
             mesh.SetNormals(_n);
             mesh.SetColors(_c);
+            mesh.SetUVs(0, _uv);
+            mesh.SetUVs(1, _surf);
+            mesh.SetTangents(_tan);
             mesh.SetTriangles(_t, 0);
             mesh.RecalculateBounds();
             return mesh;

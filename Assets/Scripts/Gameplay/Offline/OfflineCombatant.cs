@@ -89,6 +89,14 @@ namespace WarOfNyx.Gameplay.Offline
 
         public CharacterLook Look { get; private set; }
 
+        /// <summary>The vehicle this character rides (set by the match), and the seat (0 = driver).</summary>
+        public OfflineVehicle Vehicle { get; internal set; }
+        public int Seat { get; internal set; } = -1;
+        public bool Driving => Vehicle != null && Seat == 0;
+
+        /// <summary>Carried by a vehicle seat (the vehicle calls this every frame).</summary>
+        internal void PlaceInSeat(Vector3 feet, Quaternion rotation) => Movement.Seat(feet, rotation);
+
         public void Initialize(OfflineMatch match, int id, string displayName, StartingLoadout loadout, Vector3 position, float yaw,
             float protectionEndsAt, BotController bot, CharacterLook look)
         {
@@ -150,6 +158,16 @@ namespace WarOfNyx.Gameplay.Offline
             move = Core.Networking.InputCodec.Sanitize(move); // authority-only fields are never taken from a controller
             if (!unlocked)
                 move = Core.Networking.InputCodec.Neutral(move.Yaw, move.Pitch);
+
+            // Riding: the vehicle carries the character; no walking, weapons or medkits until they step out.
+            if (Vehicle != null)
+            {
+                Pitch = move.Pitch;
+                OutsideZone = zoneLive && !circle.Contains(transform.position.x, transform.position.z);
+                if (Heal.Active)
+                    HealingRules.Interrupt(ref Heal);
+                return;
+            }
 
             bool outsideBefore = zoneLive && !circle.Contains(transform.position.x, transform.position.z);
             move.SpeedMultiplier = ActiveSpeedMultiplier;
@@ -294,7 +312,13 @@ namespace WarOfNyx.Gameplay.Offline
 
                 var victim = _match.RaycastCharacters(origin, direction, wall, this, out float distance, out bool headshot);
                 if (victim == null)
+                {
+                    // The pellet stopped on a vehicle: the vehicle takes the damage.
+                    if (wall < weapon.maxRange && hit.collider != null && hit.collider.attachedRigidbody != null &&
+                        hit.collider.attachedRigidbody.TryGetComponent<OfflineVehicle>(out var vehicle))
+                        _match.ApplyVehicleDamage(this, vehicle, WeaponRules.DamageAt(weapon, wall, false));
                     continue;
+                }
                 anyHit = anyCharacter = true;
                 TracerEnds[p] = origin + direction * distance;
                 // Pellets on several targets are applied per target; most shots hit one.
@@ -440,6 +464,19 @@ namespace WarOfNyx.Gameplay.Offline
                 _animator = GetComponent<CharacterAnimator>();
             if (_animator != null && (Router == null || !Router.enabled))
                 _animator.AimPitch = Pitch;
+            if (_animator != null)
+            {
+                bool seated = Alive && Vehicle != null;
+                _animator.Seated = seated;
+                if (seated)
+                {
+                    Vehicle.PoseRider(this, Seat, out var foot, out var left, out var right);
+                    _animator.SeatFoot = foot;
+                    _animator.HandTargetL = left;
+                    _animator.HandTargetR = right;
+                }
+            }
+            _rig?.SetHidden(Alive && Vehicle != null);
             if (_outsideVisual != null)
                 _outsideVisual.SetActive(Alive && OutsideZone);
             if (_shield != null)
