@@ -52,6 +52,23 @@ namespace WarOfNyx.EditorTools
             toon.shader = toonShader;
             EditorUtility.SetDirty(toon);
 
+            // Detailed characters: vertex-coloured toon material (referencing it here also puts the shader in builds).
+            var vcShader = Shader.Find("WarOfNyx/NyxToonVC");
+            if (vcShader != null)
+            {
+                const string vcPath = "Assets/Resources/WarOfNyx/NyxToonVC.mat";
+                var vc = AssetDatabase.LoadAssetAtPath<Material>(vcPath);
+                if (vc == null)
+                {
+                    vc = new Material(vcShader) { name = "NyxToonVC" };
+                    AssetDatabase.CreateAsset(vc, vcPath);
+                }
+                vc.shader = vcShader;
+                vc.SetFloat("_OutlineWidth", 0.006f);
+                vc.SetFloat("_RimStrength", 0.22f);
+                EditorUtility.SetDirty(vc);
+            }
+
             ConvertGrayboxMaterials(toonShader);
             var profile = CreateProfile();
             var sky = CreateSky();

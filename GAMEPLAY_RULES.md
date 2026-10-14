@@ -167,6 +167,11 @@ Walk ≈ 1.8 m/s (gentle stick or the walk key) · Run 4 m/s (full stick) · Spr
 ## 14. Controls (spec 18)
 - **Android:** left side joystick, sprint, crouch, slide. Right side swipe-look, fire, aim, jump, reload, melee, weapon switch, medkit, interact. Safe areas respected, layout and sizes customizable, sensitivity sliders, optional gyro. Aim assist, if added, stays modest and validated by the same server rules.
 - **Desktop dev:** WASD, mouse, LMB fire, RMB aim, Shift sprint, X walk (hold), Left Alt free look (hold), Space jump, C crouch, Ctrl slide, R reload, E interact, F melee (press repeatedly for combos), 1/2/3 slots, H medkit. *(Implemented: `GameInputActions`.)*
+- **Screen blood (presentation only):**
+  - A critical hit on you splatters 1–3 blood marks near the screen edges, never over the crosshair, and they slowly run down. A hit is critical if it is a headshot, does 30+ damage, or leaves you at 35 % health or less.
+  - Healing clears them: each mark fades once you are 15 % above the health you had when it landed, or back to 90 %.
+  - A red vignette grows as health drops and pulses like a heartbeat under 25 %; Reduce flashing turns the pulse off.
+  - Settings → BLOOD EFFECTS turns it all off. *(Implemented: `CriticalHit`, `BloodOverlay`.)*
 - **Free look ("eye", PUBG-style):** hold Left Alt / the EYE touch button / gamepad Select and look around (up to 170° each side, so you can see behind you) while the character keeps aiming and moving the same way; shots still go where the character aims, so the crosshair hides while you look away. Release and the view swings back in about 0.2 s. The character's head turns toward where you look. Client-side camera only: it reveals nothing the player couldn't see by turning. *(Implemented: `PlayerInputRouter.FreeLook*`, `ThirdPersonCamera`, `TouchHoldButton`.)*
 
 ## 15. HUD & feed (spec 19)

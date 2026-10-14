@@ -45,6 +45,13 @@ namespace WarOfNyx.Gameplay.World
         {
             Directory.CreateDirectory(_folder);
             Debug.Log($"[WarOfNyx][DevCapture] Writing screenshots to {Path.GetFullPath(_folder)}");
+            if (_only == "menu")
+            {
+                yield return MenuShowcase();
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
             OfflineMatchRequest.Reset();
             OfflineMatchRequest.Bots = 11;
             OfflineMatchRequest.Seed = 20261014;
@@ -73,6 +80,22 @@ namespace WarOfNyx.Gameplay.World
                     yield return View(placesCam, -265f, 172f, -265f, 270f, 1.8f, "view_neon_street_night");
                     yield return View(placesCam, 280f, 168f, 280f, 238f, 3f, "view_temple_night");
                 }
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
+            if (_only == "blood")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                yield return BloodShowcase();
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
+            if (_only == "roster")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                yield return RosterShowcase();
                 Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
                 Application.Quit(0);
                 yield break;
@@ -139,6 +162,100 @@ namespace WarOfNyx.Gameplay.World
                 yield return CharacterShowcase();
             Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
             Application.Quit(0);
+        }
+
+        /// <summary>Screen blood: a critical hit, a second hit (badly hurt), then healing clears it.</summary>
+        private IEnumerator BloodShowcase()
+        {
+            var match = OfflineMatch.Instance;
+            var human = match != null ? match.Human : null;
+            if (human == null)
+                yield break;
+            OfflineCombatant attacker = null;
+            foreach (var c in FindObjectsByTypeSafe<OfflineCombatant>())
+                if (c != human)
+                    attacker = c;
+            if (attacker == null)
+                yield break;
+            human.Protection = default; // spawn protection would block the test hits
+            yield return Capture("blood_0_unhurt");
+            match.ApplyWeaponDamage(attacker, human, 35f, true, human.Slots[0].WeaponId);
+            yield return new WaitForSeconds(0.4f);
+            Debug.Log($"[WarOfNyx][DevCapture] after headshot: health {human.Health.Health:0}");
+            yield return Capture("blood_1_headshot");
+            match.ApplyWeaponDamage(attacker, human, 40f, false, human.Slots[0].WeaponId);
+            yield return new WaitForSeconds(1.5f);
+            Debug.Log($"[WarOfNyx][DevCapture] badly hurt: health {human.Health.Health:0}");
+            yield return Capture("blood_2_badly_hurt");
+            Core.Combat.HealthRules.Heal(ref human.Health, 75f);
+            yield return new WaitForSeconds(1.6f);
+            Debug.Log($"[WarOfNyx][DevCapture] healed: health {human.Health.Health:0}");
+            yield return Capture("blood_3_healed");
+        }
+
+        /// <summary>The main menu's CHARACTERS screen for every roster character.</summary>
+        private IEnumerator MenuShowcase()
+        {
+            yield return SceneManager.LoadSceneAsync(AppServices.Config.mainMenuScene, LoadSceneMode.Single);
+            yield return new WaitForSeconds(1.5f);
+            var menu = FindObjectsByTypeSafe<UI.MainMenu.MainMenuController>();
+            if (menu.Length == 0)
+                yield break;
+            yield return Capture("menu_home");
+            menu[0].ShowCharacters();
+            for (int i = 0; i < Characters.CharacterRoster.Count; i++)
+            {
+                yield return new WaitForSeconds(1.2f);
+                yield return Capture($"menu_characters_{Characters.CharacterRoster.Get(i).Name}");
+                menu[0].BrowseCharacter(1);
+            }
+        }
+
+        /// <summary>Every roster character close up: front, three-quarter, back, face, and running (cloth in motion).</summary>
+        private IEnumerator RosterShowcase()
+        {
+            var cam = Camera.main;
+            if (cam == null)
+                yield break;
+            var follow = cam.GetComponent<ThirdPersonCamera>();
+            if (follow != null)
+                follow.enabled = false;
+            foreach (var c in FindObjectsByTypeSafe<Offline.OfflineCombatant>())
+                c.gameObject.SetActive(false);
+            var start = new Vector3(-30f, Ground(-30f, -60f), -60f);
+            float fov = cam.fieldOfView;
+            for (int id = 0; id < Characters.CharacterRoster.Count; id++)
+            {
+                var look = Characters.CharacterRoster.Get(id);
+                var (root, rig) = Puppet(id, look.SignatureWeapon, start);
+                cam.fieldOfView = 32f;
+                yield return new WaitForSeconds(0.6f);
+                foreach (var (label, offset, height) in new[]
+                         {
+                             ("front", new Vector3(0f, 0f, 3.2f), 1.0f), ("three_quarter", new Vector3(2.3f, 0f, 2.3f), 1.0f),
+                             ("back", new Vector3(0.6f, 0f, -3.2f), 1.0f), ("face", new Vector3(0.25f, 0f, 1.0f), 1.6f),
+                         })
+                {
+                    cam.transform.position = root.position + offset + Vector3.up * (height + (label == "face" ? 0.05f : 0.15f));
+                    cam.transform.LookAt(root.position + Vector3.up * height);
+                    yield return new WaitForSeconds(0.25f);
+                    yield return Capture($"roster_{look.Name}_{label}");
+                }
+                // Running: cloth trails behind.
+                float t = 0f;
+                while (t < 1.4f)
+                {
+                    t += Time.deltaTime;
+                    root.position += Vector3.forward * 4.4f * Time.deltaTime;
+                    root.position = new Vector3(root.position.x, Ground(root.position.x, root.position.z), root.position.z);
+                    cam.transform.position = root.position + new Vector3(2.6f, 1.2f, 0.6f);
+                    cam.transform.LookAt(root.position + Vector3.up * 1.0f);
+                    yield return null;
+                }
+                yield return Capture($"roster_{look.Name}_running");
+                Destroy(root.gameObject);
+            }
+            cam.fieldOfView = fov;
         }
 
         /// <summary>The EYE: normal view, holding free look turned ~150° (looking behind), and the view after release.</summary>

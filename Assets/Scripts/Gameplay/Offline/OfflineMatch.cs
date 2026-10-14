@@ -99,7 +99,8 @@ namespace WarOfNyx.Gameplay.Offline
         public event Action<string, Color> Headline;
         public event Action<string> Message;
         public event Action<OfflineCombatant, bool, bool> HumanHit;
-        public event Action<float, Vector3> HumanDamaged;
+        /// <summary>The human was hit: damage applied, where it came from, and whether it was a headshot.</summary>
+        public event Action<float, Vector3, bool> HumanDamaged;
         public event Action Ended;
 
         // ------------------------------------------------------------------ setup
@@ -368,7 +369,7 @@ namespace WarOfNyx.Gameplay.Offline
             if (attacker == Human)
                 HumanHit?.Invoke(victim, headshot, result.Killed);
             if (victim == Human)
-                HumanDamaged?.Invoke(result.Applied, attacker.Feet);
+                HumanDamaged?.Invoke(result.Applied, attacker.Feet, headshot);
             if (result.Killed)
             {
                 attacker.Kills++;

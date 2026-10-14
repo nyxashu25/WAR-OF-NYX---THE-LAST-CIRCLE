@@ -57,6 +57,9 @@ Record every real run here, with the date and toolchain.
 | 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the sound and free-look pass | **331 / 366 / 16 passed** | New: every gun has 3 distinct, non-clipping shot variants and a duller distant version; reload sounds last the reload time; footsteps for every surface; free-look binding |
 | 2026-10-14 | **Unity 6000.3.26f1** Windows player | `-devCapture -devCaptureOnly freelook` | **Works** | Holding the eye turned the camera 150° (aim unchanged at 273°, character seen from the front, crosshair hidden); after release the offset returned to 0° |
 | 2026-10-14 | **Unity 6000.3.26f1** + Android | APK | **Built (63.5 MB)** | Not yet run on a phone; sounds not yet heard on a device |
+| 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the character, face/hair and screen-blood pass (adds `CharacterModelTests`, `CriticalHitTests`) | **333 / 374 / 16 passed** | New: every body part present, up to 24 000 vertices per character, every triangle faces outward, cloth chains complete, hair height within the hit shapes, story/gear/signature weapon consistent; critical-hit rule, splatter count, vignette, heal clearing |
+| 2026-10-14 | **Unity 6000.3.26f1** Windows player | `-devCapture -devCaptureOnly roster` / `blood` / `menu` (29 screenshots) | **Reviewed** | Four characters front / three-quarter / back / face / running; AKIRA's ponytail visible from behind. Blood: headshot (100 → 70) one splatter; second hit (→ 36) more splatters and red vignette; healed to 100, screen clear. CHARACTERS screen shows 3D preview, role, story and gear |
+| 2026-10-14 | **Unity 6000.3.26f1** + Android | APK | **Built (63.6 MB)** | Not yet run on a phone; character and blood cost on phones not measured |
 | — | Android phone | install + play the APK | **Not run** | Needs the owner's phone (ANDROID_BUILD.md) |
 
 ## Running the Unity checks from the command line

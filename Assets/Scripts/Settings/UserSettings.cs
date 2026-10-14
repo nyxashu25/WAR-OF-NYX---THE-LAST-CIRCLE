@@ -34,6 +34,9 @@ namespace WarOfNyx.Settings
         public bool reduceCameraShake;
         public bool reduceFlashing;
 
+        /// <summary>Blood splatter on the screen after critical hits, cleared by healing (on by default).</summary>
+        public bool bloodEffects = true;
+
         /// <summary>Phase 13: FPS / frame-time / memory overlay, and per-second CSV recording for device tests.</summary>
         public bool showPerformance;
         public bool recordPerformance;

@@ -540,7 +540,13 @@ namespace WarOfNyx.Networking
             var toSource = sourcePosition - cam.transform.position;
             float relative = Vector3.SignedAngle(Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up), Vector3.ProjectOnPlane(toSource, Vector3.up), Vector3.up);
             hud.DamageTaken(amount, relative);
+            // Screen blood (critical hits); the server doesn't send headshot info for received hits, so big hits / low health count.
+            if (_blood == null && OnlineArenaController.Instance != null)
+                _blood = UI.Hud.BloodOverlay.Create(OnlineArenaController.Instance.transform);
+            _blood?.OnDamaged(amount, false, Health, MaxHealth);
         }
+
+        private static UI.Hud.BloodOverlay _blood;
 
         // ------------------------------------------------------------------ helpers
 
@@ -671,6 +677,7 @@ namespace WarOfNyx.Networking
             int spare = ranged ? inventory.GetAmmo(weapon.ammoType) : 0;
 
             hud.SetVitals(Health, MaxHealth);
+            _blood?.SetHealth(Health, MaxHealth, Alive);
             hud.SetWeapon(weapon != null ? weapon.displayName : "Unarmed", ranged, state.Magazine, spare,
                 weapon != null ? WeaponRules.ReloadProgress(state, weapon, now) : 0f);
             hud.SetInventory($"ARMOR L{inventory.ArmorLevel}     MEDKITS  S{inventory.SmallMedkits}  M{inventory.StandardMedkits}  L{inventory.AdvancedMedkits}     " +

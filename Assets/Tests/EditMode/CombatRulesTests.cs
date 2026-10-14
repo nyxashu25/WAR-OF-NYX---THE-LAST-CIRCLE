@@ -576,3 +576,36 @@ namespace WarOfNyx.Tests
         }
     }
 }
+
+namespace WarOfNyx.Tests
+{
+    using NUnit.Framework;
+    using WarOfNyx.Core.Combat;
+
+    /// <summary>Screen blood: when a hit is "critical", and when healing clears it.</summary>
+    public class CriticalHitTests
+    {
+        [Test]
+        public void HeadshotsBigHitsAndBadlyHurt_AreCritical()
+        {
+            Assert.IsTrue(CriticalHit.Is(12f, headshot: true, 88f, 100f), "headshot");
+            Assert.IsTrue(CriticalHit.Is(30f, false, 70f, 100f), "big hit");
+            Assert.IsTrue(CriticalHit.Is(10f, false, 30f, 100f), "left badly hurt");
+            Assert.IsFalse(CriticalHit.Is(14f, false, 86f, 100f), "a graze is not");
+            Assert.IsFalse(CriticalHit.Is(0f, true, 100f, 100f), "blocked damage is not");
+            Assert.AreEqual(3, CriticalHit.Splatters(20f, true));
+            Assert.AreEqual(2, CriticalHit.Splatters(32f, false));
+        }
+
+        [Test]
+        public void HealingClearsTheBlood_VignetteFollowsHealth()
+        {
+            Assert.IsFalse(CriticalHit.HealedPast(0.3f, 0.35f), "not healed enough yet");
+            Assert.IsTrue(CriticalHit.HealedPast(0.3f, 0.5f), "healed clearly above the hit");
+            Assert.IsTrue(CriticalHit.HealedPast(0.85f, 0.9f), "back to (almost) full");
+            Assert.AreEqual(0f, CriticalHit.Vignette(0.8f));
+            Assert.AreEqual(1f, CriticalHit.Vignette(0.05f));
+            Assert.That(CriticalHit.Vignette(0.3f), Is.InRange(0.5f, 0.7f));
+        }
+    }
+}

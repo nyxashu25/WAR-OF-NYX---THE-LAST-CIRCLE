@@ -25,7 +25,7 @@ namespace WarOfNyx.UI.MainMenu
     /// </summary>
     public sealed class MainMenuController : MonoBehaviour
     {
-        private enum MenuScreen { Home, OfflineSetup, Settings, Online }
+        private enum MenuScreen { Home, OfflineSetup, Settings, Online, Characters }
 
         private static readonly string[] DifficultyBlurbs =
         {
@@ -227,6 +227,7 @@ namespace WarOfNyx.UI.MainMenu
             _screens[MenuScreen.OfflineSetup] = BuildOfflineSetup(safe);
             _screens[MenuScreen.Settings] = BuildSettings(safe);
             _screens[MenuScreen.Online] = BuildOnline(safe);
+            _screens[MenuScreen.Characters] = BuildCharacters(safe);
 
             _noticeText = UiFactory.CreateText(safe, string.Empty, 30, NyxPalette.VictoryGold, TextAnchor.MiddleCenter, FontStyle.Bold);
             var noticeRect = _noticeText.rectTransform;
@@ -270,7 +271,7 @@ namespace WarOfNyx.UI.MainMenu
             UiFactory.CreateButton(menu, "PRACTICE ARENA", OnPracticePressed, 96f, 34);
 
             var row = UiFactory.CreateRow("SecondaryRow", menu, 80f, 14f);
-            UiFactory.CreateButton(row, "CHARACTERS", null, 80f, 26).Interactable = false;
+            UiFactory.CreateButton(row, "CHARACTERS", () => Show(MenuScreen.Characters), 80f, 26);
             UiFactory.CreateButton(row, "LOADOUTS", null, 80f, 26).Interactable = false;
             UiFactory.CreateButton(row, "PROFILE", null, 80f, 26).Interactable = false;
 
@@ -385,6 +386,7 @@ namespace WarOfNyx.UI.MainMenu
             var perfRow = UiFactory.CreateRow("PerformanceRow", root, 80f, 14f);
             AddToggle(perfRow, "SHOW FPS", () => data.showPerformance, v => data.showPerformance = v);
             AddToggle(perfRow, "RECORD PERFORMANCE (CSV)", () => data.recordPerformance, v => data.recordPerformance = v);
+            AddToggle(perfRow, "BLOOD EFFECTS", () => data.bloodEffects, v => data.bloodEffects = v);
 
             // Cosmetic character (spec 17): same hitboxes, speed and health for everyone.
             var characterRow = UiFactory.CreateRow("CharacterRow", root, 80f, 14f);
@@ -482,6 +484,93 @@ namespace WarOfNyx.UI.MainMenu
                 RefreshOnline();
             else if (screen == MenuScreen.Settings)
                 RefreshSettings();
+            if (screen == MenuScreen.Characters)
+            {
+                _browsedCharacter = AppServices.UserSettings.Data.characterId;
+                RefreshCharacters();
+            }
+            _preview?.SetActive(screen == MenuScreen.Characters);
+        }
+
+        // ------------------------------------------------------------------ CHARACTERS screen
+
+        private CharacterPreviewStage _preview;
+        private int _browsedCharacter;
+        private Text _characterName, _characterTitle, _characterRole, _characterStory, _characterGear;
+        private MenuButton _selectCharacterButton;
+
+        /// <summary>
+        /// Roster browser: 3-D preview (drag to turn), name, title, role, story and gear, and SELECT. Characters are
+        /// cosmetic only (same hitboxes, speed and health), which the screen says.
+        /// </summary>
+        private GameObject BuildCharacters(RectTransform parent)
+        {
+            var root = UiFactory.CreateRect("CharactersScreen", parent);
+            UiFactory.Anchor(root, new Vector2(0.04f, 0.06f), new Vector2(0.96f, 0.95f));
+
+            var previewArea = UiFactory.CreateRect("PreviewArea", root);
+            UiFactory.Anchor(previewArea, new Vector2(0f, 0.1f), new Vector2(0.4f, 1f));
+            _preview = CharacterPreviewStage.Create(previewArea);
+            var previewRect = (RectTransform)_preview.transform;
+            UiFactory.Stretch(previewRect);
+            previewRect.gameObject.AddComponent<AspectRatioFitter>().aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            previewRect.GetComponent<AspectRatioFitter>().aspectRatio = 900f / 1200f;
+
+            var arrows = UiFactory.CreateRow("Arrows", (RectTransform)previewArea.parent, 70f, 14f);
+            UiFactory.Anchor(arrows, new Vector2(0.02f, 0f), new Vector2(0.38f, 0.09f));
+            UiFactory.CreateButton(arrows, "<", () => BrowseCharacter(-1), 70f, 34);
+            UiFactory.CreateButton(arrows, ">", () => BrowseCharacter(1), 70f, 34);
+
+            var info = UiFactory.CreateRect("Info", root);
+            UiFactory.Anchor(info, new Vector2(0.44f, 0f), new Vector2(1f, 1f));
+            UiFactory.AddVerticalLayout(info.gameObject, 8f, null, TextAnchor.UpperLeft);
+            _characterName = UiFactory.CreateText(info, string.Empty, 84, NyxPalette.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold, 100f);
+            _characterTitle = UiFactory.CreateText(info, string.Empty, 38, NyxPalette.ElectricCyan, TextAnchor.MiddleLeft, FontStyle.Bold, 50f);
+            _characterRole = UiFactory.CreateText(info, string.Empty, 28, NyxPalette.VictoryGold, TextAnchor.MiddleLeft, FontStyle.Bold, 40f);
+            _characterStory = UiFactory.CreateText(info, string.Empty, 26, NyxPalette.TextPrimary, TextAnchor.UpperLeft, FontStyle.Normal, 150f);
+            UiFactory.CreateText(info, "SIGNATURE GEAR", 26, NyxPalette.TextMuted, TextAnchor.MiddleLeft, FontStyle.Bold, 36f);
+            _characterGear = UiFactory.CreateText(info, string.Empty, 24, NyxPalette.TextPrimary, TextAnchor.UpperLeft, FontStyle.Normal, 190f);
+            UiFactory.CreateText(info, "Cosmetic only: every character has the same hitboxes, speed and health. Drag the preview to turn.",
+                22, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Italic, 40f);
+            var actions = UiFactory.CreateRow("Actions", info, 90f, 20f);
+            _selectCharacterButton = UiFactory.CreateButton(actions, "SELECT", SelectBrowsedCharacter, 90f, 32);
+            UiFactory.CreateButton(actions, "BACK", () => Show(MenuScreen.Home), 90f, 32);
+            return root.gameObject;
+        }
+
+        /// <summary>Opens the CHARACTERS screen (also used by the developer screenshot run).</summary>
+        public void ShowCharacters() => Show(MenuScreen.Characters);
+
+        /// <summary>Shows the previous / next roster character on the CHARACTERS screen.</summary>
+        public void BrowseCharacter(int step)
+        {
+            int n = WarOfNyx.Characters.CharacterRoster.Count;
+            _browsedCharacter = ((_browsedCharacter + step) % n + n) % n;
+            RefreshCharacters();
+        }
+
+        private void SelectBrowsedCharacter()
+        {
+            AppServices.UserSettings.Data.characterId = _browsedCharacter;
+            AppServices.UserSettings.Save();
+            RefreshCharacters();
+            Notify($"{WarOfNyx.Characters.CharacterRoster.Get(_browsedCharacter).Name} selected.");
+        }
+
+        private void RefreshCharacters()
+        {
+            if (_characterName == null)
+                return;
+            var look = WarOfNyx.Characters.CharacterRoster.Get(_browsedCharacter);
+            _characterName.text = look.Name;
+            _characterTitle.text = look.Title.ToUpperInvariant();
+            _characterRole.text = look.Role.ToUpperInvariant();
+            _characterStory.text = look.Story;
+            _characterGear.text = look.Gear != null ? "•  " + string.Join("\n•  ", look.Gear) : string.Empty;
+            bool selected = AppServices.UserSettings.Data.characterId == look.Id;
+            _selectCharacterButton.SetLabel(selected ? "SELECTED" : "SELECT");
+            _selectCharacterButton.SetSelected(selected);
+            _preview?.Show(look);
         }
 
         private void OnBack()

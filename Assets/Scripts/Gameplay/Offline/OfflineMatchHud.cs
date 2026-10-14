@@ -29,6 +29,7 @@ namespace WarOfNyx.Gameplay.Offline
     {
         private OfflineMatch _match;
         private CombatHud _hud;
+        private UI.Hud.BloodOverlay _blood;
         private ZoneHud _zone;
         private HuntHud _hunt;
         private LootPanel _loot;
@@ -94,8 +95,12 @@ namespace WarOfNyx.Gameplay.Offline
                 _hud.HitMarker(head, kill);
                 Effects.ProceduralAudio.PlayAt(Effects.ProceduralAudio.HitTick, _match.Human.Feet, 0.7f);
             };
-            _match.HumanDamaged += (amount, source) =>
+            _blood = UI.Hud.BloodOverlay.Create(transform);
+            _match.HumanDamaged += (amount, source, headshot) =>
             {
+                var human = _match.Human;
+                if (human != null)
+                    _blood.OnDamaged(amount, headshot, human.Health.Health, human.Health.MaxHealth);
                 var cam = Camera.main;
                 if (cam == null) return;
                 var to = source - cam.transform.position;
@@ -203,6 +208,7 @@ namespace WarOfNyx.Gameplay.Offline
             bool ranged = weapon != null && weapon.IsRanged;
             int spare = ranged ? me.Inventory.GetAmmo(weapon.ammoType) : 0;
             _hud.SetVitals(me.Health.Health, me.Health.MaxHealth);
+            _blood?.SetHealth(me.Health.Health, me.Health.MaxHealth, me.Alive);
             _hud.SetWeapon(weapon != null ? weapon.displayName : "Unarmed", ranged, state.Magazine, spare,
                 weapon != null ? WeaponRules.ReloadProgress(state, weapon, now) : 0f);
             var inv = me.Inventory;
