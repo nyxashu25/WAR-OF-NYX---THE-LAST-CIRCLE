@@ -37,6 +37,7 @@ namespace WarOfNyx.Gameplay.Effects
         private MeleePattern _swingPattern;
         private TrailRenderer _trail;
         private CharacterBody _body;
+        private AudioSource _reloadSound;
 
         public Vector3 MuzzlePosition => _muzzle != null ? _muzzle.position : transform.position + Vector3.up * 1.4f;
 
@@ -115,6 +116,9 @@ namespace WarOfNyx.Gameplay.Effects
                 return;
             if (_model != null)
                 Destroy(_model.gameObject);
+            // Switching weapons cancels a reload: so does its sound.
+            if (_reloadSound != null && _reloadSound.isPlaying && Weapon != weapon)
+                _reloadSound.Stop();
             Weapon = weapon;
             _model = WeaponModelFactory.Build(weapon, _hand, out var muzzle);
             _muzzle.localPosition = muzzle;
@@ -160,9 +164,11 @@ namespace WarOfNyx.Gameplay.Effects
             if (hitSomething)
                 for (int i = 0; i < count; i++)
                     SpawnImpact(endPoints[i]);
-            bool heavy = weapon != null && (weapon.pellets > 1 || weapon.damage >= 50f);
-            ProceduralAudio.PlayAt(heavy ? ProceduralAudio.HeavyShot : ProceduralAudio.Gunshot, MuzzlePosition, heavy ? 1f : 0.8f);
+            GunAudio.PlayShot(weapon, MuzzlePosition);
         }
+
+        /// <summary>Trigger pulled on an empty magazine.</summary>
+        public void PlayDryFire() => GunAudio.PlayDryFire(MuzzlePosition);
 
         /// <summary>One melee attack of a combo (the pattern decides the swing path, see CharacterAnimator).</summary>
         public void PlaySwing(MeleeAttack attack, WeaponStats meleeWeapon)
@@ -181,7 +187,10 @@ namespace WarOfNyx.Gameplay.Effects
         public void PlayReload()
         {
             _reloadDip = 1f;
-            ProceduralAudio.PlayAt(ProceduralAudio.Reload, transform.position + Vector3.up * 1.2f, 0.6f);
+            if (Weapon != null && Weapon.IsRanged)
+                _reloadSound = GunAudio.PlayReload(Weapon, transform);
+            else
+                ProceduralAudio.PlayAt(ProceduralAudio.Reload, transform.position + Vector3.up * 1.2f, 0.6f);
         }
 
         public void PlayDefeat()

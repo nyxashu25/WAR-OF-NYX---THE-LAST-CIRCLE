@@ -183,6 +183,94 @@ namespace WarOfNyx.Tests
             return v.sqrMagnitude < 1e-4f ? Vector3.down : v.normalized;
         }
 
+        // ------------------------------------------------------------------ sound
+
+        private static float[] Samples(AudioClip clip)
+        {
+            var data = new float[clip.samples];
+            clip.GetData(data, 0);
+            return data;
+        }
+
+        private static float Rms(float[] d)
+        {
+            double sum = 0;
+            foreach (float v in d)
+                sum += v * v;
+            return (float)System.Math.Sqrt(sum / d.Length);
+        }
+
+        /// <summary>Sign changes per second: a rough brightness measure.</summary>
+        private static float ZeroCrossingsPerSecond(float[] d, int rate)
+        {
+            int n = 0;
+            for (int i = 1; i < d.Length; i++)
+                if ((d[i - 1] < 0f) != (d[i] < 0f))
+                    n++;
+            return n / (d.Length / (float)rate);
+        }
+
+        private static void AssertSound(AudioClip clip, string name)
+        {
+            Assert.That(clip, Is.Not.Null, name);
+            var d = Samples(clip);
+            foreach (float v in d)
+                Assert.That(float.IsNaN(v) || Mathf.Abs(v) > 1.0001f, Is.False, name + " clips or has NaN");
+            Assert.That(Rms(d), Is.GreaterThan(0.01f), name + " is not silent");
+            Assert.That(Mathf.Abs(d[d.Length - 1]), Is.LessThan(0.05f), name + " ends without a click");
+        }
+
+        [Test]
+        public void EveryGunHasDistinctShots_AndADullerDistantVersion()
+        {
+            foreach (var w in WarOfNyx.Core.Combat.WeaponCatalog.All)
+            {
+                if (!w.IsRanged)
+                    continue;
+                var near = WarOfNyx.Gameplay.Effects.GunAudio.ShotClips(w, far: false);
+                var far = WarOfNyx.Gameplay.Effects.GunAudio.ShotClips(w, far: true);
+                Assert.That(near.Length, Is.GreaterThanOrEqualTo(3), w.id + " variants");
+                foreach (var c in near)
+                    AssertSound(c, w.id + " near");
+                foreach (var c in far)
+                    AssertSound(c, w.id + " far");
+                Assert.That(Samples(near[0]), Is.Not.EqualTo(Samples(near[1])), w.id + " variants differ");
+                Assert.That(ZeroCrossingsPerSecond(Samples(far[0]), far[0].frequency),
+                    Is.LessThan(ZeroCrossingsPerSecond(Samples(near[0]), near[0].frequency)), w.id + " distant shot is duller");
+            }
+            var shotgun = WarOfNyx.Gameplay.Effects.GunAudio.ShotClips(WarOfNyx.Core.Combat.WeaponCatalog.Get(WarOfNyx.Core.Combat.WeaponCatalog.CrimsonShotgun), false)[0];
+            var smg = WarOfNyx.Gameplay.Effects.GunAudio.ShotClips(WarOfNyx.Core.Combat.WeaponCatalog.Get(WarOfNyx.Core.Combat.WeaponCatalog.ShadowSmg), false)[0];
+            Assert.That(shotgun.length, Is.GreaterThan(smg.length), "shotgun blast (and pump) rings longer than an SMG shot");
+        }
+
+        [Test]
+        public void ReloadSoundsLastAsLongAsTheReload()
+        {
+            foreach (var w in WarOfNyx.Core.Combat.WeaponCatalog.All)
+            {
+                if (!w.IsRanged)
+                    continue;
+                var clip = WarOfNyx.Gameplay.Effects.GunAudio.ReloadClip(w);
+                AssertSound(clip, w.id + " reload");
+                Assert.That(clip.length, Is.InRange(w.reloadSeconds, w.reloadSeconds + 0.4f), w.id);
+            }
+        }
+
+        [Test]
+        public void EverySurfaceHasFootsteps()
+        {
+            foreach (WarOfNyx.Gameplay.Effects.FootSurface surface in System.Enum.GetValues(typeof(WarOfNyx.Gameplay.Effects.FootSurface)))
+            {
+                var clips = WarOfNyx.Gameplay.Effects.FootstepAudio.StepClips(surface);
+                Assert.That(clips.Length, Is.GreaterThanOrEqualTo(4), surface.ToString());
+                foreach (var c in clips)
+                {
+                    AssertSound(c, surface + " step");
+                    Assert.That(c.length, Is.LessThan(0.5f), surface + " steps are short");
+                }
+            }
+        }
+
         // ------------------------------------------------------------------ weather
 
         [Test]

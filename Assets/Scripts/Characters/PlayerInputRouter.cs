@@ -32,7 +32,11 @@ namespace WarOfNyx.Characters
         [SerializeField] private float maxPitch = 75f;
 
         private InputActionAsset _asset;
-        private InputAction _move, _look, _sprint, _walk, _aim, _jump, _crouch, _slide;
+        private InputAction _move, _look, _sprint, _walk, _freeLook, _aim, _jump, _crouch, _slide;
+
+        /// <summary>How far free look can turn the camera away from the aim (degrees, each side).</summary>
+        public const float FreeLookMaxYaw = 170f;
+        private bool _touchFreeLook;
 
         /// <summary>Stick magnitude used while the walk key is held: about 1.8 m/s (a calm walk).</summary>
         public const float WalkInputMagnitude = 0.45f;
@@ -57,6 +61,26 @@ namespace WarOfNyx.Characters
         public bool InputEnabled { get; set; } = true;
 
         public bool AimHeld => InputEnabled && _aim != null && _aim.IsPressed();
+
+        /// <summary>
+        /// Free look (the "eye"): while held, look input turns only the camera; the aim, the movement direction
+        /// and shots keep pointing where they were. On release the view swings back to the aim.
+        /// </summary>
+        public bool FreeLooking => InputEnabled && ((_freeLook != null && _freeLook.IsPressed()) || _touchFreeLook);
+
+        /// <summary>Camera offset from the aim while free-looking (degrees); eases back to 0 after release.</summary>
+        public float FreeLookYaw { get; private set; }
+        public float FreeLookPitch { get; private set; }
+
+        /// <summary>The view is noticeably away from the aim (the crosshair is hidden then).</summary>
+        public bool FreeLookActive => Mathf.Abs(FreeLookYaw) > 8f || Mathf.Abs(FreeLookPitch) > 8f;
+
+        /// <summary>Where the camera looks: the aim plus the free-look offset.</summary>
+        public float CameraYaw => Mathf.Repeat(Yaw + FreeLookYaw, 360f);
+        public float CameraPitch => Mathf.Clamp(Pitch + FreeLookPitch, minPitch, maxPitch);
+
+        /// <summary>Touch EYE button held / released.</summary>
+        public void SetTouchFreeLook(bool held) => _touchFreeLook = held;
         public bool SprintToggled => _sprintToggled;
 
         private void Awake()
@@ -67,6 +91,7 @@ namespace WarOfNyx.Characters
             _look = map.FindAction(GameInputActions.Look, true);
             _sprint = map.FindAction(GameInputActions.Sprint, true);
             _walk = map.FindAction(GameInputActions.Walk, true);
+            _freeLook = map.FindAction(GameInputActions.FreeLook, true);
             _aim = map.FindAction(GameInputActions.Aim, true);
             _jump = map.FindAction(GameInputActions.Jump, true);
             _crouch = map.FindAction(GameInputActions.Crouch, true);
@@ -118,6 +143,8 @@ namespace WarOfNyx.Characters
             if (!InputEnabled)
             {
                 _pendingTouchLook = Vector2.zero;
+                _touchFreeLook = false;
+                FreeLookYaw = FreeLookPitch = 0f;
                 return;
             }
 
@@ -161,6 +188,18 @@ namespace WarOfNyx.Characters
                     degrees.y -= gyroPitch;
                 }
             }
+
+            if (FreeLooking)
+            {
+                // Turn the camera only; the aim stays put.
+                FreeLookYaw = Mathf.Clamp(FreeLookYaw + degrees.x, -FreeLookMaxYaw, FreeLookMaxYaw);
+                FreeLookPitch = Mathf.Clamp(Pitch + FreeLookPitch - degrees.y, minPitch, maxPitch) - Pitch;
+                return;
+            }
+            // Released: swing back to the aim quickly (about a fifth of a second).
+            float back = 1f - Mathf.Exp(-16f * Time.unscaledDeltaTime);
+            FreeLookYaw = Mathf.Abs(FreeLookYaw) < 0.05f ? 0f : Mathf.Lerp(FreeLookYaw, 0f, back);
+            FreeLookPitch = Mathf.Abs(FreeLookPitch) < 0.05f ? 0f : Mathf.Lerp(FreeLookPitch, 0f, back);
 
             Yaw = Mathf.Repeat(Yaw + degrees.x, 360f);
             Pitch = Mathf.Clamp(Pitch - degrees.y, minPitch, maxPitch);

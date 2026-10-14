@@ -101,8 +101,9 @@ namespace WarOfNyx.Gameplay
 
         private void Place(Vector3 pivot, float dt)
         {
-            float yaw = _input != null ? _input.Yaw : _target.eulerAngles.y;
-            float pitch = _input != null ? _input.Pitch : 10f;
+            // CameraYaw / CameraPitch include the free-look offset (the "eye"); otherwise they equal the aim.
+            float yaw = _input != null ? _input.CameraYaw : _target.eulerAngles.y;
+            float pitch = _input != null ? _input.CameraPitch : 10f;
             var rotation = Quaternion.Euler(pitch, yaw, 0f);
 
             // The shoulder point sits beside the pivot; pull back from there.

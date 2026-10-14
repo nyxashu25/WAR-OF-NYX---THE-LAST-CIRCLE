@@ -54,6 +54,9 @@ Record every real run here, with the date and toolchain.
 | 2026-10-14 | **Unity 6000.3.26f1** | NYX ISLAND v3 spawn diagnostic (400 samples) | **388 valid** | With ~3 000 new prop parts (389 before) |
 | 2026-10-14 | **Unity 6000.3.26f1** Windows player | `-devCapture -devCaptureOnly characters` / `places` (55 screenshots) | **Reviewed** | Walk / run / sprint / aim / reload poses, every katana and energy blade combo attack with trails, windowed streets day and night, temple, fortress, docks, core. Fixed during review: unlit window glass too bright at night |
 | 2026-10-14 | **Unity 6000.3.26f1** + Android | APK | **Built (63.5 MB)** | Not yet run on a phone |
+| 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the sound and free-look pass | **331 / 366 / 16 passed** | New: every gun has 3 distinct, non-clipping shot variants and a duller distant version; reload sounds last the reload time; footsteps for every surface; free-look binding |
+| 2026-10-14 | **Unity 6000.3.26f1** Windows player | `-devCapture -devCaptureOnly freelook` | **Works** | Holding the eye turned the camera 150° (aim unchanged at 273°, character seen from the front, crosshair hidden); after release the offset returned to 0° |
+| 2026-10-14 | **Unity 6000.3.26f1** + Android | APK | **Built (63.5 MB)** | Not yet run on a phone; sounds not yet heard on a device |
 | — | Android phone | install + play the APK | **Not run** | Needs the owner's phone (ANDROID_BUILD.md) |
 
 ## Running the Unity checks from the command line

@@ -124,6 +124,8 @@ namespace WarOfNyx.Gameplay.Effects
             var character = visualRoot.parent != null ? visualRoot.parent : visualRoot;
             if (character.GetComponent<CharacterAnimator>() == null)
                 character.gameObject.AddComponent<CharacterAnimator>();
+            if (character.GetComponent<CharacterAudio>() == null)
+                character.gameObject.AddComponent<CharacterAudio>();
         }
 
         private static Transform Joint(string name, Transform parent, Vector3 localPosition)

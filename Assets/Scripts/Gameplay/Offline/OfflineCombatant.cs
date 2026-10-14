@@ -228,6 +228,10 @@ namespace WarOfNyx.Gameplay.Offline
                     {
                         _match.LocalMessage("WEAPONS DISABLED - MELEE ONLY OUTSIDE THE CIRCLE");
                     }
+                    else if (decision.Reason == FireBlockReason.EmptyMagazine && cmd.FirePressed && !decision.ShouldAutoReload)
+                    {
+                        _rig?.PlayDryFire();
+                    }
                     if (decision.ShouldAutoReload && WeaponRules.TryStartReload(ref Slots[ActiveSlot], weapon, now, pool))
                         OnReloadStarted();
                 }

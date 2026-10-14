@@ -28,6 +28,8 @@ namespace WarOfNyx.Controls
         /// gamepad binding): sticks and the touch joystick walk by pushing gently.
         /// </summary>
         public const string Walk = "Walk";
+        /// <summary>Hold to look around without turning the character (PUBG-style "eye"). Touch: the EYE button.</summary>
+        public const string FreeLook = "FreeLook";
         public const string Jump = "Jump";
         public const string Crouch = "Crouch";
         public const string Slide = "Slide";
@@ -43,7 +45,7 @@ namespace WarOfNyx.Controls
 
         public static readonly string[] AllPlayerActions =
         {
-            Move, Look, Fire, Aim, Sprint, Jump, Crouch, Slide, Reload, Interact, Melee,
+            Move, Look, Fire, Aim, Sprint, FreeLook, Jump, Crouch, Slide, Reload, Interact, Melee,
             WeaponSlot1, WeaponSlot2, WeaponSlot3, NextWeapon, Medkit, Pause,
         };
 
@@ -70,7 +72,8 @@ namespace WarOfNyx.Controls
             AddButton(player, Fire, "<Mouse>/leftButton", "<Gamepad>/rightTrigger");
             AddButton(player, Aim, "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             AddButton(player, Sprint, "<Keyboard>/leftShift", "<Gamepad>/leftStickPress");
-            player.AddAction(Walk, InputActionType.Button).AddBinding("<Keyboard>/leftAlt");
+            player.AddAction(Walk, InputActionType.Button).AddBinding("<Keyboard>/x");
+            AddButton(player, FreeLook, "<Keyboard>/leftAlt", "<Gamepad>/select");
             AddButton(player, Jump, "<Keyboard>/space", "<Gamepad>/buttonSouth");
             AddButton(player, Crouch, "<Keyboard>/c", "<Gamepad>/buttonEast");
             AddButton(player, Slide, "<Keyboard>/leftCtrl", "<Gamepad>/leftShoulder");

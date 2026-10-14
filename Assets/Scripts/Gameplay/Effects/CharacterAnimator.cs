@@ -25,6 +25,14 @@ namespace WarOfNyx.Gameplay.Effects
         /// <summary>Aim pitch in degrees (+ = looking down). Set by the owner; the local input router is read automatically.</summary>
         public float AimPitch { get; set; }
 
+        /// <summary>Head turn while free-looking (degrees, + = right); the head follows the camera within its range.</summary>
+        public float LookYaw { get; set; }
+
+        /// <summary>A foot touched the ground: side (-1 left, +1 right) and intensity (0.2 crouch-walk … 0.95 sprint).</summary>
+        public event System.Action<int, float> FootContact;
+
+        private readonly float[] _lastFootCos = { 1f, 1f };
+
         private CharacterBody _body;
         private PlayerMovement _movement;
         private PlayerInputRouter _router;
@@ -97,7 +105,10 @@ namespace WarOfNyx.Gameplay.Effects
                 sprinting = _movement.State.IsSprinting;
             }
             if (_router != null && _router.enabled)
+            {
                 AimPitch = _router.Pitch;
+                LookYaw = _router.FreeLookYaw;
+            }
 
             float k = 1f - Mathf.Exp(-10f * dt);
             _moveBlend = Mathf.Lerp(_moveBlend, Mathf.Clamp01(speed / 0.8f), k);
@@ -150,7 +161,8 @@ namespace WarOfNyx.Gameplay.Effects
             float pitch = Mathf.Clamp(AimPitch, -70f, 70f);
             _body.Spine.localRotation = Quaternion.Euler(pitch * 0.35f - lean * 0.25f + Mathf.Sin(_breath) * 0.8f + _swingBend,
                 -twist * 1.3f + _swingTwist, 0f);
-            _body.Head.localRotation = Quaternion.Euler(pitch * 0.45f - lean * 0.45f, twist * 0.3f, 0f);
+            float look = Mathf.Clamp(LookYaw, -80f, 80f);
+            _body.Head.localRotation = Quaternion.Euler(pitch * 0.45f - lean * 0.45f, twist * 0.3f + look * 0.8f, 0f);
         }
 
         private void PoseLegs(Transform frame, Vector3 moveDir, float stride, float lift)
@@ -161,6 +173,16 @@ namespace WarOfNyx.Gameplay.Effects
                 float phase = _phase + (side > 0 ? Mathf.PI : 0f);
                 float along = Mathf.Sin(phase) * stride * 0.5f * walking;
                 float up = Mathf.Max(0f, Mathf.Cos(phase)) * lift * walking;
+
+                // Foot contact: the swing (cos > 0) ends and the stance begins.
+                float footCos = Mathf.Cos(phase);
+                int index = side < 0 ? 0 : 1;
+                if (_lastFootCos[index] > 0f && footCos <= 0f && walking > 0.3f && _airBlend < 0.3f)
+                {
+                    float intensity = Mathf.Lerp(Mathf.Lerp(0.35f, 0.65f, _runBlend), 0.95f, _sprintBlend) * Mathf.Lerp(1f, 0.45f, _crouchBlend);
+                    FootContact?.Invoke(side, intensity);
+                }
+                _lastFootCos[index] = footCos;
 
                 var foot = new Vector3(side * (CharacterBody.HipSpacing + 0.015f + 0.04f * _crouchBlend), CharacterBody.AnkleHeight + up, 0.02f)
                            + moveDir * along;

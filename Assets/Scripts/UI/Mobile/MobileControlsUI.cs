@@ -240,6 +240,10 @@ namespace WarOfNyx.UI.Mobile
             AddButton(safe, "WEAPON", "<Gamepad>/rightStickPress", BottomRight, new Vector2(-450f, 120f), 110f, active: true);
             AddButton(safe, "USE", "<Gamepad>/buttonNorth", BottomRight, new Vector2(-270f, 480f), 110f, active: true);
             AddButton(safe, "MEDKIT", "<Gamepad>/dpad/down", BottomRight, new Vector2(-110f, 500f), 100f, active: true);
+            // EYE (free look, PUBG-style): hold to look around without turning; drag it (or swipe) to steer the view.
+            var eye = CreateRoundButton(safe, "EYE", BottomRight, new Vector2(-430f, 500f), 100f, true);
+            eye.gameObject.AddComponent<TouchHoldButton>().Changed += router.SetTouchFreeLook;
+            eye.gameObject.AddComponent<TouchDragLook>().Bind(router);
 
             // Register every button for the layout (position, size, opacity) and the editor.
             foreach (Transform child in safe)
@@ -251,6 +255,8 @@ namespace WarOfNyx.UI.Mobile
                 Behaviour input = child.GetComponent<OnScreenButton>();
                 if (input == null) // explicit check: never ?? on Unity objects
                     input = child.GetComponent<TouchTapButton>();
+                if (input == null)
+                    input = child.GetComponent<TouchHoldButton>();
                 var entry = new ControlEntry
                 {
                     Id = child.name.Substring(4),

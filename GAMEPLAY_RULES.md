@@ -166,7 +166,8 @@ Walk ≈ 1.8 m/s (gentle stick or the walk key) · Run 4 m/s (full stick) · Spr
 
 ## 14. Controls (spec 18)
 - **Android:** left side joystick, sprint, crouch, slide. Right side swipe-look, fire, aim, jump, reload, melee, weapon switch, medkit, interact. Safe areas respected, layout and sizes customizable, sensitivity sliders, optional gyro. Aim assist, if added, stays modest and validated by the same server rules.
-- **Desktop dev:** WASD, mouse, LMB fire, RMB aim, Shift sprint, Left Alt walk, Space jump, C crouch, Ctrl slide, R reload, E interact, F melee (press repeatedly for combos), 1/2/3 slots, H medkit. *(Implemented: `GameInputActions`.)*
+- **Desktop dev:** WASD, mouse, LMB fire, RMB aim, Shift sprint, X walk (hold), Left Alt free look (hold), Space jump, C crouch, Ctrl slide, R reload, E interact, F melee (press repeatedly for combos), 1/2/3 slots, H medkit. *(Implemented: `GameInputActions`.)*
+- **Free look ("eye", PUBG-style):** hold Left Alt / the EYE touch button / gamepad Select and look around (up to 170° each side, so you can see behind you) while the character keeps aiming and moving the same way; shots still go where the character aims, so the crosshair hides while you look away. Release and the view swings back in about 0.2 s. The character's head turns toward where you look. Client-side camera only: it reveals nothing the player couldn't see by turning. *(Implemented: `PlayerInputRouter.FreeLook*`, `ThirdPersonCamera`, `TouchHoldButton`.)*
 
 ## 15. HUD & feed (spec 19)
 Palette: background `#0B0B18`, purple `#8A2BE2`, cyan `#00E5FF`, crimson `#FF304F` (danger/exposure), gold `#FFC857`. Feed events carry an **event id and server timestamp** so duplicates are dropped. The minimap never shows enemies except during camping exposure.

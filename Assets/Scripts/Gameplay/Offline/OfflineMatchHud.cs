@@ -213,7 +213,9 @@ namespace WarOfNyx.Gameplay.Offline
                 WeaponRegistry.DisplayName(me.Slots[2].WeaponId), me.ActiveSlot);
             var cam = Camera.main;
             float spread = ranged ? WeaponRules.CurrentSpread(state, weapon, now, me.Router.AimHeld) : 0.5f;
-            _hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, me.Alive && _spectating == null);
+            // Hidden while free-looking: shots still go where the character aims, not where the camera looks.
+            bool freeLook = me.Router != null && me.Router.FreeLookActive;
+            _hud.SetCrosshair(spread, cam != null ? cam.fieldOfView : 60f, me.Alive && _spectating == null && !freeLook);
 
             if (!me.Alive)
             {

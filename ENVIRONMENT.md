@@ -35,6 +35,18 @@ _Environment pass, 2026-10-14. Everything below is procedural PLACEHOLDER art (o
 - Solid-looking props (cars, crates, barrels, sandbags, machines) have colliders: they are cover and part of the NavMesh. Small decoration has none.
 - **Grass:** three clump types: meadow, fine lawn (near paths and in the forest) and tall tufts with seed heads.
 
+## Sound (2026-10-14, procedural placeholders)
+- **Gunfire:** each gun has its own layered shot (crack, blast, thump, action sound, outdoor echo), 3 variants with pitch jitter. Beyond 45 m a muffled distant boom is used, audible to about 450 m (`GunAudio`).
+- **Reloads:** staged per weapon and timed to the reload length:
+  - rifles and SMGs: magazine release, out, in, bolt rack;
+  - pistol: magazine change, then slide release;
+  - shotgun: shell by shell, then pump;
+  - marksman: bolt open, magazine change, bolt close.
+
+  A dry click sounds on an empty magazine. Switching weapons cuts the reload sound.
+- **Movement:** a footstep on every foot contact of the gait, by surface (grass, dirt / sand, stone / concrete, metal, wood). Steps get louder and carry further from walk (≈ 15 m) to sprint (≈ 40 m); crouching is quiet. Jumps, landings (by fall speed) and slides have their own sounds. Other players' steps are positional (`FootstepAudio`, `CharacterAudio`).
+- Voices are pooled (48), so automatic fire from many characters doesn't allocate per shot.
+
 ## Rules that keep it fair
 | Rule | Where |
 |---|---|

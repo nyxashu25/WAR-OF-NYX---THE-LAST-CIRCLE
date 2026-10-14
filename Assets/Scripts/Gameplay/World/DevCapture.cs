@@ -77,6 +77,14 @@ namespace WarOfNyx.Gameplay.World
                 Application.Quit(0);
                 yield break;
             }
+            if (_only == "freelook")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                yield return FreeLookShowcase();
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
             if (_only == "characters")
             {
                 weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
@@ -131,6 +139,31 @@ namespace WarOfNyx.Gameplay.World
                 yield return CharacterShowcase();
             Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
             Application.Quit(0);
+        }
+
+        /// <summary>The EYE: normal view, holding free look turned ~150° (looking behind), and the view after release.</summary>
+        private IEnumerator FreeLookShowcase()
+        {
+            var human = Offline.OfflineMatch.Instance != null ? Offline.OfflineMatch.Instance.Human : null;
+            var router = human != null ? human.Router : null;
+            if (router == null)
+                yield break;
+            yield return new WaitForSeconds(1f);
+            yield return Capture("freelook_0_normal");
+            router.SetTouchFreeLook(true);
+            for (int i = 0; i < 30; i++)
+            {
+                // ~150° to the right in total, through the same path as a swipe.
+                router.AddTouchLook(new Vector2(150f / 30f / 180f * Screen.height * 1f, 0f));
+                yield return null;
+            }
+            yield return new WaitForSeconds(0.2f);
+            Debug.Log($"[WarOfNyx][DevCapture] free look offset {router.FreeLookYaw:0}°, aim yaw {router.Yaw:0}°, camera yaw {router.CameraYaw:0}°");
+            yield return Capture("freelook_1_behind");
+            router.SetTouchFreeLook(false);
+            yield return new WaitForSeconds(0.6f);
+            Debug.Log($"[WarOfNyx][DevCapture] after release: free look offset {router.FreeLookYaw:0}°");
+            yield return Capture("freelook_2_released");
         }
 
         // ------------------------------------------------------------------ character showcase
