@@ -41,6 +41,15 @@ namespace WarOfNyx.EditorTools
                     definition.placeholderColor = stats.IsMelee ? new Color(0f, 0.9f, 1f) : new Color(0.25f, 0.27f, 0.36f);
                     AssetDatabase.CreateAsset(definition, path);
                 }
+                else if (definition.catalogVersion < WeaponCatalog.Version)
+                {
+                    // The built-in numbers changed (e.g. the accuracy pass): refresh. Designer edits made to
+                    // an older asset are replaced; tune in WeaponCatalog to keep them across versions.
+                    definition.stats = stats.Clone();
+                    Debug.Log($"[WarOfNyx] Weapon '{stats.id}' refreshed to catalog version {WeaponCatalog.Version}.");
+                }
+                definition.catalogVersion = WeaponCatalog.Version;
+                EditorUtility.SetDirty(definition);
 
                 if (!database.weapons.Contains(definition))
                     database.weapons.Add(definition);

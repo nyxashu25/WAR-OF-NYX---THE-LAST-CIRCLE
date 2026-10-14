@@ -32,7 +32,10 @@ namespace WarOfNyx.Characters
         [SerializeField] private float maxPitch = 75f;
 
         private InputActionAsset _asset;
-        private InputAction _move, _look, _sprint, _aim, _jump, _crouch, _slide;
+        private InputAction _move, _look, _sprint, _walk, _aim, _jump, _crouch, _slide;
+
+        /// <summary>Stick magnitude used while the walk key is held: about 1.8 m/s (a calm walk).</summary>
+        public const float WalkInputMagnitude = 0.45f;
         private InputAction _fire, _reload, _melee, _slot1, _slot2, _slot3, _nextWeapon, _medkit, _interact;
 
         private bool _jumpLatched, _crouchLatched, _slideLatched;
@@ -63,6 +66,7 @@ namespace WarOfNyx.Characters
             _move = map.FindAction(GameInputActions.Move, true);
             _look = map.FindAction(GameInputActions.Look, true);
             _sprint = map.FindAction(GameInputActions.Sprint, true);
+            _walk = map.FindAction(GameInputActions.Walk, true);
             _aim = map.FindAction(GameInputActions.Aim, true);
             _jump = map.FindAction(GameInputActions.Jump, true);
             _crouch = map.FindAction(GameInputActions.Crouch, true);
@@ -227,6 +231,10 @@ namespace WarOfNyx.Characters
 
             var move = Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
             bool aim = _aim.IsPressed();
+            // Walk key: same direction, walking pace (sticks and the touch joystick walk by pushing gently).
+            bool walking = _walk.IsPressed();
+            if (walking && move.sqrMagnitude > WalkInputMagnitude * WalkInputMagnitude)
+                move = move.normalized * WalkInputMagnitude;
 
             if (_sprintToggled && (move.sqrMagnitude < 0.01f || aim || _crouchLatched || _slideLatched))
                 _sprintToggled = false;
@@ -237,7 +245,7 @@ namespace WarOfNyx.Characters
                 MoveY = move.y,
                 Yaw = Yaw,
                 Pitch = Pitch,
-                SprintHeld = _sprint.IsPressed() || _sprintToggled,
+                SprintHeld = !walking && (_sprint.IsPressed() || _sprintToggled),
                 AimHeld = aim,
                 JumpPressed = _jumpLatched,
                 CrouchPressed = _crouchLatched,

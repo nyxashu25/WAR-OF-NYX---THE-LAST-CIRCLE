@@ -19,6 +19,7 @@ namespace WarOfNyx.Gameplay.World
     public sealed class DevCapture : MonoBehaviour
     {
         private string _folder;
+        private string _only = "all";
         private int _index;
 
         /// <summary>Starts a capture run when <c>-devCapture</c> is on the command line.</summary>
@@ -32,7 +33,11 @@ namespace WarOfNyx.Gameplay.World
                 return false;
             var go = new GameObject("DevCapture");
             DontDestroyOnLoad(go);
-            go.AddComponent<DevCapture>()._folder = folder;
+            var capture = go.AddComponent<DevCapture>();
+            capture._folder = folder;
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == "-devCaptureOnly")
+                    capture._only = args[i + 1]; // world | characters | all
             return true;
         }
 
@@ -47,6 +52,39 @@ namespace WarOfNyx.Gameplay.World
             yield return new WaitForSeconds(5f);
 
             var weather = WeatherSystem.Current;
+            if (_only == "places")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                var placesCam = Camera.main;
+                var placesFollow = placesCam != null ? placesCam.GetComponent<ThirdPersonCamera>() : null;
+                if (placesFollow != null)
+                    placesFollow.enabled = false;
+                if (placesCam != null)
+                {
+                    yield return View(placesCam, 160f, -230f, 230f, -300f, 1.7f, "view_meadow");
+                    yield return View(placesCam, -265f, 172f, -265f, 270f, 1.8f, "view_neon_street");
+                    yield return View(placesCam, -265f, 196f, -282f, 240f, 15f, "view_neon_rooftops");
+                    yield return View(placesCam, 280f, 168f, 280f, 238f, 3f, "view_temple_approach");
+                    yield return View(placesCam, 330f, -185f, 330f, -110f, 3f, "view_fortress_gate");
+                    yield return View(placesCam, 30f, -415f, -10f, -470f, 5f, "view_docks");
+                    yield return View(placesCam, 34f, -48f, 0f, 0f, 4f, "view_core");
+                    weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Night, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                    yield return new WaitForSeconds(0.5f);
+                    yield return View(placesCam, -265f, 172f, -265f, 270f, 1.8f, "view_neon_street_night");
+                    yield return View(placesCam, 280f, 168f, 280f, 238f, 3f, "view_temple_night");
+                }
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
+            if (_only == "characters")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                yield return CharacterShowcase();
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
             if (weather != null)
             {
                 foreach (var (time, kind) in new[]
@@ -73,9 +111,143 @@ namespace WarOfNyx.Gameplay.World
                 yield return View(cam, -260f, -95f, -330f, -120f, 1.7f, "view_shadow_forest");
                 yield return View(cam, 255f, 150f, 280f, 240f, 2f, "view_crimson_temple");
                 yield return View(cam, -60f, 230f, 20f, 330f, 2.5f, "view_eclipse_valley");
+                // Buildings and props (detail pass).
+                yield return View(cam, -265f, 172f, -265f, 270f, 1.8f, "view_neon_street");
+                yield return View(cam, -265f, 196f, -282f, 240f, 15f, "view_neon_rooftops");
+                yield return View(cam, 280f, 168f, 280f, 238f, 3f, "view_temple_approach");
+                yield return View(cam, 330f, -185f, 330f, -110f, 3f, "view_fortress_gate");
+                yield return View(cam, 30f, -415f, -10f, -470f, 5f, "view_docks");
+                yield return View(cam, 34f, -48f, 0f, 0f, 4f, "view_core");
+                if (weather != null)
+                {
+                    weather.Begin(new AtmospherePlan { Time = TimeOfDay.Night, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                    yield return new WaitForSeconds(0.5f);
+                    yield return View(cam, -265f, 172f, -265f, 270f, 1.8f, "view_neon_street_night");
+                    yield return View(cam, 280f, 168f, 280f, 238f, 3f, "view_temple_night");
+                    weather.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                }
             }
+            if (_only == "all")
+                yield return CharacterShowcase();
             Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
             Application.Quit(0);
+        }
+
+        // ------------------------------------------------------------------ character showcase
+
+        /// <summary>A display character (styled body, animator, weapon rig) with no gameplay components.</summary>
+        private static (Transform root, Effects.WeaponVisualRig rig) Puppet(int look, string weaponId, Vector3 position)
+        {
+            var root = new GameObject("Showcase puppet").transform;
+            root.position = position;
+            var visual = new GameObject("Visual (PLACEHOLDER)").transform;
+            visual.SetParent(root, false);
+            Effects.CharacterStyler.Apply(visual, Characters.CharacterRoster.Get(look));
+            var rig = Effects.WeaponVisualRig.Attach(root, visual);
+            rig?.ShowWeapon(Core.Combat.WeaponCatalog.Get(weaponId));
+            return (root, rig);
+        }
+
+        /// <summary>
+        /// Gaits and combat poses on display characters on the core plaza, filmed side-on: idle / walk / run /
+        /// sprint with a rifle, running with a katana, aiming, reloading, and every katana combo attack.
+        /// </summary>
+        private IEnumerator CharacterShowcase()
+        {
+            var cam = Camera.main;
+            if (cam == null)
+                yield break;
+            var follow = cam.GetComponent<ThirdPersonCamera>();
+            if (follow != null)
+                follow.enabled = false;
+            // Clear the stage: hide the match's characters so only the puppet is filmed.
+            foreach (var c in FindObjectsByTypeSafe<Offline.OfflineCombatant>())
+                c.gameObject.SetActive(false);
+
+            var start = new Vector3(-30f, Ground(-30f, -60f), -60f);
+            foreach (var (label, speed, weapon, aim) in new[]
+                     {
+                         ("idle_rifle", 0f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                         ("walk_rifle", 1.8f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                         ("run_rifle", 4.2f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                         ("sprint_rifle", 6.6f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                         ("aim_walk_rifle", 1.6f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, true),
+                         ("run_katana", 4.2f, Core.Combat.WeaponCatalog.Katana, false),
+                         ("sprint_katana", 6.6f, Core.Combat.WeaponCatalog.Katana, false),
+                         ("run_pistol", 4.2f, Core.Combat.WeaponCatalog.NeonPistol, false),
+                     })
+            {
+                var (root, rig) = Puppet(_index % 4, weapon, start);
+                rig?.SetAiming(aim);
+                float t = 0f;
+                int shot = 0;
+                while (shot < 3)
+                {
+                    float dt = Time.deltaTime;
+                    t += dt;
+                    root.position += Vector3.forward * speed * dt;
+                    root.position = new Vector3(root.position.x, Ground(root.position.x, root.position.z), root.position.z);
+                    var side = root.position + new Vector3(3.6f, 1.1f, 0.4f);
+                    cam.transform.position = side;
+                    cam.transform.LookAt(root.position + Vector3.up * 0.95f);
+                    if (t > 1.2f + shot * 0.13f)
+                    {
+                        yield return Capture($"char_{label}_{shot}");
+                        shot++;
+                    }
+                    else
+                    {
+                        yield return null;
+                    }
+                }
+                Destroy(root.gameObject);
+            }
+
+            // Reload and the katana / energy blade combos, standing.
+            {
+                var (root, rig) = Puppet(1, Core.Combat.WeaponCatalog.Nx7AssaultRifle, start);
+                Frame(cam, root, 3.2f);
+                yield return new WaitForSeconds(0.5f);
+                rig?.PlayReload();
+                yield return new WaitForSeconds(0.45f);
+                yield return Capture("char_reload");
+                Destroy(root.gameObject);
+            }
+            foreach (var weaponId in new[] { Core.Combat.WeaponCatalog.Katana, Core.Combat.WeaponCatalog.EnergyBlade })
+            {
+                var weaponStats = Core.Combat.WeaponCatalog.Get(weaponId);
+                var combo = Core.Combat.MeleeRules.Combo(weaponStats);
+                for (int step = 0; step < combo.Length; step++)
+                {
+                    var (root, rig) = Puppet(2, weaponId, start);
+                    Frame(cam, root, 3.4f, frontish: true);
+                    yield return new WaitForSeconds(0.4f);
+                    rig?.PlaySwing(combo[step], weaponStats);
+                    float windup = weaponStats.meleeWindup * combo[step].WindupMultiplier;
+                    yield return new WaitForSeconds(windup * 0.9f);
+                    yield return Capture($"char_{weaponId}_{combo[step].Pattern}_a_windup");
+                    yield return new WaitForSeconds(windup * 0.1f + 0.07f);
+                    yield return Capture($"char_{weaponId}_{combo[step].Pattern}_b_strike");
+                    yield return new WaitForSeconds(0.1f);
+                    yield return Capture($"char_{weaponId}_{combo[step].Pattern}_c_follow");
+                    Destroy(root.gameObject);
+                }
+            }
+        }
+
+        private static void Frame(Camera cam, Transform target, float distance, bool frontish = false)
+        {
+            var offset = frontish ? new Vector3(distance * 0.75f, 1.2f, distance * 0.65f) : new Vector3(distance, 1.1f, 0.4f);
+            cam.transform.position = target.position + offset;
+            cam.transform.LookAt(target.position + Vector3.up * 1f);
+        }
+
+        private static T[] FindObjectsByTypeSafe<T>() where T : Component
+        {
+            var list = new System.Collections.Generic.List<T>();
+            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
+                list.AddRange(root.GetComponentsInChildren<T>(true));
+            return list.ToArray();
         }
 
         private IEnumerator View(Camera cam, float x, float z, float tx, float tz, float eye, string name)

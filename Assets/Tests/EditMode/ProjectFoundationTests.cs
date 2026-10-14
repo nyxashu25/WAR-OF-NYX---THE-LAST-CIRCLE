@@ -90,6 +90,7 @@ namespace WarOfNyx.Tests
         [TestCase(GameInputActions.Fire, "<Mouse>/leftButton")]
         [TestCase(GameInputActions.Aim, "<Mouse>/rightButton")]
         [TestCase(GameInputActions.Sprint, "<Keyboard>/leftShift")]
+        [TestCase(GameInputActions.Walk, "<Keyboard>/leftAlt")]
         [TestCase(GameInputActions.Jump, "<Keyboard>/space")]
         [TestCase(GameInputActions.Crouch, "<Keyboard>/c")]
         [TestCase(GameInputActions.Reload, "<Keyboard>/r")]

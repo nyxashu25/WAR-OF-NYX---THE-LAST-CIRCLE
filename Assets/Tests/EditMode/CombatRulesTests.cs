@@ -223,6 +223,43 @@ namespace WarOfNyx.Tests
             Assert.AreEqual(36f, WeaponRules.DamageAt(w, 10f, true), "headshot x1.5");
         }
 
+        /// <summary>Share of a full-auto spray that lands on a standing player (0.7 m wide, 1.5 m tall body) at a distance.</summary>
+        private static float SprayHitShare(string weaponId, float distance, bool aiming, int rounds)
+        {
+            var w = WeaponCatalog.Get(weaponId);
+            var s = Fresh(w.id);
+            float halfWidth = (float)(Math.Atan(0.35 / distance) * 180.0 / Math.PI);
+            float halfHeight = (float)(Math.Atan(0.75 / distance) * 180.0 / Math.PI);
+            int hits = 0, pellets = 0;
+            float now = 0f;
+            for (int shot = 0; pellets < rounds && shot < 1000; shot++, now += w.FireInterval + 0.001f)
+            {
+                var d = WeaponRules.TryFire(ref s, w, now, true, true, aiming, true, 999);
+                if (!d.Fired)
+                    continue;
+                for (int p = 0; p < d.Pellets; p++, pellets++)
+                {
+                    WeaponRules.SpreadOffset(7, d.ShotIndex, p, d.SpreadDegrees, out float yaw, out float pitch);
+                    if (Math.Abs(yaw) <= halfWidth && Math.Abs(pitch) <= halfHeight)
+                        hits++;
+                }
+            }
+            return hits / (float)pellets;
+        }
+
+        [Test]
+        public void Sprays_PutAGoodShareOfBulletsOnTarget()
+        {
+            // "In a spray, some bullets must land": hip fire at mid range, aimed fire at long range.
+            Assert.That(SprayHitShare(WeaponCatalog.Nx7AssaultRifle, 20f, aiming: false, 30), Is.GreaterThan(0.45f), "AR hip, 20 m");
+            Assert.That(SprayHitShare(WeaponCatalog.Nx7AssaultRifle, 50f, aiming: true, 30), Is.GreaterThan(0.45f), "AR aimed, 50 m");
+            Assert.That(SprayHitShare(WeaponCatalog.ShadowSmg, 15f, aiming: false, 40), Is.GreaterThan(0.45f), "SMG hip, 15 m");
+            Assert.That(SprayHitShare(WeaponCatalog.CrimsonShotgun, 8f, aiming: false, 8), Is.GreaterThan(0.5f), "shotgun pellets, 8 m");
+            Assert.That(SprayHitShare(WeaponCatalog.PhantomMarksman, 120f, aiming: true, 1), Is.EqualTo(1f), "first aimed marksman shot, 120 m");
+            // ...but not laser beams: long-range hip spray still misses a lot.
+            Assert.That(SprayHitShare(WeaponCatalog.Nx7AssaultRifle, 80f, aiming: false, 30), Is.LessThan(0.6f), "AR hip, 80 m");
+        }
+
         [Test]
         public void SpreadIsDeterministicAndBounded()
         {
@@ -339,6 +376,76 @@ namespace WarOfNyx.Tests
             Assert.IsFalse(MeleeRules.TryStartSwing(ref m, katana, 1.5f), "cooldown");
             Assert.IsTrue(MeleeRules.TryStartSwing(ref m, katana, 1.87f));
             Assert.AreEqual(2, m.SwingCount);
+        }
+
+        /// <summary>Swings as fast as allowed: start, resolve, wait for recovery, start again.</summary>
+        private static System.Collections.Generic.List<MeleePattern> Chain(WeaponStats w, int swings, float extraPause)
+        {
+            var m = new MeleeState();
+            var patterns = new System.Collections.Generic.List<MeleePattern>();
+            float now = 1f;
+            for (int i = 0; i < swings; i++)
+            {
+                Assert.IsTrue(MeleeRules.TryStartSwing(ref m, w, now), $"swing {i}");
+                patterns.Add(MeleeRules.Current(m, w).Pattern);
+                now += 0.5f * w.meleeWindup;
+                Assert.IsFalse(MeleeRules.TryResolve(ref m, w, now), "windup scales per attack");
+                now = m.SwingStartedAt + w.meleeWindup * MeleeRules.Current(m, w).WindupMultiplier + 0.001f;
+                Assert.IsTrue(MeleeRules.TryResolve(ref m, w, now));
+                now = m.NextSwingAt + 0.01f + extraPause;
+            }
+            return patterns;
+        }
+
+        [Test]
+        public void KatanaChainsFourDifferentAttacks_ThenStartsOver()
+        {
+            var katana = WeaponCatalog.Get(WeaponCatalog.Katana);
+            var patterns = Chain(katana, 5, extraPause: 0f);
+            CollectionAssert.AreEqual(new[]
+            {
+                MeleePattern.HorizontalSlash, MeleePattern.BackhandSlash, MeleePattern.OverheadStrike, MeleePattern.Thrust,
+                MeleePattern.HorizontalSlash,
+            }, patterns);
+        }
+
+        [Test]
+        public void PausingTooLongRestartsTheCombo()
+        {
+            var katana = WeaponCatalog.Get(WeaponCatalog.Katana);
+            var patterns = Chain(katana, 3, extraPause: MeleeRules.ComboWindowSeconds + 0.1f);
+            CollectionAssert.AreEqual(new[] { MeleePattern.HorizontalSlash, MeleePattern.HorizontalSlash, MeleePattern.HorizontalSlash }, patterns);
+        }
+
+        [Test]
+        public void EveryMeleeWeaponHasAComboWithDistinctPatterns()
+        {
+            foreach (var w in WeaponCatalog.All.Where(w => w.IsMelee))
+            {
+                var combo = MeleeRules.Combo(w);
+                Assert.GreaterOrEqual(combo.Length, 3, w.id);
+                Assert.AreEqual(combo.Length, combo.Select(a => a.Pattern).Distinct().Count(), w.id + " patterns differ");
+                foreach (var a in combo)
+                {
+                    Assert.That(MeleeRules.Reach(w, a), Is.GreaterThan(1f), w.id);
+                    Assert.That(a.ArcDegrees, Is.InRange(20f, 360f), w.id);
+                    Assert.That(MeleeRules.Damage(w, a), Is.InRange(w.damage * 0.8f, w.damage * 1.5f), w.id);
+                }
+            }
+            Assert.AreEqual(MeleeStyle.Knife, WeaponCatalog.Get(WeaponCatalog.CombatKnife).meleeStyle);
+            Assert.AreEqual(MeleeStyle.Energy, WeaponCatalog.Get(WeaponCatalog.EnergyBlade).meleeStyle);
+        }
+
+        [Test]
+        public void ThrustReachesFurther_SpinHitsBehind()
+        {
+            var katana = WeaponCatalog.Get(WeaponCatalog.Katana);
+            var thrust = MeleeRules.Combo(katana)[3];
+            Assert.Greater(MeleeRules.Reach(katana, thrust), katana.meleeReach);
+            var energy = WeaponCatalog.Get(WeaponCatalog.EnergyBlade);
+            var spin = MeleeRules.Combo(energy)[2];
+            Assert.IsTrue(MeleeRules.InArc(0f, 0f, 0f, 0f, -1.5f, MeleeRules.Reach(energy, spin), spin.ArcDegrees), "spin reaches someone behind");
+            Assert.IsFalse(MeleeRules.InArc(0f, 0f, 0f, 0f, -1.5f, katana.meleeReach, MeleeRules.Combo(katana)[0].ArcDegrees), "a slash does not");
         }
 
         [Test]

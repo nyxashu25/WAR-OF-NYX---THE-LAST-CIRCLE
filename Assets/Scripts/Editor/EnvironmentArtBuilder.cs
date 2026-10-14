@@ -107,8 +107,10 @@ namespace WarOfNyx.EditorTools
                 library.Rocks.Add(RockPrefab($"Rock_{v}", mesh, rockMat));
             }
 
-            for (int v = 0; v < 3; v++)
-                library.Grass.Add(DetailPrefab($"Grass_{v}", SaveMesh(VegetationMeshes.GrassClump(700 + v * 7), $"Grass_{v}"), grassMat));
+            // Grass_0 meadow, Grass_1 fine lawn, Grass_2 tall tuft with seed heads (NyxIslandBuilder.PaintDetails relies on this order).
+            var styles = new[] { GrassStyle.Meadow, GrassStyle.Fine, GrassStyle.Tuft };
+            for (int v = 0; v < styles.Length; v++)
+                library.Grass.Add(DetailPrefab($"Grass_{v}", SaveMesh(VegetationMeshes.GrassClump(700 + v * 7, styles[v]), $"Grass_{v}"), grassMat));
             var petals = new[] { new Color(1f, 0.55f, 0.78f), new Color(0.7f, 0.55f, 1f), new Color(1f, 0.95f, 0.75f) };
             for (int v = 0; v < petals.Length; v++)
                 library.Flowers.Add(DetailPrefab($"Flowers_{v}", SaveMesh(VegetationMeshes.FlowerClump(800 + v * 7, petals[v]), $"Flowers_{v}"), grassMat));

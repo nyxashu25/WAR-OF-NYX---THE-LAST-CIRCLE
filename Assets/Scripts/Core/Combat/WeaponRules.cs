@@ -214,7 +214,9 @@ namespace WarOfNyx.Core.Combat
         }
 
         /// <summary>
-        /// Deterministic spread offset for one pellet: uniform inside a cone of <paramref name="spreadDegrees"/>.
+        /// Deterministic spread offset for one pellet inside a cone of <paramref name="spreadDegrees"/>,
+        /// weighted toward the centre (the radius is uniform, not the area): half of all bullets land within
+        /// half the cone, so a spray still puts many rounds on the crosshair while the edges stay possible.
         /// The same seed gives the same direction on the server and in client prediction.
         /// </summary>
         public static void SpreadOffset(int playerId, int shotIndex, int pellet, float spreadDegrees,
@@ -223,7 +225,7 @@ namespace WarOfNyx.Core.Combat
             uint h = Hash((uint)playerId * 73856093u ^ (uint)shotIndex * 19349663u ^ (uint)pellet * 83492791u);
             float u = (h & 0xFFFF) / 65535f;
             float v = ((h >> 16) & 0xFFFF) / 65535f;
-            float radius = spreadDegrees * (float)Math.Sqrt(u);
+            float radius = spreadDegrees * u;
             float angle = v * 2f * (float)Math.PI;
             yawOffset = radius * (float)Math.Cos(angle);
             pitchOffset = radius * (float)Math.Sin(angle);

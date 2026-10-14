@@ -23,6 +23,11 @@ namespace WarOfNyx.Controls
         public const string Fire = "Fire";
         public const string Aim = "Aim";
         public const string Sprint = "Sprint";
+        /// <summary>
+        /// Hold to walk (keyboard only, so not in <see cref="AllPlayerActions"/>, which need a touch-compatible
+        /// gamepad binding): sticks and the touch joystick walk by pushing gently.
+        /// </summary>
+        public const string Walk = "Walk";
         public const string Jump = "Jump";
         public const string Crouch = "Crouch";
         public const string Slide = "Slide";
@@ -65,6 +70,7 @@ namespace WarOfNyx.Controls
             AddButton(player, Fire, "<Mouse>/leftButton", "<Gamepad>/rightTrigger");
             AddButton(player, Aim, "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             AddButton(player, Sprint, "<Keyboard>/leftShift", "<Gamepad>/leftStickPress");
+            player.AddAction(Walk, InputActionType.Button).AddBinding("<Keyboard>/leftAlt");
             AddButton(player, Jump, "<Keyboard>/space", "<Gamepad>/buttonSouth");
             AddButton(player, Crouch, "<Keyboard>/c", "<Gamepad>/buttonEast");
             AddButton(player, Slide, "<Keyboard>/leftCtrl", "<Gamepad>/leftShoulder");

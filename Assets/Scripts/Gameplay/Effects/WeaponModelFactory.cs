@@ -86,20 +86,162 @@ namespace WarOfNyx.Gameplay.Effects
             return root;
         }
 
+        private static readonly Color Steel = new Color(0.62f, 0.66f, 0.76f);
+        private static readonly Color Edge = new Color(0.94f, 0.96f, 1f);
+        private static readonly Color Gold = new Color(0.78f, 0.6f, 0.28f);
+
+        /// <summary>
+        /// Melee weapons, held at the origin (hand) with the blade along +Y and the cutting edge facing +Z:
+        ///  * katana: wrapped handle with diamond pattern and pommel cap, round tsuba, habaki collar and a
+        ///    curved two-tone blade (steel body, polished edge) with an angled kissaki tip;
+        ///  * knife / dagger: tanto-style single-edged blade, guard, ribbed grip;
+        ///  * energy blade: emitter hilt and a glowing blade with a bright core.
+        /// A "TrailTip" child at the blade tip anchors the slash trail.
+        /// </summary>
         private static void BuildBlade(Transform root, WeaponStats weapon, Color accent, Color glow)
         {
-            float length = weapon.id == WeaponCatalog.Katana ? 0.95f
-                : weapon.id == WeaponCatalog.EnergyBlade ? 0.85f
-                : weapon.id == WeaponCatalog.CombatKnife ? 0.32f
-                : 0.26f;
+            bool katana = weapon.id == WeaponCatalog.Katana;
             bool energy = weapon.id == WeaponCatalog.EnergyBlade;
-            var bladeColor = energy ? accent : new Color(0.82f, 0.86f, 0.95f);
-            StyleKit.Part(PrimitiveType.Cylinder, "Handle", root, new Vector3(0f, 0f, 0f), new Vector3(0.04f, 0.09f, 0.04f), Grip);
-            StyleKit.Part(PrimitiveType.Cube, "Guard", root, new Vector3(0f, 0.1f, 0f), new Vector3(0.12f, 0.02f, 0.05f), accent * 0.8f);
-            StyleKit.Part(PrimitiveType.Cube, "Blade", root, new Vector3(0f, 0.11f + length * 0.5f, 0f), new Vector3(0.025f, length, 0.06f),
-                bladeColor, default, energy ? glow * 1.4f : default);
-            StyleKit.Cone("Tip", root, new Vector3(0f, 0.11f + length, 0f), new Vector3(0.06f, 0.08f, 0.025f), bladeColor, Vector3.zero,
-                energy ? glow : default);
+            bool knife = !katana && !energy;
+            float handle = katana ? 0.27f : energy ? 0.22f : 0.12f;
+            float length = katana ? 0.74f : energy ? 0.72f : weapon.id == WeaponCatalog.CombatKnife ? 0.24f : 0.19f;
+            float width = katana ? 0.042f : energy ? 0.046f : 0.034f;
+            float curve = katana ? 0.035f : energy ? 0f : 0.004f;
+            float bladeStart = 0.115f;
+
+            // Handle: the hand holds the top of it (origin); the second hand lower down (two-handed weapons).
+            float handleTop = 0.1f, handleBottom = handleTop - handle;
+            StyleKit.Part(PrimitiveType.Cylinder, "Handle", root, new Vector3(0f, (handleTop + handleBottom) * 0.5f, 0f),
+                new Vector3(0.036f, handle * 0.5f, 0.03f), Grip);
+            int wraps = Mathf.RoundToInt(handle / 0.032f);
+            for (int i = 0; i < wraps; i++)
+            {
+                // Diamond wrap (tsuka-ito) / ribbed grip.
+                float y = handleTop - 0.016f - i * (handle / wraps);
+                StyleKit.Part(PrimitiveType.Cube, "Wrap", root, new Vector3(0f, y, 0f), new Vector3(0.039f, 0.012f, 0.034f),
+                    knife ? Metal : accent * 0.55f, new Vector3(0f, 45f, 0f));
+            }
+            StyleKit.Part(PrimitiveType.Cylinder, "Pommel", root, new Vector3(0f, handleBottom - 0.008f, 0f), new Vector3(0.042f, 0.01f, 0.036f), energy ? Metal : Gold);
+
+            if (energy)
+            {
+                StyleKit.Part(PrimitiveType.Cylinder, "Emitter", root, new Vector3(0f, 0.1f, 0f), new Vector3(0.05f, 0.025f, 0.05f), Metal);
+                StyleKit.Part(PrimitiveType.Cube, "EmitterRing", root, new Vector3(0f, 0.08f, 0f), new Vector3(0.055f, 0.008f, 0.055f), accent, default, glow);
+            }
+            else if (katana)
+            {
+                StyleKit.Part(PrimitiveType.Cylinder, "Tsuba", root, new Vector3(0f, 0.105f, 0f), new Vector3(0.085f, 0.006f, 0.075f), new Color(0.12f, 0.11f, 0.14f));
+                StyleKit.Part(PrimitiveType.Cylinder, "TsubaRim", root, new Vector3(0f, 0.105f, 0f), new Vector3(0.09f, 0.004f, 0.08f), Gold);
+                StyleKit.Part(PrimitiveType.Cube, "Habaki", root, new Vector3(0f, bladeStart + 0.012f, 0.002f), new Vector3(0.012f, 0.026f, width + 0.006f), Gold);
+            }
+            else
+            {
+                StyleKit.Part(PrimitiveType.Cube, "Guard", root, new Vector3(0f, 0.105f, 0f), new Vector3(0.022f, 0.014f, 0.085f), Metal);
+            }
+
+            // Blade: two meshes (spine side and edge side) so the polished edge reads as a separate bright line.
+            var body = BladeMeshes(length, width, curve, knife, out var edge);
+            BladePart(root, "Blade", body, bladeStart, energy ? accent : Steel, energy ? glow * 1.2f : default);
+            BladePart(root, "BladeEdge", edge, bladeStart, energy ? Color.white : Edge, energy ? glow * 2f : Edge * 0.15f);
+
+            var tip = new GameObject("TrailTip").transform;
+            tip.SetParent(root, false);
+            tip.localPosition = new Vector3(0f, bladeStart + length * 0.92f, -curve * 0.85f);
+        }
+
+        private static void BladePart(Transform root, string name, Mesh mesh, float y, Color color, Color emission)
+        {
+            var go = new GameObject(name);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = StyleKit.Toon;
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = new Vector3(0f, y, 0f);
+            StyleKit.Paint(renderer, color, emission);
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<string, (Mesh body, Mesh edge)> BladeCache =
+            new System.Collections.Generic.Dictionary<string, (Mesh, Mesh)>();
+
+        /// <summary>
+        /// A single-edged blade along +Y (length), edge toward +Z, spine toward -Z, curving back toward the spine
+        /// (<paramref name="curve"/> metres at the tip). Cross-section: spine flats, a ridge line (shinogi) and
+        /// the edge bevel; the last 12 % angles into the tip (kissaki / tanto point).
+        /// </summary>
+        private static Mesh BladeMeshes(float length, float width, float curve, bool tanto, out Mesh edgeMesh)
+        {
+            string key = $"{length:0.000}_{width:0.000}_{curve:0.000}_{tanto}";
+            if (BladeCache.TryGetValue(key, out var cached) && cached.body != null)
+            {
+                edgeMesh = cached.edge;
+                return cached.body;
+            }
+            const int stations = 14;
+            float thickness = width * 0.22f;
+            var spineVerts = new System.Collections.Generic.List<Vector3>();
+            var edgeVerts = new System.Collections.Generic.List<Vector3>();
+            for (int i = 0; i <= stations; i++)
+            {
+                float t = i / (float)stations;
+                float y = t * length;
+                float back = -curve * t * t;                        // curvature toward the spine
+                float tipT = Mathf.InverseLerp(tanto ? 0.8f : 0.88f, 1f, t);
+                float w = Mathf.Lerp(width, width * 0.72f, t) * (1f - tipT * 0.97f);
+                float edgeZ = back + w * 0.5f;
+                float spineZ = back - w * 0.5f + w * tipT * 0.9f;    // the spine sweeps down into the point
+                float ridgeZ = Mathf.Lerp(spineZ, edgeZ, 0.45f);
+                float th = thickness * (1f - tipT * 0.8f);
+                // Spine side: spine flat (two points) to the ridge (two points).
+                spineVerts.Add(new Vector3(-th * 0.45f, y, spineZ));
+                spineVerts.Add(new Vector3(th * 0.45f, y, spineZ));
+                spineVerts.Add(new Vector3(th * 0.5f, y, ridgeZ));
+                spineVerts.Add(new Vector3(-th * 0.5f, y, ridgeZ));
+                // Edge side: ridge to the cutting edge.
+                edgeVerts.Add(new Vector3(th * 0.5f, y, ridgeZ));
+                edgeVerts.Add(new Vector3(0f, y, edgeZ));
+                edgeVerts.Add(new Vector3(-th * 0.5f, y, ridgeZ));
+            }
+            var body = Strip(spineVerts, 4, stations, closedLoop: true, "BladeBody");
+            edgeMesh = Strip(edgeVerts, 3, stations, closedLoop: false, "BladeEdge");
+            BladeCache[key] = (body, edgeMesh);
+            return body;
+        }
+
+        /// <summary>Joins consecutive cross-sections of <paramref name="ring"/> points into quads; flat shaded.</summary>
+        private static Mesh Strip(System.Collections.Generic.List<Vector3> points, int ring, int stations, bool closedLoop, string name)
+        {
+            var verts = new System.Collections.Generic.List<Vector3>();
+            var normals = new System.Collections.Generic.List<Vector3>();
+            var tris = new System.Collections.Generic.List<int>();
+            int segments = closedLoop ? ring : ring - 1;
+            for (int s = 0; s < stations; s++)
+            for (int j = 0; j < segments; j++)
+            {
+                int j2 = (j + 1) % ring;
+                var a = points[s * ring + j];
+                var b = points[s * ring + j2];
+                var c = points[(s + 1) * ring + j2];
+                var d = points[(s + 1) * ring + j];
+                var n = Vector3.Cross(b - a, c - a);
+                if (n.sqrMagnitude < 1e-12f)
+                    n = Vector3.Cross(c - a, d - a);
+                n.Normalize();
+                // Two-sided with separate vertices per side (shared vertices would average the normals to zero).
+                int i0 = verts.Count;
+                verts.AddRange(new[] { a, b, c, d });
+                normals.AddRange(new[] { n, n, n, n });
+                tris.AddRange(new[] { i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3 });
+                int i1 = verts.Count;
+                verts.AddRange(new[] { a, b, c, d });
+                normals.AddRange(new[] { -n, -n, -n, -n });
+                tris.AddRange(new[] { i1, i1 + 2, i1 + 1, i1, i1 + 3, i1 + 2 });
+            }
+            var mesh = new Mesh { name = name + " (procedural)" };
+            mesh.SetVertices(verts);
+            mesh.SetNormals(normals);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private static void Receiver(Transform root, float length, float height, Color accent, Color glow)

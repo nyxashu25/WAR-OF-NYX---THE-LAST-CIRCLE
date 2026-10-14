@@ -47,20 +47,22 @@ Every player gets 1 primary + 1 melee + 2 magazines of spare ammo (by type) + 1�
 These are random equipment sets, not character classes.
 
 ## 6. Movement (spec 8) [T]
-Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · HP 100. State-driven controller with client prediction and server reconciliation.
+Walk ≈ 1.8 m/s (gentle stick or the walk key) · Run 4 m/s (full stick) · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · HP 100. State-driven controller with client prediction and server reconciliation.
 
 ## 7. Weapons (spec 9) [T]
 *(Implemented: `WeaponCatalog` / `WeaponRules` / `NetworkCombat`. Values are tunable in the WeaponDefinition assets.)*
 
 | Weapon | Mode | Dmg | Rate (/s) | Mag / Reserve | Reload | Full dmg → min (m) | Max range | Headshot | Spread hip / aim | Move |
 |---|---|---:|---:|---|---:|---|---:|---:|---|---:|
-| NX‑7 Assault Rifle | Auto | 24 | 9 | 30 / 90 | 2.1 s | 30 → 80 (×0.6) | 150 m | ×1.5 | 2.5° / 0.8° | ×0.95 |
-| Shadow SMG | Auto | 16 | 13 | 40 / 120 | 1.8 s | 15 → 40 (×0.5) | 80 m | ×1.4 | 3° / 1.4° | ×1.0 |
-| Crimson Shotgun | Semi | 12 × 8 | 1.1 | 6 / 24 | 3.0 s | 6 → 18 (×0.2) | 30 m | ×1.25 | 6° / 4.5° | ×0.92 |
-| Phantom Marksman | Semi | 55 | 1.4 | 10 / 30 | 2.6 s | 80 → 200 (×0.8) | 300 m | ×2.0 | 4° / 0.15° | ×0.88 |
-| Storm Burst Rifle | Burst ×3 | 21/shot | 3 bursts | 24 / 72 | 2.2 s | 35 → 90 (×0.6) | 160 m | ×1.5 | 2.2° / 0.6° | ×0.95 |
-| Neon Pistol | Semi | 26 | 5 | 12 / 48 | 1.4 s | 20 → 50 (×0.55) | 90 m | ×1.6 | 2° / 0.9° | ×1.0 |
-| Storm Light SMG (from the loadout table) | Auto | 14 | 15 | 45 / 135 | 1.6 s | 12 → 35 (×0.45) | 70 m | ×1.4 | 3.2° / 1.6° | ×1.03 |
+| NX‑7 Assault Rifle | Auto | 24 | 9 | 30 / 90 | 2.1 s | 30 → 80 (×0.6) | 150 m | ×1.5 | 1.5° / 0.3° | ×0.95 |
+| Shadow SMG | Auto | 16 | 13 | 40 / 120 | 1.8 s | 15 → 40 (×0.5) | 80 m | ×1.4 | 1.8° / 0.7° | ×1.0 |
+| Crimson Shotgun | Semi | 12 × 8 | 1.1 | 6 / 24 | 3.0 s | 6 → 18 (×0.2) | 30 m | ×1.25 | 4.5° / 3.2° | ×0.92 |
+| Phantom Marksman | Semi | 55 | 1.4 | 10 / 30 | 2.6 s | 80 → 200 (×0.8) | 300 m | ×2.0 | 2.5° / 0.05° | ×0.88 |
+| Storm Burst Rifle | Burst ×3 | 21/shot | 3 bursts | 24 / 72 | 2.2 s | 35 → 90 (×0.6) | 160 m | ×1.5 | 1.3° / 0.25° | ×0.95 |
+| Neon Pistol | Semi | 26 | 5 | 12 / 48 | 1.4 s | 20 → 50 (×0.55) | 90 m | ×1.6 | 1.2° / 0.35° | ×1.0 |
+| Storm Light SMG (from the loadout table) | Auto | 14 | 15 | 45 / 135 | 1.6 s | 12 → 35 (×0.45) | 70 m | ×1.4 | 2° / 0.8° | ×1.03 |
+
+**Accuracy pass (2026-10-14):** spread cones were 2–3× tighter, bloom grows slower (AR: +0.12° per shot up to +1.4°), and bullets are weighted toward the crosshair (the radius is uniform, not the area: half of all bullets land within half the cone). Tested: an AR hip spray puts over 45 % of rounds on a standing player at 20 m, an aimed spray over 45 % at 50 m; a long-range hip spray still misses most (`CombatRulesTests.Sprays_PutAGoodShareOfBulletsOnTarget`). Existing weapon assets are refreshed by setup (`WeaponCatalog.Version` 2).
 
 | Melee | Dmg | Windup | Cooldown | Reach | Arc |
 |---|---:|---:|---:|---:|---:|
@@ -68,6 +70,14 @@ Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · H
 | Combat Knife | 35 | 0.12 s | 0.45 s | 1.7 m | 80° |
 | Energy Blade | 50 | 0.28 s | 0.80 s | 2.6 m | 110° |
 | Dagger | 30 | 0.10 s | 0.40 s | 1.5 m | 70° |
+
+**Melee combos (2026-10-14):** pressing again within 0.6 s of a swing's recovery continues the weapon's chain; waiting longer (or finishing it) starts over. Each attack changes arc, reach, damage and timing (multipliers of the table above), decided by the same server rule online and offline (`MeleeRules.Combo`):
+
+| Style | Chain |
+|---|---|
+| Blade (katana) | horizontal slash 110° → backhand slash 100° → overhead strike 55°, +0.3 m, ×1.4 → thrust 30°, +0.9 m, ×1.25 (finisher) |
+| Knife (combat knife, dagger) | slash 90° → backhand 90° → quick stab 35°, +0.3 m, ×1.3 |
+| Energy blade | slash 115° → rising slash 90° → spin 360°, −0.2 m, ×0.9 |
 
 - **Firing:** hitscan from the camera shoulder point along the aim, server-side and lag-compensated. Deterministic per-pellet spread. Recoil = bloom (spread grows per shot, recovers over time; recovery is always slower than sustained fire). Blocked attempts (cooldown, reload, empty, outside the circle from Phase 7) never cost ammo. Empty magazine → automatic reload.
 - **Slots:** [1] primary, [2] secondary, [3] melee. Switching takes 0.3 s, cancels a reload, and cancels a melee windup. The MELEE button always swings the melee slot.
@@ -156,7 +166,7 @@ Walk 4 m/s · Sprint 6.5 m/s · Crouch 2.5 m/s · Jump 1.5 m · Slide 0.7 s · H
 
 ## 14. Controls (spec 18)
 - **Android:** left side joystick, sprint, crouch, slide. Right side swipe-look, fire, aim, jump, reload, melee, weapon switch, medkit, interact. Safe areas respected, layout and sizes customizable, sensitivity sliders, optional gyro. Aim assist, if added, stays modest and validated by the same server rules.
-- **Desktop dev:** WASD, mouse, LMB fire, RMB aim, Shift sprint, Space jump, C crouch, Ctrl slide, R reload, E interact, F melee, 1/2/3 slots, H medkit. *(Implemented: `GameInputActions`.)*
+- **Desktop dev:** WASD, mouse, LMB fire, RMB aim, Shift sprint, Left Alt walk, Space jump, C crouch, Ctrl slide, R reload, E interact, F melee (press repeatedly for combos), 1/2/3 slots, H medkit. *(Implemented: `GameInputActions`.)*
 
 ## 15. HUD & feed (spec 19)
 Palette: background `#0B0B18`, purple `#8A2BE2`, cyan `#00E5FF`, crimson `#FF304F` (danger/exposure), gold `#FFC857`. Feed events carry an **event id and server timestamp** so duplicates are dropped. The minimap never shows enemies except during camping exposure.

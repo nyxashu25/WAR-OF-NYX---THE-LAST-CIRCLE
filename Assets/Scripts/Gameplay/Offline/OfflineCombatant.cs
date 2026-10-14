@@ -68,6 +68,7 @@ namespace WarOfNyx.Gameplay.Offline
         private WeaponVisualRig _rig;
         private OutsideZoneVisual _outsideVisual;
         private HuntBeaconVisual _beacon;
+        private CharacterAnimator _animator;
         private SpawnShieldVisual _shield;
         private short _shownWeapon = -2;
         private float _nextFootstepAt;
@@ -206,7 +207,7 @@ namespace WarOfNyx.Gameplay.Offline
                     Protection.OnAggressiveAction(AggressiveAction.MeleeAttack);
                     WeaponRules.CancelReload(ref Slots[ActiveSlot]);
                     attacked = true;
-                    _rig?.PlaySwing();
+                    _rig?.PlaySwing(MeleeRules.Current(Melee, meleeWeapon), meleeWeapon);
                     _match.EmitSound(SoundKind.Melee, transform.position, Id);
                 }
                 if (meleeWeapon != null && MeleeRules.TryResolve(ref Melee, meleeWeapon, now))
@@ -314,9 +315,11 @@ namespace WarOfNyx.Gameplay.Offline
 
         private void ResolveMelee(WeaponStats meleeWeapon, float yaw, float now)
         {
-            var target = _match.FindMeleeTarget(this, meleeWeapon, yaw);
+            // The combo step decides the arc, reach and damage (same rule as online).
+            var attack = MeleeRules.Current(Melee, meleeWeapon);
+            var target = _match.FindMeleeTarget(this, MeleeRules.Reach(meleeWeapon, attack), attack.ArcDegrees, yaw);
             if (target != null)
-                _match.ApplyMeleeDamage(this, target, meleeWeapon.damage, Slots[CombatLoadout.MeleeSlot].WeaponId);
+                _match.ApplyMeleeDamage(this, target, MeleeRules.Damage(meleeWeapon, attack), Slots[CombatLoadout.MeleeSlot].WeaponId);
         }
 
         // ------------------------------------------------------------------ hit shapes (same as the online hitboxes)
@@ -428,6 +431,11 @@ namespace WarOfNyx.Gameplay.Offline
                 _rig.SetHealing(Alive && Heal.Active);
                 _rig.SetAiming(Alive && Router != null && Router.enabled && Router.AimHeld);
             }
+            // Bots' heads and weapons follow their aim (the human's animator reads the input router itself).
+            if (_animator == null)
+                _animator = GetComponent<CharacterAnimator>();
+            if (_animator != null && (Router == null || !Router.enabled))
+                _animator.AimPitch = Pitch;
             if (_outsideVisual != null)
                 _outsideVisual.SetActive(Alive && OutsideZone);
             if (_shield != null)

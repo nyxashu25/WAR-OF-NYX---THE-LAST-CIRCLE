@@ -48,6 +48,8 @@ namespace WarOfNyx.Networking
         [Networked] private float MeleeSwingStartedAt { get; set; }
         [Networked] private float MeleeNextSwingAt { get; set; }
         [Networked] private int MeleeSwingCount { get; set; }
+        /// <summary>Combo step of the current / last swing (MeleeRules.Combo): every peer animates the same attack.</summary>
+        [Networked] private byte MeleeComboStep { get; set; }
 
         [Networked] public float Health { get; set; }
         [Networked] public float MaxHealth { get; set; }
@@ -200,7 +202,10 @@ namespace WarOfNyx.Networking
                 }
 
                 // Melee: the melee button always swings the melee slot; with the melee weapon out, fire swings too.
-                var melee = new MeleeState { SwingStartedAt = MeleeSwingStartedAt, NextSwingAt = MeleeNextSwingAt, SwingCount = MeleeSwingCount };
+                var melee = new MeleeState
+                {
+                    SwingStartedAt = MeleeSwingStartedAt, NextSwingAt = MeleeNextSwingAt, SwingCount = MeleeSwingCount, ComboStep = MeleeComboStep,
+                };
                 var meleeWeapon = WeaponRegistry.Get(GetSlot(CombatLoadout.MeleeSlot).WeaponId);
                 bool wantsMelee = cmd.MeleePressed || (weapon.IsMelee && cmd.FirePressed);
                 if (wantsMelee && now >= SwitchReadyAt && meleeWeapon != null && MeleeRules.TryStartSwing(ref melee, meleeWeapon, now))
@@ -209,10 +214,10 @@ namespace WarOfNyx.Networking
                     WeaponRules.CancelReload(ref state);
                     attacked = true;
                     if (IsPredictedForward)
-                        _rig?.PlaySwing();
+                        _rig?.PlaySwing(MeleeRules.Current(melee, meleeWeapon), meleeWeapon);
                 }
                 if (meleeWeapon != null && MeleeRules.TryResolve(ref melee, meleeWeapon, now) && HasStateAuthority)
-                    ResolveMelee(meleeWeapon, yaw);
+                    ResolveMelee(meleeWeapon, MeleeRules.Current(melee, meleeWeapon), yaw);
 
                 // Firearms: only with the body inside the Nyx Circle (spec 11). A blocked attempt costs nothing.
                 if (weapon.IsRanged && now >= SwitchReadyAt && !melee.InProgress)
@@ -239,6 +244,7 @@ namespace WarOfNyx.Networking
                 MeleeSwingStartedAt = melee.SwingStartedAt;
                 MeleeNextSwingAt = melee.NextSwingAt;
                 MeleeSwingCount = melee.SwingCount;
+                MeleeComboStep = melee.ComboStep;
             }
 
             // Medkits (spec 15): channelled; sprinting or attacking interrupts; consumed only on completion.
@@ -326,14 +332,13 @@ namespace WarOfNyx.Networking
                 _rig?.PlayShot(weapon, origin, _tracerEnds, pellets, anyHit);
         }
 
-        private void ResolveMelee(WeaponStats meleeWeapon, float yaw)
+        private void ResolveMelee(WeaponStats meleeWeapon, in MeleeAttack attack, float yaw)
         {
             var feet = transform.position;
-            AimGeometry.Forward(yaw, 0f, out float fx, out _, out float fz);
-            var forward = new Vector3(fx, 0f, fz);
-            var centre = feet + Vector3.up * 1.1f + forward * (meleeWeapon.meleeReach * 0.5f);
-
-            Runner.LagCompensation.OverlapSphere(centre, meleeWeapon.meleeReach * 0.6f, Object.InputAuthority, _hits,
+            float reach = MeleeRules.Reach(meleeWeapon, attack);
+            // Gather candidates around the attacker (spins hit all around), then apply the attack's arc.
+            var centre = feet + Vector3.up * 1.1f;
+            Runner.LagCompensation.OverlapSphere(centre, reach + 0.6f, Object.InputAuthority, _hits,
                 HitMask, HitOptions.IgnoreInputAuthority);
 
             NetworkCombat best = null;
@@ -349,7 +354,7 @@ namespace WarOfNyx.Networking
 
                 var targetPos = hit.Hitbox.Root.transform.position;
                 // Reach is measured to the target's capsule surface, not its centre.
-                if (!MeleeRules.InArc(feet.x, feet.z, yaw, targetPos.x, targetPos.z, meleeWeapon.meleeReach + 0.35f, meleeWeapon.meleeArcDegrees))
+                if (!MeleeRules.InArc(feet.x, feet.z, yaw, targetPos.x, targetPos.z, reach + 0.35f, attack.ArcDegrees))
                     continue;
                 // No hits through walls.
                 if (Physics.Linecast(chest, targetPos + Vector3.up * 1.1f, HitMask, QueryTriggerInteraction.Ignore))
@@ -364,7 +369,7 @@ namespace WarOfNyx.Networking
             }
 
             if (best != null)
-                DealDamage(best, meleeWeapon.damage, DamageKind.Melee, false, GetSlot(CombatLoadout.MeleeSlot).WeaponId);
+                DealDamage(best, MeleeRules.Damage(meleeWeapon, attack), DamageKind.Melee, false, GetSlot(CombatLoadout.MeleeSlot).WeaponId);
         }
 
         // ------------------------------------------------------------------ damage (server)
@@ -601,7 +606,11 @@ namespace WarOfNyx.Networking
                     if (ShotCount != _renderedShots && weapon != null && weapon.IsRanged)
                         PlayRemoteShot(weapon);
                     if (MeleeSwingCount != _renderedSwings)
-                        _rig.PlaySwing();
+                    {
+                        var remoteMelee = WeaponRegistry.Get(GetSlot(CombatLoadout.MeleeSlot).WeaponId);
+                        if (remoteMelee != null)
+                            _rig.PlaySwing(MeleeRules.Current(new MeleeState { ComboStep = MeleeComboStep }, remoteMelee), remoteMelee);
+                    }
                     if (ReloadCount != _renderedReloads)
                         _rig.PlayReload();
                 }

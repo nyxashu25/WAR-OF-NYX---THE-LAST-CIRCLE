@@ -31,8 +31,31 @@ namespace WarOfNyx.Gameplay.Effects
         private float _reloadDip;
         private float _flashUntil;
         private float _deathT = -1f;
+        private float _swingStartedAt = -1f;
+        private float _swingWindup;
+        private float _swingTotal;
+        private MeleePattern _swingPattern;
+        private TrailRenderer _trail;
+        private CharacterBody _body;
 
         public Vector3 MuzzlePosition => _muzzle != null ? _muzzle.position : transform.position + Vector3.up * 1.4f;
+
+        // ---- State read by CharacterAnimator (which poses the hands when the character has a jointed body)
+        /// <summary>The held weapon's grip transform (the model is its child).</summary>
+        public Transform Hand => _hand;
+        public WeaponStats Weapon { get; private set; }
+        public bool Aiming => _aiming;
+        public bool Healing => _healing;
+        /// <summary>Recoil kick in degrees (decays quickly).</summary>
+        public float Kick => _kick;
+        /// <summary>1 at the start of a reload, easing to 0.</summary>
+        public float ReloadAmount => _reloadDip;
+        public bool Swinging => _swingStartedAt >= 0f && Time.time - _swingStartedAt < _swingTotal;
+        public float SwingElapsed => Swinging ? Time.time - _swingStartedAt : 0f;
+        public float SwingWindup => _swingWindup;
+        public MeleePattern SwingPattern => _swingPattern;
+        /// <summary>0..1 over the whole swing.</summary>
+        public float SwingProgress => Swinging ? Mathf.Clamp01(SwingElapsed / _swingTotal) : 0f;
 
         public static WeaponVisualRig Attach(Transform character, Transform visualRoot)
         {
@@ -92,8 +115,25 @@ namespace WarOfNyx.Gameplay.Effects
                 return;
             if (_model != null)
                 Destroy(_model.gameObject);
+            Weapon = weapon;
             _model = WeaponModelFactory.Build(weapon, _hand, out var muzzle);
             _muzzle.localPosition = muzzle;
+            _trail = null;
+            var tip = _model.Find("TrailTip");
+            if (tip != null && _fx != null)
+            {
+                // Slash trail along the real blade path (enabled during the strike).
+                _trail = tip.gameObject.AddComponent<TrailRenderer>();
+                _trail.sharedMaterial = _fx;
+                _trail.time = 0.12f;
+                _trail.minVertexDistance = 0.04f;
+                _trail.widthCurve = new AnimationCurve(new Keyframe(0f, 0.22f), new Keyframe(1f, 0f));
+                bool energy = weapon != null && weapon.meleeStyle == MeleeStyle.Energy;
+                _trail.startColor = energy ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.9f) : new Color(0.9f, 0.95f, 1f, 0.7f);
+                _trail.endColor = new Color(Purple.r, Purple.g, Purple.b, 0f);
+                _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _trail.emitting = false;
+            }
         }
 
         /// <summary>Short recoil of the whole body when hit (visual only).</summary>
@@ -124,11 +164,17 @@ namespace WarOfNyx.Gameplay.Effects
             ProceduralAudio.PlayAt(heavy ? ProceduralAudio.HeavyShot : ProceduralAudio.Gunshot, MuzzlePosition, heavy ? 1f : 0.8f);
         }
 
-        public void PlaySwing()
+        /// <summary>One melee attack of a combo (the pattern decides the swing path, see CharacterAnimator).</summary>
+        public void PlaySwing(MeleeAttack attack, WeaponStats meleeWeapon)
         {
             _swing = 0f;
+            _swingStartedAt = Time.time;
+            _swingPattern = attack.Pattern;
+            _swingWindup = meleeWeapon != null ? meleeWeapon.meleeWindup * attack.WindupMultiplier : 0.2f;
+            _swingTotal = _swingWindup + (attack.Pattern == MeleePattern.SpinSlash ? 0.34f : 0.2f) + 0.3f;
             ProceduralAudio.PlayAt(ProceduralAudio.MeleeSwing, transform.position + Vector3.up * 1.2f, 0.9f);
-            if (_fx != null)
+            // Characters without a jointed body (or a gun bash) keep the simple arc effect.
+            if (_fx != null && (_body == null || _trail == null))
                 SpawnSlashArc();
         }
 
@@ -156,9 +202,16 @@ namespace WarOfNyx.Gameplay.Effects
             if (_hand == null)
                 return;
             float dt = Time.deltaTime;
+            if (_body == null)
+                _body = GetComponentInChildren<CharacterBody>();
 
             _kick = Mathf.MoveTowards(_kick, 0f, dt * 60f);
             _reloadDip = Mathf.MoveTowards(_reloadDip, 0f, dt * 0.7f);
+            if (_trail != null)
+            {
+                float t = SwingElapsed;
+                _trail.emitting = Swinging && t >= _swingWindup - 0.03f && t <= _swingWindup + (_swingPattern == MeleePattern.SpinSlash ? 0.36f : 0.2f);
+            }
             float swingAngle = 0f;
             if (_swing >= 0f)
             {
@@ -167,7 +220,9 @@ namespace WarOfNyx.Gameplay.Effects
                 if (_swing >= 1f)
                     _swing = -1f;
             }
-            _hand.localRotation = Quaternion.Euler(-_kick + _reloadDip * 35f + (_healing ? 50f : 0f) - (_aiming ? 8f : 0f), 0f, -swingAngle);
+            // With a jointed body, CharacterAnimator places the hand (grip, aim, recoil, swings) before this runs.
+            if (_body == null)
+                _hand.localRotation = Quaternion.Euler(-_kick + _reloadDip * 35f + (_healing ? 50f : 0f) - (_aiming ? 8f : 0f), 0f, -swingAngle);
             _flashLight.intensity = Time.time < _flashUntil ? 4f : 0f;
 
             if (_healRing != null)

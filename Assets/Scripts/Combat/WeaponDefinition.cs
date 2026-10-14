@@ -14,6 +14,8 @@ namespace WarOfNyx.Combat
     public sealed class WeaponDefinition : ScriptableObject
     {
         public WeaponStats stats = new WeaponStats();
+        /// <summary><see cref="WeaponCatalog.Version"/> these stats came from; setup refreshes older assets.</summary>
+        public int catalogVersion;
 
         [Header("Presentation (placeholders until Phase 10)")]
         public Color placeholderColor = new Color(0.25f, 0.27f, 0.36f);

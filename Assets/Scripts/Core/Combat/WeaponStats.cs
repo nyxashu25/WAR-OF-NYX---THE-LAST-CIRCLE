@@ -80,6 +80,8 @@ namespace WarOfNyx.Core.Combat
         public float meleeWindup = 0.2f;
         public float meleeCooldown = 0.6f;
         public float meleeArcDegrees = 100f;
+        /// <summary>Which combo chain the weapon uses (<see cref="MeleeRules.Combo"/>).</summary>
+        public MeleeStyle meleeStyle = MeleeStyle.Blade;
 
         // ---- Loadout balancing (Phase 6) ----
         public float powerScore = 10f;

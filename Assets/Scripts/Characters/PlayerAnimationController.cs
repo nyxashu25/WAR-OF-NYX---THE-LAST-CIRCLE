@@ -43,6 +43,23 @@ namespace WarOfNyx.Characters
 
         private bool UsesAnimator => animator != null && animator.runtimeAnimatorController != null;
 
+        /// <summary>A jointed styled body is posed by CharacterAnimator (bent knees instead of squash); only the tremble is applied here.</summary>
+        private bool JointedBody
+        {
+            get
+            {
+                if (_bodyChecked < Time.frameCount - 30 && placeholderVisual != null)
+                {
+                    _hasBody = placeholderVisual.GetComponentInChildren<Gameplay.Effects.CharacterBody>() != null;
+                    _bodyChecked = Time.frameCount;
+                }
+                return _hasBody;
+            }
+        }
+
+        private bool _hasBody;
+        private int _bodyChecked = -1000;
+
         private void Awake()
         {
             _movement = GetComponent<PlayerMovement>();
@@ -80,6 +97,13 @@ namespace WarOfNyx.Characters
         {
             if (UsesAnimator || placeholderVisual == null)
                 return;
+            if (JointedBody)
+            {
+                placeholderVisual.localScale = _visualBaseScale;
+                placeholderVisual.localPosition = _visualBasePosition + TrembleOffset;
+                placeholderVisual.localRotation = Quaternion.identity;
+                return;
+            }
 
             var state = _movement.State;
             var settings = _movement.Settings;

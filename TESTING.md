@@ -50,6 +50,10 @@ Record every real run here, with the date and toolchain.
 | 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the environment pass (adds `AtmosphereTests`, `EnvironmentTests`, `EffectVisualTests`) | **326 / 355 / 16 passed** | New: deterministic weather plans, fog never below 250 m, mesh budgets / face directions / wind weights, grass shorter than a crouched player, weather lighting, hunt beacon hidden until exposed. One real bug found by the tests: pine canopy undersides lit like tops (fixed) |
 | 2026-10-14 | **Unity 6000.3.26f1** Windows player | `WarOfNyx.exe -devCapture` (offline NYX ISLAND match, 10 screenshots) | **Reviewed** | Found and fixed: terrain grass not drawn (coverage scatter mode), palms inland (coast by height), over-bright ground, grass blades blocking the camera |
 | 2026-10-14 | **Unity 6000.3.26f1** + Android | APK + `ValidateRelease` | **Built (63 MB); 1 blocked (Fusion), 0 warnings** | Not yet run on a phone |
+| 2026-10-14 | .NET + **Unity 6000.3.26f1** | Core / EditMode / PlayMode after the combat, animation and detail pass | **331 / 362 / 16 passed** | New: spray hit shares (AR hip > 45 % at 20 m, aimed > 45 % at 50 m), melee combo chains / window / reach, walk binding, two-bone IK, grass styles and vertex budgets |
+| 2026-10-14 | **Unity 6000.3.26f1** | NYX ISLAND v3 spawn diagnostic (400 samples) | **388 valid** | With ~3 000 new prop parts (389 before) |
+| 2026-10-14 | **Unity 6000.3.26f1** Windows player | `-devCapture -devCaptureOnly characters` / `places` (55 screenshots) | **Reviewed** | Walk / run / sprint / aim / reload poses, every katana and energy blade combo attack with trails, windowed streets day and night, temple, fortress, docks, core. Fixed during review: unlit window glass too bright at night |
+| 2026-10-14 | **Unity 6000.3.26f1** + Android | APK | **Built (63.5 MB)** | Not yet run on a phone |
 | — | Android phone | install + play the APK | **Not run** | Needs the owner's phone (ANDROID_BUILD.md) |
 
 ## Running the Unity checks from the command line

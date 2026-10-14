@@ -20,7 +20,7 @@ namespace WarOfNyx.EditorTools
     /// Stage 3+ (artist-made buildings and models) replaces the primitives later.
     /// Everything is original geometry; nothing copies existing maps.
     /// </summary>
-    public static class NyxIslandBuilder
+    public static partial class NyxIslandBuilder
     {
         public const string ScenePath = ProjectSetupWizard.ScenesFolder + "/NyxIsland.unity";
         public const string NavMeshPath = ProjectSetupWizard.ScenesFolder + "/NyxIsland_NavMesh.asset";
@@ -53,7 +53,7 @@ namespace WarOfNyx.EditorTools
         private static readonly Vector2 ValleyCentre = new Vector2(0f, 310f); // Eclipse Valley: hills, no plateau
 
         /// <summary>Raise when the generated map changes, so existing projects rebuild it on the next setup.</summary>
-        public const int BuildVersion = 2;
+        public const int BuildVersion = 3;
         private const string VersionPath = TerrainFolder + "/NyxIsland.version.txt";
 
         private static Dictionary<string, Material> _materials;
@@ -71,6 +71,7 @@ namespace WarOfNyx.EditorTools
             ProjectSetupWizard.EnsureFolder(TerrainFolder);
             ProjectSetupWizard.EnsureFolder(MaterialFolder);
             _random = new System.Random(2026);
+            Buildings.Clear();
             CreateMaterials();
             _art = EnvironmentArtBuilder.Build();
 
@@ -101,8 +102,15 @@ namespace WarOfNyx.EditorTools
             BuildValley(new GameObject("Eclipse Valley").transform, world);
             BuildRoutes(new GameObject("Routes & cover").transform, world);
 
+            BuildDetails(world);
+
             foreach (var t in world.GetComponentsInChildren<Transform>())
                 GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic);
+            // Facades and containers draw their pattern in object space (windows fitted to each wall):
+            // static batching would merge them into world space, so they stay individual (the SRP batcher draws them cheaply).
+            foreach (var r in world.GetComponentsInChildren<MeshRenderer>())
+                if (UsesObjectSpacePattern(r.sharedMaterial))
+                    GameObjectUtility.SetStaticEditorFlags(r.gameObject, 0);
 
             // Vegetation is NOT static-batched: thousands of copies of a few meshes would multiply memory.
             // The SRP batcher draws them cheaply, and LOD groups cull them.
@@ -304,8 +312,9 @@ namespace WarOfNyx.EditorTools
                 var p = new Vector3(bx * 30f, 0f, bz * 30f);
                 float height = 8f + _random.Next(0, 5) * 4f;
                 float w = 14f + _random.Next(0, 3) * 2f;
-                string[] facades = { "Concrete", "ConcreteTeal", "ConcreteRose" };
+                string[] facades = { "FacadeGrey", "FacadeTeal", "FacadeRose" };
                 Prim(PrimitiveType.Cube, "Building", g, p + Vector3.up * height * 0.5f, new Vector3(w, height, w), facades[_random.Next(facades.Length)]);
+                Buildings.Add((g.TransformPoint(p), w, height, (bx + bz) % 2 == 0));
                 Deco(PrimitiveType.Cube, "NeonSign", g, p + new Vector3(0f, height * 0.6f, w * 0.5f + 0.15f), new Vector3(w * 0.6f, 1.2f, 0.2f),
                     neon[_random.Next(neon.Length)]);
                 Deco(PrimitiveType.Cube, "RoofTrim", g, p + Vector3.up * (height + 0.1f), new Vector3(w + 0.4f, 0.2f, w + 0.4f), neon[_random.Next(neon.Length)]);
@@ -579,8 +588,17 @@ namespace WarOfNyx.EditorTools
                 bool inForest = Vector2.Distance(new Vector2(x, z), forest.Centre) < forest.Radius;
                 float lush = Mathf.PerlinNoise(x * 0.02f + 3f, z * 0.02f + 5f);
                 int count = Mathf.RoundToInt((inForest ? 1.5f : 2.5f + lush * 2.5f) * surface.x);
+                // Which clumps grow here: fine lawn near paths and on the forest floor, tufts in patches, meadow elsewhere.
+                float tufts = Mathf.PerlinNoise(x * 0.04f + 50f, z * 0.04f + 9f);
+                bool nearPath = surface.y > 0.05f;
                 for (int c = 0; c < count; c++)
-                    layers[random.Next(grassKinds)][zi, xi]++;
+                {
+                    double roll = random.NextDouble();
+                    int kind = inForest || nearPath ? (roll < 0.7 ? 1 : 0)
+                        : tufts > 0.62f ? (roll < 0.45 ? 2 : roll < 0.85 ? 0 : 1)
+                        : (roll < 0.7 ? 0 : roll < 0.9 ? 1 : 2);
+                    layers[Mathf.Min(kind, grassKinds - 1)][zi, xi]++;
+                }
 
                 // Flower patches; pink ones around the temple.
                 float bloom = Mathf.PerlinNoise(x * 0.05f + 21f, z * 0.05f + 17f);
@@ -799,7 +817,69 @@ namespace WarOfNyx.EditorTools
             M("CoreGlow", new Color(0.55f, 0.35f, 1f), new Color(1.2f, 0.6f, 2.2f));
             M("Lantern", new Color(1f, 0.6f, 0.3f), new Color(1.8f, 0.9f, 0.4f));
             M("Water", new Color(0.12f, 0.22f, 0.45f), new Color(0.02f, 0.06f, 0.14f));
+
+            // Detail pass: procedural surface patterns (WarOfNyx/NyxSurface) on the world's big surfaces.
+            var surface = Shader.Find("WarOfNyx/NyxSurface");
+            if (surface == null)
+                return;
+            void S(string key, string pattern, Color color, Color secondary, Color trim)
+            {
+                string path = $"{MaterialFolder}/Island_{key}.mat";
+                var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (m == null)
+                {
+                    m = new Material(surface);
+                    AssetDatabase.CreateAsset(m, path);
+                }
+                m.shader = surface;
+                foreach (var keyword in new[] { "FACADE", "CORRUGATED", "PANELS", "STONE", "CONCRETE", "WOOD" })
+                    m.DisableKeyword("_PATTERN_" + keyword);
+                m.EnableKeyword("_PATTERN_" + pattern);
+                m.SetFloat("_Pattern", System.Array.IndexOf(new[] { "FACADE", "CORRUGATED", "PANELS", "STONE", "CONCRETE", "WOOD" }, pattern));
+                m.SetColor("_BaseColor", color);
+                m.SetColor("_SecondaryColor", secondary);
+                m.SetColor("_TrimColor", trim);
+                m.SetColor("_EmissionColor", Color.black);
+                EditorUtility.SetDirty(m);
+                _materials[key] = m;
+            }
+            S("Concrete", "CONCRETE", new Color(0.4f, 0.4f, 0.47f), new Color(0.25f, 0.25f, 0.31f), new Color(0.32f, 0.32f, 0.38f));
+            S("Metal", "PANELS", new Color(0.27f, 0.28f, 0.35f), new Color(0.13f, 0.13f, 0.17f), new Color(0.45f, 0.46f, 0.52f));
+            S("TempleStone", "STONE", new Color(0.6f, 0.53f, 0.5f), new Color(0.32f, 0.28f, 0.28f), new Color(0.5f, 0.45f, 0.42f));
+            S("Wood", "WOOD", new Color(0.46f, 0.31f, 0.22f), new Color(0.18f, 0.12f, 0.09f), new Color(0.3f, 0.2f, 0.15f));
+            S("ContainerA", "CORRUGATED", new Color(0.78f, 0.24f, 0.28f), new Color(0.2f, 0.1f, 0.1f), new Color(0.5f, 0.16f, 0.18f));
+            S("ContainerB", "CORRUGATED", new Color(0.2f, 0.44f, 0.74f), new Color(0.08f, 0.14f, 0.24f), new Color(0.13f, 0.28f, 0.48f));
+            S("ContainerC", "CORRUGATED", new Color(0.88f, 0.63f, 0.2f), new Color(0.28f, 0.2f, 0.08f), new Color(0.6f, 0.42f, 0.13f));
+            S("FacadeGrey", "FACADE", new Color(0.42f, 0.42f, 0.5f), new Color(0.14f, 0.14f, 0.19f), new Color(0.3f, 0.3f, 0.37f));
+            S("FacadeTeal", "FACADE", new Color(0.3f, 0.46f, 0.52f), new Color(0.1f, 0.17f, 0.2f), new Color(0.2f, 0.32f, 0.37f));
+            S("FacadeRose", "FACADE", new Color(0.56f, 0.4f, 0.52f), new Color(0.19f, 0.12f, 0.18f), new Color(0.4f, 0.28f, 0.37f));
+            var accents = new[] { new Color(1f, 0.3f, 0.75f), new Color(0.2f, 0.9f, 1f), new Color(0.65f, 0.35f, 1f) };
+            int a = 0;
+            foreach (var key in new[] { "FacadeGrey", "FacadeTeal", "FacadeRose" })
+            {
+                _materials[key].SetColor("_GlassColor", new Color(0.3f, 0.45f, 0.62f));
+                _materials[key].SetColor("_LitColor", new Color(1f, 0.82f, 0.55f));
+                _materials[key].SetColor("_AccentColor", accents[a++]);
+            }
+            // Prop colours (plain cel-shaded).
+            M("PropDark", new Color(0.16f, 0.16f, 0.2f), Color.black);
+            M("PropLight", new Color(0.62f, 0.63f, 0.68f), Color.black);
+            M("PropRed", new Color(0.75f, 0.16f, 0.2f), Color.black);
+            M("PropYellow", new Color(0.95f, 0.75f, 0.2f), Color.black);
+            M("PropBlue", new Color(0.18f, 0.36f, 0.7f), Color.black);
+            M("PropWhite", new Color(0.88f, 0.88f, 0.9f), Color.black);
+            M("PropKhaki", new Color(0.55f, 0.5f, 0.36f), Color.black);
+            M("PropGlass", new Color(0.12f, 0.2f, 0.3f), new Color(0.02f, 0.05f, 0.08f));
+            M("LampGlow", new Color(1f, 0.9f, 0.7f), new Color(2.2f, 1.8f, 1.2f));
+            M("ScreenGlow", new Color(0.3f, 0.9f, 1f), new Color(0.6f, 1.6f, 2f));
+            M("RedGlow", new Color(1f, 0.2f, 0.25f), new Color(2f, 0.3f, 0.35f));
+            M("PaperLantern", new Color(1f, 0.35f, 0.25f), new Color(1.6f, 0.45f, 0.3f));
+            M("Banner", new Color(0.85f, 0.85f, 0.8f), Color.black);
+            M("Roof", new Color(0.2f, 0.2f, 0.26f), Color.black);
         }
+
+        private static bool UsesObjectSpacePattern(Material m) =>
+            m != null && (m.IsKeywordEnabled("_PATTERN_FACADE") || m.IsKeywordEnabled("_PATTERN_CORRUGATED"));
 
         private static GameObject Prim(PrimitiveType type, string name, Transform parent, Vector3 localPosition, Vector3 scale, string material,
             Vector3 euler = default, bool worldPosition = false)

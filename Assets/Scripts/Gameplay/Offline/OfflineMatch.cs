@@ -429,7 +429,7 @@ namespace WarOfNyx.Gameplay.Offline
         }
 
         /// <summary>Nearest living target in reach and arc with no wall in between (same rule as online melee).</summary>
-        public OfflineCombatant FindMeleeTarget(OfflineCombatant attacker, WeaponStats weapon, float yaw)
+        public OfflineCombatant FindMeleeTarget(OfflineCombatant attacker, float reach, float arcDegrees, float yaw)
         {
             OfflineCombatant best = null;
             float bestDistance = float.MaxValue;
@@ -439,7 +439,7 @@ namespace WarOfNyx.Gameplay.Offline
                 if (c == attacker || !c.Alive)
                     continue;
                 var p = c.Feet;
-                if (!MeleeRules.InArc(feet.x, feet.z, yaw, p.x, p.z, weapon.meleeReach + OfflineCombatant.BodyRadius, weapon.meleeArcDegrees))
+                if (!MeleeRules.InArc(feet.x, feet.z, yaw, p.x, p.z, reach + OfflineCombatant.BodyRadius, arcDegrees))
                     continue;
                 if (Physics.Linecast(attacker.Chest, c.Chest, EnvironmentMask, QueryTriggerInteraction.Ignore))
                     continue;

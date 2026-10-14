@@ -3,6 +3,17 @@ using UnityEngine;
 
 namespace WarOfNyx.Gameplay.World
 {
+    /// <summary>Grass clump looks (all shorter than <see cref="VegetationMeshes.MaxGrassHeight"/>).</summary>
+    public enum GrassStyle : byte
+    {
+        /// <summary>Mixed meadow blades, a few dry ones.</summary>
+        Meadow = 0,
+        /// <summary>Short, thin, dense lawn grass (paths, forest floor).</summary>
+        Fine = 1,
+        /// <summary>Taller tuft with seed heads.</summary>
+        Tuft = 2,
+    }
+
     public enum TreeKind : byte
     {
         Broadleaf = 0,
@@ -41,23 +52,74 @@ namespace WarOfNyx.Gameplay.World
             return b.ToMesh($"Tree_{kind}_{seed}{(lowDetail ? "_LOD1" : "")}");
         }
 
-        public static Mesh GrassClump(int seed)
+        public static Mesh GrassClump(int seed) => GrassClump(seed, GrassStyle.Meadow);
+
+        private static readonly Color[] GrassTips =
+        {
+            new Color(0.56f, 0.78f, 0.36f), // yellow-green
+            new Color(0.42f, 0.7f, 0.34f),  // green
+            new Color(0.36f, 0.62f, 0.4f),  // blue-green
+            new Color(0.62f, 0.8f, 0.42f),  // fresh
+        };
+
+        public static Mesh GrassClump(int seed, GrassStyle style)
         {
             var b = new Builder(1);
-            var random = new System.Random(seed);
-            int blades = 10 + random.Next(0, 4);
+            var random = new System.Random(seed * 3 + (int)style);
+            int blades; float minH, maxH, minW, maxW, radius;
+            switch (style)
+            {
+                case GrassStyle.Fine: blades = 20 + random.Next(0, 5); minH = 0.1f; maxH = 0.26f; minW = 0.012f; maxW = 0.02f; radius = 0.3f; break;
+                case GrassStyle.Tuft: blades = 9 + random.Next(0, 4); minH = 0.3f; maxH = MaxGrassHeight - 0.08f; minW = 0.025f; maxW = 0.04f; radius = 0.18f; break;
+                default: blades = 14 + random.Next(0, 4); minH = 0.18f; maxH = MaxGrassHeight - 0.05f; minW = 0.02f; maxW = 0.035f; radius = 0.28f; break;
+            }
             for (int i = 0; i < blades; i++)
             {
                 float a = (float)(random.NextDouble() * Mathf.PI * 2f);
-                float r = 0.28f * Mathf.Sqrt((float)random.NextDouble());
+                float r = radius * Mathf.Sqrt((float)random.NextDouble());
                 var root = new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
-                float height = Mathf.Lerp(0.18f, MaxGrassHeight - 0.05f, (float)random.NextDouble());
-                float width = Mathf.Lerp(0.022f, 0.038f, (float)random.NextDouble());
+                // Taller blades in the middle of the clump, shorter at the rim.
+                float height = Mathf.Lerp(minH, maxH, (float)random.NextDouble()) * Mathf.Lerp(1f, 0.75f, r / radius);
+                float width = Mathf.Lerp(minW, maxW, (float)random.NextDouble());
                 float tint = Mathf.Lerp(0.85f, 1.1f, (float)random.NextDouble());
-                var tip = new Color(0.56f * tint, 0.78f * tint, 0.36f * tint);
-                Blade(b, random, root, height, width, new Color(0.16f, 0.3f, 0.16f), tip);
+                var tip = GrassTips[random.Next(GrassTips.Length)] * tint;
+                if (random.NextDouble() < (style == GrassStyle.Tuft ? 0.18 : 0.08))
+                    tip = new Color(0.72f, 0.66f, 0.38f) * tint; // dry blade
+                tip.a = 1f;
+                Blade(b, random, root, height, width, new Color(0.15f, 0.28f, 0.15f), tip);
             }
-            return b.ToMesh($"Grass_{seed}");
+            if (style == GrassStyle.Tuft)
+            {
+                // Seed stalks: thin stems ending in an elongated seed head.
+                int stalks = 2 + random.Next(0, 3);
+                for (int i = 0; i < stalks; i++)
+                {
+                    float a = (float)(random.NextDouble() * Mathf.PI * 2f);
+                    var root = new Vector3(Mathf.Cos(a) * 0.06f, 0f, Mathf.Sin(a) * 0.06f);
+                    float height = Mathf.Lerp(0.38f, MaxGrassHeight - 0.08f, (float)random.NextDouble());
+                    var top = Blade(b, random, root, height, 0.008f, new Color(0.2f, 0.32f, 0.18f), new Color(0.6f, 0.62f, 0.36f));
+                    SeedHead(b, top, (float)(random.NextDouble() * Mathf.PI), new Color(0.78f, 0.72f, 0.48f));
+                }
+            }
+            return b.ToMesh($"Grass_{style}_{seed}");
+        }
+
+        /// <summary>A small elongated seed head (crossed diamonds) on top of a stalk; stays under the grass height limit.</summary>
+        private static void SeedHead(Builder b, Vector3 top, float spin, Color color)
+        {
+            color.a = 1f;
+            const float length = 0.07f, width = 0.018f;
+            for (int k = 0; k < 2; k++)
+            {
+                float a = spin + k * Mathf.PI * 0.5f;
+                var side = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * width;
+                int i0 = b.Vertex(0, top, Vector3.up, color);
+                b.Vertex(0, top + Vector3.up * length * 0.45f + side, Vector3.up, color);
+                b.Vertex(0, top + Vector3.up * length, Vector3.up, color);
+                b.Vertex(0, top + Vector3.up * length * 0.45f - side, Vector3.up, color);
+                b.Triangle(0, i0, i0 + 1, i0 + 2);
+                b.Triangle(0, i0, i0 + 2, i0 + 3);
+            }
         }
 
         public static Mesh FlowerClump(int seed, Color petal)

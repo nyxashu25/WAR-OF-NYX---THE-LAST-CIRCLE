@@ -96,6 +96,13 @@ namespace WarOfNyx.Tests
             Assert.That(VegetationMeshes.MaxGrassHeight * 1.1f, Is.LessThan(0.65f), "detail scale included");
             for (int seed = 0; seed < 20; seed++)
             {
+                foreach (GrassStyle style in System.Enum.GetValues(typeof(GrassStyle)))
+                {
+                    var clump = Keep(VegetationMeshes.GrassClump(seed, style));
+                    AssertFinite(clump);
+                    Assert.That(clump.bounds.max.y, Is.LessThanOrEqualTo(VegetationMeshes.MaxGrassHeight + 0.01f), style.ToString());
+                    Assert.That(clump.vertexCount, Is.LessThan(260), style + " vertex budget (instanced by the thousand)");
+                }
                 var grass = Keep(VegetationMeshes.GrassClump(seed));
                 AssertFinite(grass);
                 Assert.That(grass.bounds.max.y, Is.LessThanOrEqualTo(VegetationMeshes.MaxGrassHeight + 0.01f));
@@ -137,6 +144,43 @@ namespace WarOfNyx.Tests
                     outward++;
             }
             Assert.That(outward / (t.Length / 3f), Is.GreaterThan(0.95f), "visible from outside (back faces are culled)");
+        }
+
+        // ------------------------------------------------------------------ character IK
+
+        [Test]
+        public void TwoBoneIk_ReachesTargets_AndBendsTowardThePole()
+        {
+            var shoulder = Keep(new GameObject("Upper")).transform;
+            var elbow = new GameObject("Lower").transform;
+            elbow.SetParent(shoulder, false);
+            elbow.localPosition = new Vector3(0f, -0.3f, 0f);
+            var hand = new GameObject("End").transform;
+            hand.SetParent(elbow, false);
+            hand.localPosition = new Vector3(0f, -0.3f, 0f);
+            shoulder.position = new Vector3(0f, 1.4f, 0f);
+
+            var random = new System.Random(5);
+            for (int i = 0; i < 200; i++)
+            {
+                var target = shoulder.position + RandomDirection(random) * (float)(0.1 + random.NextDouble() * 0.48);
+                var pole = new Vector3(0f, 0f, 1f);
+                WarOfNyx.Gameplay.Effects.Ik.SolveTwoBone(shoulder, elbow, 0.3f, 0.3f, target, pole);
+                Assert.That(Vector3.Distance(hand.position, target), Is.LessThan(0.01f), "reachable target");
+                var mid = (shoulder.position + target) * 0.5f;
+                Assert.That(Vector3.Dot(elbow.position - mid, Vector3.ProjectOnPlane(pole, (target - shoulder.position).normalized)), Is.GreaterThanOrEqualTo(-1e-3f),
+                    "the joint bends toward the pole");
+            }
+            // Too far: the limb straightens and points at the target.
+            var far = shoulder.position + new Vector3(0f, 0f, 2f);
+            WarOfNyx.Gameplay.Effects.Ik.SolveTwoBone(shoulder, elbow, 0.3f, 0.3f, far, Vector3.down);
+            Assert.That(Vector3.Distance(hand.position, shoulder.position + new Vector3(0f, 0f, 0.6f)), Is.LessThan(0.01f));
+        }
+
+        private static Vector3 RandomDirection(System.Random r)
+        {
+            var v = new Vector3((float)r.NextDouble() * 2f - 1f, (float)r.NextDouble() * 2f - 1f, (float)r.NextDouble() * 2f - 1f);
+            return v.sqrMagnitude < 1e-4f ? Vector3.down : v.normalized;
         }
 
         // ------------------------------------------------------------------ weather

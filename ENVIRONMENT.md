@@ -20,6 +20,21 @@ _Environment pass, 2026-10-14. Everything below is procedural PLACEHOLDER art (o
 - **Ambient life:** bird flocks in calm daylight, fireflies on calm nights, cherry petals near the temple.
 - **Sound:** rain, wind gusts, and thunder delayed by distance (about 343 m/s). All are procedural placeholders.
 
+## Map detail (build version 3)
+- **Procedural surface patterns** (`WarOfNyx/NyxSurface`, no textures):
+  - building facades: windows fitted to every wall, frames, sills, floor ledges, shopfronts with doors and neon strips, lit rooms at night;
+  - corrugated containers with doors;
+  - metal panels with rivets, stone brickwork, formwork concrete and wood planks.
+- **Props** (`NyxIslandDetails.cs`):
+  - streets with lane markings, street lamps, parked cars, vending machines, benches, bins and barricades;
+  - rooftop AC units, water tanks, antennas, billboards, balconies and awnings;
+  - pagoda roofs and torii beams, paper and stone lanterns, banners;
+  - battlements, sandbag nests, crates, barrels, tents, flags and floodlights;
+  - bollards, boats, buoys and crane hooks; pipework, consoles and a rune ring at NYX CORE;
+  - fences, signposts and wrecked cars in the fields; broken columns in Eclipse Valley.
+- Solid-looking props (cars, crates, barrels, sandbags, machines) have colliders: they are cover and part of the NavMesh. Small decoration has none.
+- **Grass:** three clump types: meadow, fine lawn (near paths and in the forest) and tall tufts with seed heads.
+
 ## Rules that keep it fair
 | Rule | Where |
 |---|---|
