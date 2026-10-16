@@ -68,7 +68,7 @@ namespace WarOfNyx.Gameplay.Offline
         private WeaponVisualRig _rig;
         private OutsideZoneVisual _outsideVisual;
         private HuntBeaconVisual _beacon;
-        private CharacterAnimator _animator;
+        private ICharacterPose _animator;
         private SpawnShieldVisual _shield;
         private short _shownWeapon = -2;
         private float _nextFootstepAt;
@@ -461,7 +461,9 @@ namespace WarOfNyx.Gameplay.Offline
             }
             // Bots' heads and weapons follow their aim (the human's animator reads the input router itself).
             if (_animator == null)
-                _animator = GetComponent<CharacterAnimator>();
+                _animator = GetComponentInChildren<ICharacterPose>();
+            if (_animator != null)
+                _animator.Health01 = Health.MaxHealth > 0f ? Health.Health / Health.MaxHealth : 0f;
             if (_animator != null && (Router == null || !Router.enabled))
                 _animator.AimPitch = Pitch;
             if (_animator != null)

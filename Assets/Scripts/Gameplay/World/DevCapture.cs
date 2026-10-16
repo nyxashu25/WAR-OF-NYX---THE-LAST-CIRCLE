@@ -219,10 +219,10 @@ namespace WarOfNyx.Gameplay.World
                 yield break;
             yield return Capture("menu_home");
             menu[0].ShowCharacters();
-            for (int i = 0; i < Characters.CharacterRoster.Count; i++)
+            for (int i = 0; i < WarOfNyx.Characters.CharacterRoster.Count; i++)
             {
                 yield return new WaitForSeconds(1.2f);
-                yield return Capture($"menu_characters_{Characters.CharacterRoster.Get(i).Name}");
+                yield return Capture($"menu_characters_{WarOfNyx.Characters.CharacterRoster.Get(i).Name}");
                 menu[0].BrowseCharacter(1);
             }
         }
@@ -240,9 +240,9 @@ namespace WarOfNyx.Gameplay.World
                 c.gameObject.SetActive(false);
             var start = new Vector3(-30f, Ground(-30f, -60f), -60f);
             float fov = cam.fieldOfView;
-            for (int id = 0; id < Characters.CharacterRoster.Count; id++)
+            for (int id = 0; id < WarOfNyx.Characters.CharacterRoster.Count; id++)
             {
-                var look = Characters.CharacterRoster.Get(id);
+                var look = WarOfNyx.Characters.CharacterRoster.Get(id);
                 var (root, rig) = Puppet(id, look.SignatureWeapon, start);
                 cam.fieldOfView = 32f;
                 yield return new WaitForSeconds(0.6f);
@@ -469,7 +469,7 @@ namespace WarOfNyx.Gameplay.World
             root.position = position;
             var visual = new GameObject("Visual (PLACEHOLDER)").transform;
             visual.SetParent(root, false);
-            Effects.CharacterStyler.Apply(visual, Characters.CharacterRoster.Get(look));
+            Effects.CharacterStyler.Apply(visual, WarOfNyx.Characters.CharacterRoster.Get(look));
             var rig = Effects.WeaponVisualRig.Attach(root, visual);
             rig?.ShowWeapon(Core.Combat.WeaponCatalog.Get(weaponId));
             return (root, rig);

@@ -20,8 +20,11 @@ namespace WarOfNyx.Gameplay.Effects
     /// interpolated online players.
     /// </summary>
     [DefaultExecutionOrder(50)] // after PlayerAnimationController, before WeaponVisualRig (hurt / defeat on the root)
-    public sealed class CharacterAnimator : MonoBehaviour
+    public sealed class CharacterAnimator : MonoBehaviour, ICharacterPose
     {
+        /// <summary>Health share (0..1); the jointed placeholder body has no face to show it.</summary>
+        public float Health01 { get; set; } = 1f;
+
         /// <summary>Aim pitch in degrees (+ = looking down). Set by the owner; the local input router is read automatically.</summary>
         public float AimPitch { get; set; }
 

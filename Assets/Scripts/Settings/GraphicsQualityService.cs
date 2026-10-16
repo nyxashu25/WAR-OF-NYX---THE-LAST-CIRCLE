@@ -40,6 +40,8 @@ namespace WarOfNyx.Settings
             Shader.SetGlobalFloat(OutlineDisableId, tier == GraphicsQualityTier.Low ? 1f : 0f);
             // Character fabric / leather / metal micro-patterns are skipped on Low as well.
             Shader.SetGlobalFloat(SurfaceDetailOffId, tier == GraphicsQualityTier.Low ? 1f : 0f);
+            // Skinned characters: hair-only secondary motion on Low.
+            Gameplay.Characters.CharacterSecondaryMotion.Quality = tier == GraphicsQualityTier.Low ? 1 : 2;
             TierChanged?.Invoke(tier);
         }
 

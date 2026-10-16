@@ -37,6 +37,9 @@ namespace WarOfNyx.Settings
         /// <summary>Blood splatter on the screen after critical hits, cleared by healing (on by default).</summary>
         public bool bloodEffects = true;
 
+        /// <summary>Section 40: hair and coat secondary motion off (accessibility / low-end phones).</summary>
+        public bool reduceMotion;
+
         /// <summary>Phase 13: FPS / frame-time / memory overlay, and per-second CSV recording for device tests.</summary>
         public bool showPerformance;
         public bool recordPerformance;

@@ -54,6 +54,21 @@ namespace WarOfNyx.Gameplay.Effects
                     r.enabled = false;
             }
 
+            // Skinned humanoid characters (section 40) replace the jointed placeholder when their model exists.
+            var skinned = Characters.SkinnedCharacterLoader.TryCreate(visualRoot, look, StyledRootName);
+            if (skinned != null)
+            {
+                var owner = visualRoot.parent != null ? visualRoot.parent : visualRoot;
+                // A previous jointed look (menu preview switching characters) leaves its procedural animator behind.
+                if (owner.TryGetComponent<CharacterAnimator>(out var jointed))
+                    StyleKit.Remove(jointed);
+                if (owner.TryGetComponent<ClothDynamics>(out var cloth))
+                    StyleKit.Remove(cloth);
+                if (owner.GetComponent<CharacterAudio>() == null)
+                    owner.gameObject.AddComponent<CharacterAudio>();
+                return;
+            }
+
             var model = CharacterModels.Get(look);
             var levels = new CharacterModel[CharacterModels.LodCount];
             var lodRenderers = new List<Renderer>[CharacterModels.LodCount];

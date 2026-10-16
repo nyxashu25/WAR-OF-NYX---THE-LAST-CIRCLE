@@ -387,6 +387,7 @@ namespace WarOfNyx.UI.MainMenu
             AddToggle(perfRow, "SHOW FPS", () => data.showPerformance, v => data.showPerformance = v);
             AddToggle(perfRow, "RECORD PERFORMANCE (CSV)", () => data.recordPerformance, v => data.recordPerformance = v);
             AddToggle(perfRow, "BLOOD EFFECTS", () => data.bloodEffects, v => data.bloodEffects = v);
+            AddToggle(perfRow, "REDUCED MOTION", () => data.reduceMotion, v => data.reduceMotion = v);
 
             // Cosmetic character (spec 17): same hitboxes, speed and health for everyone.
             var characterRow = UiFactory.CreateRow("CharacterRow", root, 80f, 14f);

@@ -47,6 +47,16 @@ namespace WarOfNyx.Gameplay.Effects
         public WeaponStats Weapon { get; private set; }
         public bool Aiming => _aiming;
 
+        /// <summary>A skinned, animated body plays hurt / victory / defeat itself: the rig then leaves the visual root alone.</summary>
+        public bool AnimatedBody { get; set; }
+
+        /// <summary>Presentation events for an animated body (clips instead of transform effects).</summary>
+        public event System.Action Hurt;
+        public event System.Action Defeated;
+        public event System.Action Victorious;
+        public event System.Action<MeleeAttack, WeaponStats> Swung;
+        public event System.Action<WeaponStats> Fired;
+
         /// <summary>Hides the held weapon (driving); the weapon itself is unchanged.</summary>
         public void SetHidden(bool hidden)
         {
@@ -148,13 +158,18 @@ namespace WarOfNyx.Gameplay.Effects
         }
 
         /// <summary>Short recoil of the whole body when hit (visual only).</summary>
-        public void PlayHurt() => _hurt = 1f;
+        public void PlayHurt()
+        {
+            _hurt = 1f;
+            Hurt?.Invoke();
+        }
 
         /// <summary>Winner celebration: spin and hop until the scene changes.</summary>
         public void PlayVictory()
         {
             if (_victoryT < 0f)
                 _victoryT = 0f;
+            Victorious?.Invoke();
         }
 
         public void SetHealing(bool healing) => _healing = healing;
@@ -165,6 +180,7 @@ namespace WarOfNyx.Gameplay.Effects
         public void PlayShot(WeaponStats weapon, Vector3 origin, Vector3[] endPoints, int count, bool hitSomething)
         {
             _kick = Mathf.Min(_kick + (weapon != null ? weapon.recoilKick * 4f : 3f), 20f);
+            Fired?.Invoke(weapon);
             _flashUntil = Time.time + 0.05f;
             for (int i = 0; i < count; i++)
                 SpawnTracer(MuzzlePosition, endPoints[i]);
@@ -186,8 +202,9 @@ namespace WarOfNyx.Gameplay.Effects
             _swingWindup = meleeWeapon != null ? meleeWeapon.meleeWindup * attack.WindupMultiplier : 0.2f;
             _swingTotal = _swingWindup + (attack.Pattern == MeleePattern.SpinSlash ? 0.34f : 0.2f) + 0.3f;
             ProceduralAudio.PlayAt(ProceduralAudio.MeleeSwing, transform.position + Vector3.up * 1.2f, 0.9f);
+            Swung?.Invoke(attack, meleeWeapon);
             // Characters without a jointed body (or a gun bash) keep the simple arc effect.
-            if (_fx != null && (_body == null || _trail == null))
+            if (_fx != null && (_body == null || _trail == null) && !AnimatedBody)
                 SpawnSlashArc();
         }
 
@@ -204,6 +221,7 @@ namespace WarOfNyx.Gameplay.Effects
         {
             if (_deathT < 0f)
                 _deathT = 0f;
+            Defeated?.Invoke();
         }
 
         public void ResetDefeat()
@@ -237,7 +255,7 @@ namespace WarOfNyx.Gameplay.Effects
                     _swing = -1f;
             }
             // With a jointed body, CharacterAnimator places the hand (grip, aim, recoil, swings) before this runs.
-            if (_body == null)
+            if (_body == null && !AnimatedBody)
                 _hand.localRotation = Quaternion.Euler(-_kick + _reloadDip * 35f + (_healing ? 50f : 0f) - (_aiming ? 8f : 0f), 0f, -swingAngle);
             _flashLight.intensity = Time.time < _flashUntil ? 4f : 0f;
 
@@ -250,6 +268,8 @@ namespace WarOfNyx.Gameplay.Effects
 
             // Hurt flinch and victory are added on top of the animation controller's pose (this runs after it).
             _hurt = Mathf.MoveTowards(_hurt, 0f, dt * 5f);
+            if (AnimatedBody)
+                return;
             if (_hurt > 0f && _visualRoot != null && _deathT < 0f)
                 _visualRoot.localRotation *= Quaternion.Euler(-12f * Mathf.Sin(_hurt * Mathf.PI), 0f, 0f);
             if (_victoryT >= 0f && _visualRoot != null && _deathT < 0f)

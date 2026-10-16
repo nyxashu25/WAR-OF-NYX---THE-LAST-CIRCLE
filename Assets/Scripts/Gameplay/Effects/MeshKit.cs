@@ -69,7 +69,61 @@ namespace WarOfNyx.Gameplay.Effects
         private readonly List<Vector2> _uv = new List<Vector2>();
         private readonly List<Vector4> _surf = new List<Vector4>();
         private readonly List<Vector4> _tan = new List<Vector4>();
-        private readonly List<int> _t = new List<int>();
+        private readonly List<BoneWeight> _w = new List<BoneWeight>();
+        private readonly List<List<int>> _submeshes = new List<List<int>> { new List<int>() };
+        private List<int> _t;
+        private bool _skinned;
+
+        public MeshKit() => _t = _submeshes[0];
+
+        /// <summary>
+        /// Skinning: when set, every vertex added gets the bone weights this returns for its (bind-pose) position, and
+        /// <see cref="ToMesh"/> writes them (skinned characters). Sticky; change it per part (arm, leg, coat panel...).
+        /// </summary>
+        public Func<Vector3, BoneWeight> Skinning;
+
+        /// <summary>Triangles that follow go to this submesh (a second material, e.g. the painted face).</summary>
+        public void UseSubmesh(int index)
+        {
+            while (_submeshes.Count <= index)
+                _submeshes.Add(new List<int>());
+            _t = _submeshes[index];
+        }
+
+        /// <summary>Adds one vertex with explicit uvs and material data; returns its index (decals, custom patches).</summary>
+        public int AddVertex(Vector3 position, Vector3 normal, Color color, Vector2 uv, Vector4 surf)
+        {
+            Add(position, normal.normalized, color, uv, TangentOf(Vector3.up, Vector3.right, normal.normalized));
+            _surf[_surf.Count - 1] = surf;
+            return _v.Count - 1;
+        }
+
+        /// <summary>Adds a triangle oriented by its vertices' normals.</summary>
+        public void AddTriangle(int a, int b, int c) => Triangle(a, b, c);
+
+        /// <summary>Replaces the normals of the vertices from <paramref name="from"/> on (e.g. smooth anime face shading).</summary>
+        public void OverrideNormals(int from, Func<Vector3, Vector3, Vector3> normal)
+        {
+            for (int i = from; i < _v.Count; i++)
+                _n[i] = normal(_v[i], _n[i]).normalized;
+            // Keep every affected triangle's front face on the side of its (new) normals.
+            foreach (var tris in _submeshes)
+                for (int t = 0; t + 2 < tris.Count; t += 3)
+                {
+                    int a = tris[t], b = tris[t + 1], c = tris[t + 2];
+                    if (a < from && b < from && c < from)
+                        continue;
+                    var geo = Vector3.Cross(_v[b] - _v[a], _v[c] - _v[a]);
+                    if (Vector3.Dot(geo, _n[a] + _n[b] + _n[c]) < 0f)
+                    {
+                        tris[t + 1] = c;
+                        tris[t + 2] = b;
+                    }
+                }
+        }
+
+        /// <summary>Positions of the vertices added so far (read only; e.g. to fit decals to a surface).</summary>
+        public Vector3 VertexAt(int i) => _v[i];
 
         /// <summary>Surface material for the shapes that follow (sticky until changed).</summary>
         public float Material = Surf.Cloth;
@@ -112,6 +166,15 @@ namespace WarOfNyx.Gameplay.Effects
             _tan.Add(tangent);
             var mat = material ?? new Vector2(Material, Pattern);
             _surf.Add(new Vector4(mat.x, Mathf.Clamp01(ao), Outline, mat.y));
+            if (Skinning != null)
+            {
+                _skinned = true;
+                _w.Add(Skinning(position));
+            }
+            else
+            {
+                _w.Add(default);
+            }
         }
 
         private static Vector4 TangentOf(Vector3 along, Vector3 across, Vector3 normal)
@@ -268,10 +331,11 @@ namespace WarOfNyx.Gameplay.Effects
         /// </summary>
         public void Surface(IList<Ring> rings, int sides, Func<float, float, Color> color, Matrix4x4 m, float step = 0f,
             Func<float, float, float> displace = null, bool capBottom = false, bool capTop = false, float occlusion = 28f,
-            Func<float, float, Vector2> material = null)
+            Func<float, float, Vector2> material = null, float arcFrom = 0f, float arcTo = 360f, bool inward = false)
         {
             var rs = step > 0f ? Resample(rings, step / Mathf.Max(0.5f, Resolution)) : rings;
-            int n = Res(sides, 6);
+            bool partial = arcTo - arcFrom < 359.9f;
+            int n = partial ? Res(Mathf.Max(2, Mathf.RoundToInt(sides * (arcTo - arcFrom) / 360f)), 2) + 1 : Res(sides, 6);
             var p = new Vector3[rs.Count, n];
             var ao = new float[rs.Count, n];
             var cols = new Color[rs.Count, n];
@@ -279,7 +343,7 @@ namespace WarOfNyx.Gameplay.Effects
             for (int r = 0; r < rs.Count; r++)
             for (int s = 0; s < n; s++)
             {
-                float a = s * Mathf.PI * 2f / n;
+                float a = partial ? Mathf.Lerp(arcFrom, arcTo, s / (float)(n - 1)) * Mathf.Deg2Rad : s * Mathf.PI * 2f / n;
                 var ring = rs[r];
                 var outward = new Vector3(Mathf.Sin(a) / Mathf.Max(1e-4f, ring.Rx), 0f, Mathf.Cos(a) / Mathf.Max(1e-4f, ring.Rz)).normalized;
                 float d = displace != null ? displace(ring.Y, a * Mathf.Rad2Deg) : 0f;
@@ -290,7 +354,9 @@ namespace WarOfNyx.Gameplay.Effects
                 if (mats != null)
                     mats[r, s] = material(ring.Y, deg);
             }
-            Grid(p, (r, s) => cols[r, s], wrap: true, m, ao: (r, s) => ao[r, s], material: mats != null ? (r, s) => mats[r, s] : (Func<int, int, Vector2>)null);
+            Grid(p, (r, s) => cols[r, s], wrap: !partial, m, flip: inward, ao: (r, s) => ao[r, s], material: mats != null ? (r, s) => mats[r, s] : (Func<int, int, Vector2>)null);
+            if (partial)
+                return;
             if (capBottom)
                 Cap(p, 0, rs[0], Vector3.down, cols[0, 0], m);
             if (capTop)
@@ -298,8 +364,9 @@ namespace WarOfNyx.Gameplay.Effects
         }
 
         public void Surface(IList<Ring> rings, int sides, Color color, Matrix4x4 m, float step = 0f, Func<float, float, float> displace = null,
-            bool capBottom = false, bool capTop = false) =>
-            Surface(rings, sides, (_, __) => color, m, step, displace, capBottom, capTop);
+            bool capBottom = false, bool capTop = false, float occlusion = 28f, Func<float, float, Vector2> material = null, float arcFrom = 0f, float arcTo = 360f,
+            bool inward = false) =>
+            Surface(rings, sides, (_, __) => color, m, step, displace, capBottom, capTop, occlusion, material, arcFrom, arcTo, inward);
 
         /// <summary>Catmull-Rom resampling of a ring profile: one ring every <paramref name="step"/> metres of height.</summary>
         public static List<Ring> Resample(IList<Ring> rings, float step)
@@ -620,7 +687,11 @@ namespace WarOfNyx.Gameplay.Effects
             mesh.SetUVs(0, _uv);
             mesh.SetUVs(1, _surf);
             mesh.SetTangents(_tan);
-            mesh.SetTriangles(_t, 0);
+            mesh.subMeshCount = _submeshes.Count;
+            for (int i = 0; i < _submeshes.Count; i++)
+                mesh.SetTriangles(_submeshes[i], i);
+            if (_skinned)
+                mesh.boneWeights = _w.ToArray();
             mesh.RecalculateBounds();
             return mesh;
         }

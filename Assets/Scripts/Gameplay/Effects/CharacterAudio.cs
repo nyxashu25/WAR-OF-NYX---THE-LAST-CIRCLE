@@ -12,7 +12,7 @@ namespace WarOfNyx.Gameplay.Effects
     /// </summary>
     public sealed class CharacterAudio : MonoBehaviour
     {
-        private CharacterAnimator _animator;
+        private ICharacterPose _animator;
         private PlayerMovement _movement;
         private PlayerInputRouter _router;
         private FootSurface _surface;
@@ -22,7 +22,7 @@ namespace WarOfNyx.Gameplay.Effects
 
         private void OnEnable()
         {
-            _animator = GetComponent<CharacterAnimator>();
+            _animator = GetComponentInChildren<ICharacterPose>(true);
             _movement = GetComponent<PlayerMovement>();
             _router = GetComponent<PlayerInputRouter>();
             if (_animator != null)

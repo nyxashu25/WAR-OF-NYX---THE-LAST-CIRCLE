@@ -50,7 +50,8 @@ namespace WarOfNyx.Characters
             {
                 if (_bodyChecked < Time.frameCount - 30 && placeholderVisual != null)
                 {
-                    _hasBody = placeholderVisual.GetComponentInChildren<Gameplay.Effects.CharacterBody>() != null;
+                    _hasBody = placeholderVisual.GetComponentInChildren<Gameplay.Effects.CharacterBody>() != null ||
+                               placeholderVisual.GetComponentInChildren<Gameplay.Characters.CharacterAnimationController>() != null;
                     _bodyChecked = Time.frameCount;
                 }
                 return _hasBody;
