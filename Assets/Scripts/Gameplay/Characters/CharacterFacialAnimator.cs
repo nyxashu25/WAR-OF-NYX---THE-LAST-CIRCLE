@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WarOfNyx.Gameplay.Characters
@@ -10,7 +11,8 @@ namespace WarOfNyx.Gameplay.Characters
     /// what the character is doing (focused while aiming, angry when hurt or attacking, injured / exhausted at low health,
     /// confident or a victory smile at the end, closed eyes on defeat), and an eye glow at special moments. Each change is
     /// a tile switch on the face material (a MaterialPropertyBlock on the face submesh), so it costs nothing on the GPU;
-    /// far-away faces update less often and skip blinking.
+    /// far-away faces update less often and skip blinking. Imported models with a blend-shape face (VRM expressions:
+    /// blink, angry, sad, happy, relaxed, aa…) get the same behaviour through blend-shape weights instead of tiles.
     /// </summary>
     [DefaultExecutionOrder(57)]
     public sealed class CharacterFacialAnimator : MonoBehaviour
@@ -44,7 +46,90 @@ namespace WarOfNyx.Gameplay.Characters
             {
                 _submesh = profile.faceSubmesh;
                 _glowColor = profile.energyColor;
+                _faceShapes = profile.HasBlendShapeFace ? profile.faceShapes : null;
             }
+        }
+
+        // ------------------------------------------------------------------ blend-shape faces (imported models)
+
+        private FaceShapeDef[] _faceShapes;
+        private Dictionary<string, List<(SkinnedMeshRenderer renderer, int index, float weight)>> _binds;
+        private readonly Dictionary<string, float> _presetWeight = new Dictionary<string, float>();
+        private readonly Dictionary<(SkinnedMeshRenderer, int), float> _shapeTotals = new Dictionary<(SkinnedMeshRenderer, int), float>();
+
+        /// <summary>The VRM expression presets (0..1) an expression is made of; blinking is added separately.</summary>
+        public static void Presets(FaceExpression e, Dictionary<string, float> into)
+        {
+            into.Clear();
+            switch (e)
+            {
+                case FaceExpression.Focused: into["angry"] = 0.25f; break;
+                case FaceExpression.Angry: into["angry"] = 1f; break;
+                case FaceExpression.Determined: into["angry"] = 0.5f; break;
+                case FaceExpression.Injured: into["sad"] = 0.7f; break;
+                case FaceExpression.Exhausted: into["sad"] = 0.8f; into["aa"] = 0.35f; break;
+                case FaceExpression.Confident: into["relaxed"] = 0.8f; break;
+                case FaceExpression.Victory: into["happy"] = 1f; break;
+                case FaceExpression.Defeat: into["blink"] = 1f; into["sad"] = 0.6f; break;
+            }
+        }
+
+        private readonly Dictionary<string, float> _target = new Dictionary<string, float>();
+
+        private void BuildBinds()
+        {
+            _binds = new Dictionary<string, List<(SkinnedMeshRenderer, int, float)>>();
+            foreach (var def in _faceShapes)
+            {
+                var list = new List<(SkinnedMeshRenderer, int, float)>();
+                foreach (var r in _renderers)
+                {
+                    if (r == null || r.sharedMesh == null)
+                        continue;
+                    for (int i = 0; i < def.shapes.Length; i++)
+                    {
+                        int index = r.sharedMesh.GetBlendShapeIndex(def.shapes[i]);
+                        if (index >= 0)
+                            list.Add((r, index, i < def.weights.Length ? def.weights[i] : 1f));
+                    }
+                }
+                if (list.Count > 0)
+                    _binds[def.preset] = list;
+            }
+        }
+
+        private void UpdateBlendShapes(float distance)
+        {
+            if (_binds == null)
+                BuildBinds();
+            Presets(Current, _target);
+            bool eyesBusy = _target.ContainsKey("blink") || (_target.TryGetValue("happy", out float happy) && happy > 0.5f);
+            if (distance < 15f && !eyesBusy)
+            {
+                if (Time.time > _nextBlink)
+                {
+                    _blinkUntil = Time.time + 0.12f;
+                    _nextBlink = Time.time + (Random.value < 0.15f ? 0.25f : Random.Range(2.2f, 5.5f));
+                }
+                if (Time.time < _blinkUntil)
+                    _target["blink"] = 1f;
+            }
+            _shapeTotals.Clear();
+            foreach (var pair in _binds)
+            {
+                _target.TryGetValue(pair.Key, out float goal);
+                _presetWeight.TryGetValue(pair.Key, out float now);
+                float speed = pair.Key == "blink" ? 25f : 6f;
+                now = Mathf.MoveTowards(now, goal, Time.deltaTime * speed);
+                _presetWeight[pair.Key] = now;
+                foreach (var (r, index, weight) in pair.Value)
+                {
+                    var key = (r, index);
+                    _shapeTotals[key] = (_shapeTotals.TryGetValue(key, out float t) ? t : 0f) + now * weight;
+                }
+            }
+            foreach (var pair in _shapeTotals)
+                pair.Key.Item1.SetBlendShapeWeight(pair.Key.Item2, Mathf.Clamp01(pair.Value) * 100f);
         }
 
         private void Awake()
@@ -102,6 +187,12 @@ namespace WarOfNyx.Gameplay.Characters
             float distance = cam != null ? Vector3.Distance(cam.transform.position, transform.position) : 0f;
             if (distance > 40f)
                 return; // too far to read a face
+            if (_faceShapes != null)
+            {
+                Current = Override ?? Automatic();
+                UpdateBlendShapes(distance);
+                return;
+            }
             if (Time.time < _nextUpdate)
                 return;
             _nextUpdate = distance > 15f ? Time.time + 0.4f : 0f;

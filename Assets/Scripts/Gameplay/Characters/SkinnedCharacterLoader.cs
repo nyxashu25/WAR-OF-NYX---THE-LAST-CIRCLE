@@ -39,9 +39,11 @@ namespace WarOfNyx.Gameplay.Characters
             model.transform.localRotation = Quaternion.identity;
             Ensure<CharacterAnimationController>(model).Init(profile.animation);
             Ensure<CharacterFootIK>(model).Init(profile.animation);
-            if (profile.faceSubmesh >= 0) // imported models keep their own sculpted / textured face
+            // Painted-tile faces (procedural) and blend-shape faces (imported VRM / artist models) are animated;
+            // a model with neither keeps its sculpted face as it is.
+            if (profile.faceSubmesh >= 0 || profile.HasBlendShapeFace)
                 Ensure<CharacterFacialAnimator>(model).Init(profile);
-            Ensure<CharacterSecondaryMotion>(model);
+            Ensure<CharacterSecondaryMotion>(model).Init(profile);
             Ensure<CharacterVisualEffects>(model).Init(profile);
             return model;
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using WarOfNyx.Gameplay.Characters;
 
 namespace WarOfNyx.EditorTools.Characters.Import
 {
@@ -103,10 +104,143 @@ namespace WarOfNyx.EditorTools.Characters.Import
             /// <summary>Bone heads measured from the source rig (primary joints only).</summary>
             public readonly Dictionary<string, Vector3> Heads = new Dictionary<string, Vector3>();
             public readonly List<string> Notes = new List<string>();
+            /// <summary>Extra bones kept from the file (VRM spring bones: hair, coat / skirt, bust), parents first.</summary>
+            public readonly List<RigBone> Extras = new List<RigBone>();
+            /// <summary>Spring chains over the extra bones, and collider spheres (bone, offset at bind, radius).</summary>
+            public readonly List<SpringChainDef> Springs = new List<SpringChainDef>();
+            public readonly List<SpringColliderDef> Colliders = new List<SpringColliderDef>();
+            /// <summary>True when the file's skeleton includes finger joints.</summary>
+            public bool HasFingers;
         }
 
         /// <summary>Maps the joints, then raises the arms to a T-pose (mesh, normals and joints) when they hang lower than 8°.</summary>
         public static Result Convert(SourceModel model)
+        {
+            var r = model.Vrm != null && model.Vrm.HumanNodes.Count > 0 ? ConvertVrm(model) : ConvertByNames(model);
+            r.HasFingers = r.Heads.ContainsKey("LeftIndex1") && r.Heads.ContainsKey("RightIndex1");
+            foreach (var required in new[] { "Hips", "Spine", "Head", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand",
+                         "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot" })
+                if (!r.Heads.ContainsKey(required))
+                    throw new InvalidOperationException($"The model's skeleton has no recognisable '{required}' joint (joints: " +
+                                                        string.Join(", ", model.SkinJoints.ConvertAll(j => j.Name)) + ")");
+            RaiseArms(model, r);
+            return r;
+        }
+
+        /// <summary>
+        /// VRM: the file names its humanoid bones explicitly (VRoid's J_Bip_* joints), so the map is exact. Spring-bone
+        /// joints (J_Sec_* hair, skirt / coat, bust) stay as extra bones with their chains and colliders; any other
+        /// helper joint (J_Adj_*) belongs to its nearest mapped ancestor.
+        /// </summary>
+        private static Result ConvertVrm(SourceModel model)
+        {
+            var vrm = model.Vrm;
+            var r = new Result { JointBone = new string[model.SkinJoints.Count] };
+            var nodeBone = new Dictionary<int, string>();
+            foreach (var pair in vrm.HumanNodes)
+            {
+                string bone = VrmInfo.NyxBone(pair.Key);
+                if (bone == null || pair.Value < 0)
+                    continue;
+                nodeBone[pair.Value] = bone;
+                r.Heads[bone] = model.NodeWorld[pair.Value].GetColumn(3);
+            }
+            // Spring joints become extra bones (unique names, parents first).
+            var used = new HashSet<string>();
+            foreach (var b in NyxSkeleton.Build(RigProportions.Lean).Bones)
+                used.Add(b.Name);
+            Vector3 Pos(int node) => model.NodeWorld[node].GetColumn(3);
+            string MappedAncestor(int node)
+            {
+                for (int p = model.NodeParent[node]; p >= 0; p = model.NodeParent[p])
+                    if (nodeBone.TryGetValue(p, out var name))
+                        return name;
+                return "Hips";
+            }
+            foreach (var spring in vrm.Springs)
+            {
+                var names = new List<string>();
+                for (int i = 0; i < spring.Nodes.Count; i++)
+                {
+                    int node = spring.Nodes[i];
+                    if (node < 0 || node >= model.NodeWorld.Length)
+                        continue;
+                    if (!nodeBone.TryGetValue(node, out var name))
+                    {
+                        name = model.File.NodeName(node);
+                        while (used.Contains(name))
+                            name += "_";
+                        used.Add(name);
+                        nodeBone[node] = name;
+                        // Tail: the next joint, a child node, or the bone extended.
+                        Vector3 tail;
+                        if (i + 1 < spring.Nodes.Count)
+                            tail = Pos(spring.Nodes[i + 1]);
+                        else
+                        {
+                            var children = GlbReader.List(model.File.Item("nodes", node), "children");
+                            tail = children.Count > 0 ? Pos((int)(double)children[0]) : Pos(node) + (Pos(node) - Pos(Mathf.Max(0, model.NodeParent[node]))) * 0.5f;
+                        }
+                        r.Extras.Add(new RigBone { Name = name, Parent = MappedAncestor(node), Head = Pos(node), Tail = tail });
+                    }
+                    names.Add(name);
+                }
+                // The last joint of a VRM chain is usually an unweighted end point: keep it only as the tail.
+                if (names.Count > 1 && !IsSkinJoint(model, spring.Nodes[spring.Nodes.Count - 1]))
+                    names.RemoveAt(names.Count - 1);
+                if (names.Count == 0)
+                    continue;
+                string root = r.Extras.Find(e => e.Name == names[0])?.Parent ?? "Head";
+                r.Springs.Add(new SpringChainDef
+                {
+                    bones = names.ToArray(),
+                    stiffness = 8f + spring.Stiffness * 20f,
+                    damping = 1f - Mathf.Lerp(0.08f, 0.35f, Mathf.Clamp01(spring.Drag)),
+                    gravity = 1f + spring.Gravity * 4f,
+                    radius = Mathf.Max(0.005f, spring.HitRadius * Scale(model)),
+                    coat = root == "Hips" || root.EndsWith("UpperLeg"),
+                });
+            }
+            // Drop extras that ended up unused (chain end points).
+            var simulated = new HashSet<string>();
+            foreach (var c in r.Springs)
+                simulated.UnionWith(c.bones);
+            r.Extras.RemoveAll(e => !simulated.Contains(e.Name));
+            foreach (var c in vrm.Colliders)
+            {
+                if (c.Node < 0 || c.Node >= model.NodeWorld.Length)
+                    continue;
+                string bone = nodeBone.TryGetValue(c.Node, out var b) ? b : MappedAncestor(c.Node);
+                var centre = model.NodeWorld[c.Node].MultiplyPoint3x4(GlbReader.ToUnity(c.Offset));
+                var head = r.Heads.TryGetValue(bone, out var h) ? h : r.Extras.Find(e => e.Name == bone)?.Head ?? Vector3.zero;
+                float scale = ((Vector3)model.NodeWorld[c.Node].GetColumn(0)).magnitude;
+                r.Colliders.Add(new SpringColliderDef { bone = bone, offset = centre - head, radius = c.Radius * scale });
+            }
+            // Skin joints: humanoid, spring, or merged into the nearest mapped ancestor (J_Adj_*, eyes, unused ends).
+            var merged = new List<string>();
+            for (int j = 0; j < model.SkinJoints.Count; j++)
+            {
+                int node = model.SkinJoints[j].Node;
+                if (nodeBone.TryGetValue(node, out var name) && (simulated.Contains(name) || r.Heads.ContainsKey(name)))
+                {
+                    r.JointBone[j] = name;
+                    continue;
+                }
+                r.JointBone[j] = MappedAncestor(node);
+                merged.Add(model.SkinJoints[j].Name + "->" + r.JointBone[j]);
+            }
+            r.Notes.Add($"VRM {vrm.Version}.x: {vrm.HumanNodes.Count} humanoid bones from the file's own map, {r.Extras.Count} spring bones in {r.Springs.Count} chains, {r.Colliders.Count} colliders, {vrm.Expressions.Count} expressions.");
+            if (merged.Count > 0)
+                r.Notes.Add("Helper joints merged into their parent part: " + string.Join(", ", merged));
+            return r;
+        }
+
+        private static bool IsSkinJoint(SourceModel model, int node) => model.SkinJoints.Exists(j => j.Node == node);
+
+        private static float Scale(SourceModel model) =>
+            model.NodeWorld != null && model.NodeWorld.Length > 0 ? ((Vector3)model.NodeWorld[0].GetColumn(0)).magnitude : 1f;
+
+        private static Result ConvertByNames(SourceModel model)
         {
             var r = new Result { JointBone = new string[model.SkinJoints.Count] };
             var unknown = new List<string>();
@@ -131,15 +265,9 @@ namespace WarOfNyx.EditorTools.Characters.Import
                 }
                 r.JointBone[j] = bone;
             }
-            foreach (var required in new[] { "Hips", "Spine", "Head", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand",
-                         "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot" })
-                if (!r.Heads.ContainsKey(required))
-                    throw new InvalidOperationException($"The model's skeleton has no recognisable '{required}' joint (joints: " +
-                                                        string.Join(", ", model.SkinJoints.ConvertAll(j => j.Name)) + ")");
             if (unknown.Count > 0)
                 r.Notes.Add("Helper joints merged into their parent part: " + string.Join(", ", unknown));
             r.Notes.Add($"Source skeleton: {model.SkinJoints.Count} joints mapped onto the shared humanoid skeleton.");
-            RaiseArms(model, r);
             return r;
         }
 

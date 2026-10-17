@@ -177,6 +177,41 @@ namespace WarOfNyx.Tests
             Assert.That(wrongSide, Is.EqualTo(0), "no left bone owns the right side");
         }
 
+        [TestCase(1)]
+        [TestCase(0)]
+        public void Vrm_HumanoidMapExpressionsAndSpringBones_AreRead(int version)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"won_synthetic_vrm{version}.vrm");
+            int joints = SyntheticVrm.Write(path, version);
+            var model = SourceModel.Load(path);
+            Assert.That(model.Vrm, Is.Not.Null);
+            Assert.That(model.Vrm.Version, Is.EqualTo(version));
+            Assert.That(model.SkinJoints.Count, Is.EqualTo(joints));
+            Assert.That(model.Vrm.HumanNodes.ContainsKey("hips") && model.Vrm.HumanNodes.ContainsKey("leftThumbMetacarpal"), "VRM 0 thumb names are converted to 1.0");
+            Assert.That(model.ShapeNames, Does.Contain("Fcl_EYE_Close"));
+            Assert.That(model.Vrm.Expressions.ContainsKey("blink"));
+            Assert.That(model.Credit.Title, Is.EqualTo("Synthetic KAI"));
+            // Facing +Z with the character's left at -X, whichever way the file was written.
+            int leftHand = model.Vrm.HumanNodes["leftHand"], leftFoot = model.Vrm.HumanNodes["leftFoot"], leftToes = model.Vrm.HumanNodes["leftToes"];
+            Assert.That(model.NodeWorld[leftHand].GetColumn(3).x, Is.LessThan(0f));
+            Assert.That(model.NodeWorld[leftToes].GetColumn(3).z, Is.GreaterThan(model.NodeWorld[leftFoot].GetColumn(3).z));
+            float blinkMax = model.ShapeDeltas["Fcl_EYE_Close"].Max(d => d.magnitude);
+            Assert.That(blinkMax, Is.EqualTo(0.004f).Within(1e-4f), "blend-shape deltas keep their size");
+
+            var converted = SkinConverter.Convert(model);
+            Assert.That(converted.HasFingers);
+            Assert.That(converted.Springs.Count, Is.EqualTo(1));
+            Assert.That(converted.Springs[0].bones.Length, Is.EqualTo(version == 1 ? 2 : 2), "the hair chain keeps both weighted joints");
+            Assert.That(converted.Extras.Select(e => e.Name), Does.Contain(converted.Springs[0].bones[0]));
+            Assert.That(converted.Colliders.Count, Is.EqualTo(1));
+            Assert.That(converted.Colliders[0].bone, Is.EqualTo("Head"));
+            Assert.That(converted.Colliders[0].offset.y, Is.EqualTo(0.08f).Within(0.01f));
+            var skeleton = NyxSkeleton.Fitted(converted.Heads.ToDictionary(p => p.Key, p => p.Value).Concat(
+                HumanoidFitter.FitTPose(model.Positions, model.Triangles[0]).Heads.Where(p => !converted.Heads.ContainsKey(p.Key))).ToDictionary(p => p.Key, p => p.Value),
+                new Dictionary<string, Vector3>(), converted.Extras);
+            Assert.That(skeleton.Has(converted.Springs[0].bones[0]), "spring bones are part of the fitted skeleton");
+        }
+
         [Test]
         public void ImportedCharacters_AreRiggedValidAndCredited()
         {

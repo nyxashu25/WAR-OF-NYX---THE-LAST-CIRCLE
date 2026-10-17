@@ -7,7 +7,8 @@ namespace WarOfNyx.Gameplay.Characters
     /// Bone-driven secondary motion for hair and long coats (sections 40.3, 40.4): each helper-bone chain (hair locks,
     /// coat panels) follows the animated pose through a damped spring, so it swings on running, sprinting, jumping,
     /// landing and sudden turns, and settles when the character stops. Coat panels are pushed out of the thighs so
-    /// the coat does not cut through the legs. Runs after the Animator; costs a few vector operations per bone.
+    /// the coat does not cut through the legs. Imported models (VRM) bring their own chains and collider spheres in
+    /// the profile. Runs after the Animator; costs a few vector operations per bone.
     /// <see cref="Quality"/>: 0 off (reduced motion), 1 hair only, 2 hair and coat. Far away it snaps to the pose.
     /// </summary>
     [DefaultExecutionOrder(70)]
@@ -24,13 +25,18 @@ namespace WarOfNyx.Gameplay.Characters
             public float[] Lengths;
             public Vector3[] LocalTail; // bind-pose tail direction in the bone's own frame
             public Quaternion[] BindLocal; // helper bones are not animated: reset to bind each frame
-            public float Stiffness, Damping, Gravity;
+            public float Stiffness, Damping, Gravity, Radius;
             public bool Coat;
             public bool Initialized;
         }
 
         private readonly List<Chain> _chains = new List<Chain>();
+        private readonly List<(Transform bone, Vector3 offset, float radius)> _colliders = new List<(Transform, Vector3, float)>();
         private Transform _leftThigh, _rightThigh, _leftKnee, _rightKnee;
+        private CharacterVisualProfile _profile;
+
+        /// <summary>Imported models bring their own chains (hair, coat tails) and colliders in the profile.</summary>
+        public void Init(CharacterVisualProfile profile) => _profile = profile;
 
         private void Start()
         {
@@ -48,6 +54,17 @@ namespace WarOfNyx.Gameplay.Characters
             Add(false, 40f, 0.78f, 1.5f, "HairFront");
             foreach (var panel in new[] { "CoatFrontL", "CoatFrontR", "CoatBackL", "CoatBackR" })
                 Add(true, 16f, 0.86f, 6f, panel + "1", panel + "2");
+            if (_profile == null)
+                return;
+            foreach (var def in _profile.springChains ?? new SpringChainDef[0])
+                if (def.bones != null && def.bones.Length > 0)
+                    Add(def.coat, def.stiffness, def.damping, def.gravity, def.bones, def.radius);
+            foreach (var c in _profile.springColliders ?? new SpringColliderDef[0])
+            {
+                var bone = FindBone(c.bone);
+                if (bone != null)
+                    _colliders.Add((bone, c.offset, c.radius));
+            }
         }
 
         private Transform FindBone(string name)
@@ -58,7 +75,9 @@ namespace WarOfNyx.Gameplay.Characters
             return null;
         }
 
-        private void Add(bool coat, float stiffness, float damping, float gravity, params string[] names)
+        private void Add(bool coat, float stiffness, float damping, float gravity, params string[] names) => Add(coat, stiffness, damping, gravity, names, 0.02f);
+
+        private void Add(bool coat, float stiffness, float damping, float gravity, string[] names, float radius)
         {
             var bones = new Transform[names.Length];
             for (int i = 0; i < names.Length; i++)
@@ -71,6 +90,7 @@ namespace WarOfNyx.Gameplay.Characters
             {
                 Bones = bones, Tips = new Vector3[bones.Length], Previous = new Vector3[bones.Length], Lengths = new float[bones.Length],
                 LocalTail = new Vector3[bones.Length], BindLocal = new Quaternion[bones.Length], Stiffness = stiffness, Damping = damping, Gravity = gravity, Coat = coat,
+                Radius = radius,
             };
             for (int i = 0; i < bones.Length; i++)
             {
@@ -113,11 +133,31 @@ namespace WarOfNyx.Gameplay.Characters
                     next = bone.position + (next - bone.position).normalized * c.Lengths[i];
                     if (c.Coat)
                         next = PushOutOfLegs(next, bone.position, c.Lengths[i]);
+                    next = PushOutOfColliders(next, bone.position, c.Lengths[i], c.Radius);
                     c.Tips[i] = next;
                     bone.rotation = Quaternion.FromToRotation(animatedDir, (next - bone.position).normalized) * bone.rotation;
                 }
                 c.Initialized = true;
             }
+        }
+
+        /// <summary>Keeps a strand tip outside the model's collider spheres (hair off the face, shoulders and chest).</summary>
+        private Vector3 PushOutOfColliders(Vector3 p, Vector3 pivot, float length, float radius)
+        {
+            foreach (var (bone, offset, r) in _colliders)
+            {
+                if (bone == null)
+                    continue;
+                var centre = bone.TransformPoint(offset);
+                float reach = r + radius;
+                var away = p - centre;
+                if (away.sqrMagnitude < reach * reach)
+                {
+                    p = centre + (away.sqrMagnitude > 1e-8f ? away.normalized : Vector3.back) * reach;
+                    p = pivot + (p - pivot).normalized * length;
+                }
+            }
+            return p;
         }
 
         private Vector3 PushOutOfLegs(Vector3 p, Vector3 pivot, float length)

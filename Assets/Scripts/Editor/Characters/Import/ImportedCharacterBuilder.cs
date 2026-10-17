@@ -138,6 +138,40 @@ namespace WarOfNyx.EditorTools.Characters.Import
             }
         }
 
+        /// <summary>
+        /// Batch QA of the VRM path without third-party files: writes synthetic VRM 1.0 and 0.x files from KAI's rigged
+        /// body (<see cref="SyntheticVrm"/>), imports each into a temporary slot, renders studio previews (-previewOut),
+        /// logs the import reports, then deletes the temporary assets.
+        /// </summary>
+        public static void SyntheticVrmSmoke()
+        {
+            try
+            {
+                string folder = "Temp/CharacterPreviews";
+                var args = Environment.GetCommandLineArgs();
+                for (int i = 0; i < args.Length - 1; i++)
+                    if (args[i] == "-previewOut")
+                        folder = args[i + 1];
+                foreach (int version in new[] { 1, 0 })
+                {
+                    string slot = "VRMTEST" + version;
+                    string path = $"Temp/SyntheticKai_vrm{version}.vrm";
+                    SyntheticVrm.Write(path, version);
+                    var spec = new ImportedCharacterSpec { Slot = slot, File = path, Height = 1.8f, Rig = RigSource.EmbeddedSkin, Style = () => MotionStyle.Kai };
+                    Build(spec, path);
+                    CharacterPreviewRender.Render(slot, folder);
+                    AssetDatabase.DeleteAsset($"{CharacterAssetBuilder.ResourcesRoot}/{slot}.asset");
+                    AssetDatabase.DeleteAsset($"{CharacterAssetBuilder.ResourcesRoot}/{slot}_Model.prefab");
+                    AssetDatabase.DeleteAsset($"{CharacterAssetBuilder.GeneratedRoot}/{slot}");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorApplication.Exit(1);
+            }
+        }
+
         public static string Build(ImportedCharacterSpec spec, string path)
         {
             var log = new StringBuilder();
@@ -190,7 +224,8 @@ namespace WarOfNyx.EditorTools.Characters.Import
             var levels = LodBuilder.Generate(model);
             var lod = new[] { LodBuilder.Pick(levels, spec.Lod0), LodBuilder.Pick(levels, spec.Lod1), LodBuilder.Pick(levels, spec.Lod2) };
             Note($"  Mesh LOD generator: {levels.Count} levels ({string.Join(" / ", levels.ConvertAll(l => l.TriangleCount.ToString("N0")))} triangles)");
-            Note($"  Chosen detail levels: {lod[0].TriangleCount:N0} / {lod[1].TriangleCount:N0} / {lod[2].TriangleCount:N0} triangles");
+            Note($"  Chosen detail levels: {lod[0].TriangleCount:N0} / {lod[1].TriangleCount:N0} / {lod[2].TriangleCount:N0} triangles" +
+                 (model.ShapeNames.Count > 0 ? $"; {model.ShapeNames.Count} blend shapes kept on the close-up level" : string.Empty));
 
             // 4. Joints measured on a dense level.
             LodLevel dense = levels[0];
@@ -213,7 +248,7 @@ namespace WarOfNyx.EditorTools.Characters.Import
                     heads[pair.Key] = pair.Value; // the file's own joints win
             if (converted != null && !heads.ContainsKey("LeftShoulder"))
                 Note("  No clavicles in the file: placed by measurement.");
-            var skeleton = NyxSkeleton.Fitted(heads, fit.Tails);
+            var skeleton = NyxSkeleton.Fitted(heads, fit.Tails, converted?.Extras);
             Note($"  Skeleton: {skeleton.Bones.Count} bones (shared humanoid layout). Measurements on {densePoints.Length:N0} vertices (plus surface samples):");
             foreach (var line in fit.Notes)
                 Note("    " + line);
@@ -231,7 +266,8 @@ namespace WarOfNyx.EditorTools.Characters.Import
             {
                 weights = ConvertWeights(model, converted, skeleton, lod0Vertices);
                 int handVertices = 0;
-                if (fit.FingersMeasured)
+                // Files without finger joints get measured fingers (the automatic weights handle up to 64 bones).
+                if (fit.FingersMeasured && !converted.HasFingers && skeleton.Bones.Count <= 64)
                 {
                     var auto = AutoSkinner.Skin(skeleton, fit, model.Positions, lod0Vertices, lod[0].Triangles, smoothing: 3, fingers: true);
                     for (int i = 0; i < lod0Vertices.Length; i++)
@@ -247,7 +283,8 @@ namespace WarOfNyx.EditorTools.Characters.Import
                     }
                 }
                 Note($"  Skin weights from the file ({model.SkinJoints.Count} joints merged onto the shared bones)" +
-                     (handVertices > 0 ? $"; {handVertices:N0} hand vertices re-weighted to measured fingers." : "; no finger joints: hands stay rigid."));
+                     (converted.HasFingers ? "; the file's finger joints are kept." :
+                         handVertices > 0 ? $"; {handVertices:N0} hand vertices re-weighted to measured fingers." : "; no finger joints: hands stay rigid."));
             }
             var weightOf = new Dictionary<int, BoneWeight>(lod0Vertices.Length);
             for (int i = 0; i < lod0Vertices.Length; i++)
@@ -261,7 +298,8 @@ namespace WarOfNyx.EditorTools.Characters.Import
             var meshes = new Mesh[3];
             for (int l = 0; l < 3; l++)
             {
-                meshes[l] = BuildMesh(model, lod[l], weightOf, bindposes, $"{slot}_LOD{l}");
+                // Facial blend shapes on the close-up level only (expressions are not read at a distance).
+                meshes[l] = BuildMesh(model, lod[l], weightOf, bindposes, $"{slot}_LOD{l}", withShapes: l == 0);
                 CharacterAssetBuilder.Save(meshes[l], $"{dir}/{slot}_LOD{l}.asset");
                 meshes[l] = AssetDatabase.LoadAssetAtPath<Mesh>($"{dir}/{slot}_LOD{l}.asset");
             }
@@ -332,6 +370,15 @@ namespace WarOfNyx.EditorTools.Characters.Import
                 profile.artSource = $"Imported ({Path.GetFileName(path)}, ImportedCharacterBuilder)";
                 profile.credit = $"Model: {model.Credit.Title} by {Author(model.Credit.Author)} ({LicenceName(model.Credit.License)})";
                 profile.gearOverride = spec.Gear;
+                if (converted != null)
+                {
+                    profile.springChains = converted.Springs.ToArray();
+                    profile.springColliders = converted.Colliders.ToArray();
+                }
+                profile.faceShapes = FaceShapes(model);
+                if (profile.faceShapes.Length > 0 || profile.springChains.Length > 0)
+                    Note($"  Face: {profile.faceShapes.Length} expressions ({string.Join(", ", Array.ConvertAll(profile.faceShapes, f => f.preset))}); " +
+                         $"secondary motion: {profile.springChains.Length} chains, {profile.springColliders.Length} colliders.");
                 CharacterAssetBuilder.Save(profile, $"{CharacterAssetBuilder.ResourcesRoot}/{slot}.asset");
                 AssetDatabase.SaveAssets();
                 Note($"  Body scale (weapon carry) ×{animationProfile.bodyScale:0.00}; head height {profile.headHeight:0.00} m; built in {clock.Elapsed.TotalSeconds:0.0} s.");
@@ -387,7 +434,30 @@ namespace WarOfNyx.EditorTools.Characters.Import
             return result;
         }
 
-        private static Mesh BuildMesh(SourceModel model, LodLevel level, Dictionary<int, BoneWeight> weightOf, Matrix4x4[] bindposes, string name)
+        /// <summary>VRM expressions as blend-shape presets for <see cref="CharacterFacialAnimator"/>.</summary>
+        private static FaceShapeDef[] FaceShapes(SourceModel model)
+        {
+            var result = new List<FaceShapeDef>();
+            if (model.Vrm == null)
+                return result.ToArray();
+            foreach (var pair in model.Vrm.Expressions)
+            {
+                var shapes = new List<string>();
+                var weights = new List<float>();
+                foreach (var (mesh, target, weight) in pair.Value)
+                {
+                    if (!model.ShapeOf.TryGetValue((mesh, target), out var shape))
+                        continue;
+                    shapes.Add(shape);
+                    weights.Add(weight);
+                }
+                if (shapes.Count > 0)
+                    result.Add(new FaceShapeDef { preset = pair.Key, shapes = shapes.ToArray(), weights = weights.ToArray() });
+            }
+            return result.ToArray();
+        }
+
+        private static Mesh BuildMesh(SourceModel model, LodLevel level, Dictionary<int, BoneWeight> weightOf, Matrix4x4[] bindposes, string name, bool withShapes)
         {
             var order = Used(level);
             var local = new Dictionary<int, int>(order.Length);
@@ -405,6 +475,23 @@ namespace WarOfNyx.EditorTools.Characters.Import
             mesh.subMeshCount = level.Triangles.Length;
             for (int s = 0; s < level.Triangles.Length; s++)
                 mesh.SetTriangles(level.Triangles[s].ConvertAll(v => local[v]), s, false);
+            if (withShapes)
+            {
+                foreach (var shape in model.ShapeNames)
+                {
+                    var deltas = model.ShapeDeltas[shape];
+                    var normals = model.ShapeNormalDeltas[shape];
+                    bool any = false;
+                    foreach (int i in order)
+                        if (deltas[i].sqrMagnitude > 1e-12f)
+                        {
+                            any = true;
+                            break;
+                        }
+                    if (any)
+                        mesh.AddBlendShapeFrame(shape, 100f, Array.ConvertAll(order, i => deltas[i]), Array.ConvertAll(order, i => normals[i]), null);
+                }
+            }
             mesh.RecalculateBounds();
             mesh.UploadMeshData(false);
             return mesh;
@@ -435,6 +522,11 @@ namespace WarOfNyx.EditorTools.Characters.Import
             for (int m = 0; m < model.Materials.Length; m++)
             {
                 var src = model.Materials[m];
+                if (model.Vrm != null && model.Vrm.Materials.TryGetValue(m, out var mtoon))
+                {
+                    result[m] = ToonMaterial(model, src, mtoon, m, spec, dir, slot, written, note);
+                    continue;
+                }
                 var mat = new Material(lit) { name = $"{slot}_{m}_{Sanitize(src.Name)}" };
                 mat.SetColor("_BaseColor", src.BaseColor);
                 if (src.BaseColorImage >= 0)
@@ -477,6 +569,71 @@ namespace WarOfNyx.EditorTools.Characters.Import
                      $"{(src.MetallicRoughnessImage >= 0 ? "map (converted)" : "factors")}, {(src.DoubleSided ? "two-sided" : "one-sided")}, {src.AlphaMode.ToLowerInvariant()}");
             }
             return result;
+        }
+
+        /// <summary>
+        /// MToon (VRM) → WarOfNyx/NyxCharacterToon: base and shade maps, the shade step from MToon's shift / toony,
+        /// outline width and colour, emission, and the render state for opaque, cut-out (hair, lashes) and blended
+        /// (eye highlights) parts.
+        /// </summary>
+        private static Material ToonMaterial(SourceModel model, SourceMaterial src, VrmMaterial mtoon, int m, ImportedCharacterSpec spec, string dir,
+            string slot, Dictionary<string, Texture2D> written, Action<string> note)
+        {
+            var shader = Shader.Find("WarOfNyx/NyxCharacterToon");
+            if (shader == null)
+                throw new InvalidOperationException("WarOfNyx/NyxCharacterToon shader missing.");
+            var mat = new Material(shader) { name = $"{slot}_{m}_{Sanitize(src.Name)}" };
+            mat.SetColor("_BaseColor", src.BaseColor);
+            Texture2D baseMap = null;
+            if (src.BaseColorImage >= 0)
+            {
+                baseMap = ImportImage(model, src.BaseColorImage, dir, slot, "BaseColor", srgb: true, normal: false, spec, written, note);
+                mat.SetTexture("_BaseMap", baseMap);
+            }
+            var shadeMap = mtoon.ShadeImage >= 0 && mtoon.ShadeImage != src.BaseColorImage
+                ? ImportImage(model, mtoon.ShadeImage, dir, slot, "Shade", srgb: true, normal: false, spec, written, note)
+                : baseMap;
+            if (shadeMap != null)
+                mat.SetTexture("_ShadeMap", shadeMap);
+            mat.SetColor("_ShadeColor", mtoon.ShadeColor);
+            mat.SetFloat("_ShadeThreshold", Mathf.Clamp(-mtoon.ShadingShift, -1f, 1f));
+            mat.SetFloat("_ShadeSoftness", Mathf.Clamp((1f - mtoon.ShadingToony) * 0.5f + 0.01f, 0.01f, 0.5f));
+            mat.SetColor("_OutlineColor", mtoon.OutlineColor);
+            mat.SetFloat("_OutlineWidth", mtoon.OutlineWidth);
+            if (src.EmissiveImage >= 0)
+                mat.SetTexture("_EmissionMap", ImportImage(model, src.EmissiveImage, dir, slot, "Emission", srgb: true, normal: false, spec, written, note));
+            mat.SetColor("_EmissionColor", src.EmissiveFactor);
+            string mode = mtoon.BlendMode ?? src.AlphaMode;
+            float cull = model.Vrm.Version == 0 ? mtoon.Cull : src.DoubleSided ? (float)CullMode.Off : (float)CullMode.Back;
+            mat.SetFloat("_Cull", cull);
+            mat.SetFloat("_Cutoff", mode == "MASK" ? (mtoon.BlendMode != null ? mtoon.Cutoff : src.AlphaCutoff) : 0.5f);
+            if (mode == "BLEND")
+            {
+                mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                mat.SetFloat("_ZWrite", 0f);
+                mat.SetOverrideTag("RenderType", "Transparent");
+                mat.renderQueue = (int)RenderQueue.Transparent + m; // file order: highlights after the eyes
+                mat.SetShaderPassEnabled("SRPDefaultUnlit", false);   // no outline on overlays
+                mat.SetShaderPassEnabled("ShadowCaster", false);
+            }
+            else
+            {
+                mat.SetFloat("_SrcBlend", (float)BlendMode.One);
+                mat.SetFloat("_DstBlend", (float)BlendMode.Zero);
+                mat.SetFloat("_ZWrite", 1f);
+                if (mode == "MASK")
+                {
+                    mat.EnableKeyword("_ALPHATEST_ON");
+                    mat.renderQueue = (int)RenderQueue.AlphaTest;
+                }
+                if (mtoon.OutlineWidth <= 0f)
+                    mat.SetShaderPassEnabled("SRPDefaultUnlit", false);
+            }
+            CharacterAssetBuilder.Save(mat, $"{dir}/{mat.name}.mat");
+            note($"  Material {m} '{src.Name}': MToon -> NyxCharacterToon, {mode.ToLowerInvariant()}, " +
+                 $"shade step {-mtoon.ShadingShift:0.00}, outline {(mtoon.OutlineWidth > 0f ? (mtoon.OutlineWidth * 1000f).ToString("0.0") + " mm" : "off")}");
+            return AssetDatabase.LoadAssetAtPath<Material>($"{dir}/{mat.name}.mat");
         }
 
         private static string Sanitize(string s)

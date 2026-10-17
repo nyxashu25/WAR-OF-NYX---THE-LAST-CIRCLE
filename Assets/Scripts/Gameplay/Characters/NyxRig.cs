@@ -161,7 +161,14 @@ namespace WarOfNyx.Gameplay.Characters
         /// them unchanged. <paramref name="heads"/> must give every humanoid bone; <paramref name="tails"/> the end of
         /// leaf bones (head top, finger tips, toe tips). Helper bones (hair, coat) are left out unless given.
         /// </summary>
-        public static NyxSkeleton Fitted(IReadOnlyDictionary<string, Vector3> heads, IReadOnlyDictionary<string, Vector3> tails)
+        public static NyxSkeleton Fitted(IReadOnlyDictionary<string, Vector3> heads, IReadOnlyDictionary<string, Vector3> tails) =>
+            Fitted(heads, tails, null);
+
+        /// <summary>
+        /// As above, plus <paramref name="extras"/>: helper bones kept from an imported rig (hair, coat, skirt chains),
+        /// added after the shared bones in parent-first order, each parented to a shared bone or an earlier extra.
+        /// </summary>
+        public static NyxSkeleton Fitted(IReadOnlyDictionary<string, Vector3> heads, IReadOnlyDictionary<string, Vector3> tails, IEnumerable<RigBone> extras)
         {
             var template = Build(RigProportions.Lean);
             var s = new NyxSkeleton();
@@ -202,6 +209,25 @@ namespace WarOfNyx.Gameplay.Characters
             foreach (var pair in tails)
                 if (s.Has(pair.Key))
                     s[pair.Key].Tail = pair.Value;
+            if (extras != null)
+            {
+                var pending = new List<RigBone>(extras);
+                while (pending.Count > 0)
+                {
+                    int before = pending.Count;
+                    for (int i = 0; i < pending.Count; i++)
+                    {
+                        var bone = pending[i];
+                        if (!s.Has(bone.Parent))
+                            continue;
+                        s.Add(bone.Name, bone.Parent, bone.Head);
+                        s[bone.Name].Tail = bone.Tail;
+                        pending.RemoveAt(i--);
+                    }
+                    if (pending.Count == before)
+                        throw new System.ArgumentException("Fitted skeleton: helper bones without a parent: " + string.Join(", ", pending.ConvertAll(b => b.Name + "<-" + b.Parent)));
+                }
+            }
             return s;
         }
 

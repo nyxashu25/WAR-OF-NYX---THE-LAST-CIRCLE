@@ -184,6 +184,15 @@ Drop a `.glb` into `ArtSource/Characters/` (git-ignored: third-party art is neve
 
 A missing file leaves the slot's previous look. Models the importer cannot rig are refused with the reason, never faked.
 
+**VRM (VRoid Studio, UniVRM) files are read natively** (`VrmInfo`, VRM 0.x and 1.0):
+- **Skeleton:** humanoid bones come from the file's own bone map. VRM 0.x models face -Z and are turned around.
+- **Physics:** spring bones (hair, coat and skirt tails, bust) stay as real bones, with chains and collider spheres, driven by `CharacterSecondaryMotion`.
+- **Expressions:** the presets (blink, happy, angry, sad, relaxed, surprised, aa…) become blend shapes on the close-up detail level, driven by `CharacterFacialAnimator` (blinking, combat expressions, victory, defeat).
+- **Materials:** MToon becomes `WarOfNyx/NyxCharacterToon`: base and shade maps, the shade step, outlines, and cut-out or blended parts.
+- **Testing:** `SyntheticVrm` writes VRM 0.x and 1.0 test files from KAI's rigged body, used by the tests and by `ImportedCharacterBuilder.SyntheticVrmSmoke`.
+
+**The planned route to final art is VRoid Studio** (chosen 2026-10-17): the owner builds each character from [KAI_VROID_GUIDE.md](KAI_VROID_GUIDE.md) and saves `{NAME}.vrm` in `ArtSource/Characters/`. KAI comes first.
+
 **Supplied 2026-10-17, removed the same day at the owner's request.** Four Sketchfab files were audited. Android 18 (2M triangles, unrigged T-pose) was auto-rigged as YUNA's look and the Tripo astronaut (Character Creator rig) was converted as REN's; both worked in game (tests, studio and in-game captures) and were then **deleted**: the catalogue is empty, the copies in `ArtSource/` are gone, and setup removes any imported look whose file is no longer catalogued, so YUNA and REN are back to their previous looks. The Mai Shiranui model (posed, unrigged) and 3DAISTOCK (vertex colour only, CC-BY-NC) were never imported. The pipeline stays for licensed or original models.
 
 ## 7. Naming conventions

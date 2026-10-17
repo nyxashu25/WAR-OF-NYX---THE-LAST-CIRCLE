@@ -11,6 +11,8 @@ namespace WarOfNyx.EditorTools.Characters.Import
         public int BaseColorImage = -1;
         public int MetallicRoughnessImage = -1;
         public int NormalImage = -1;
+        public int EmissiveImage = -1;
+        public Color EmissiveFactor = Color.black;
         public Color BaseColor = Color.white;
         public float Metallic = 1f, Roughness = 1f;
         public bool DoubleSided;
@@ -47,6 +49,17 @@ namespace WarOfNyx.EditorTools.Characters.Import
         public ModelCredit Credit;
         public GlbReader File;
         public int SourceTriangles;
+        /// <summary>Blend shapes (morph targets): name → per-vertex position / normal deltas (Unity space).</summary>
+        public readonly List<string> ShapeNames = new List<string>();
+        public Dictionary<string, Vector3[]> ShapeDeltas = new Dictionary<string, Vector3[]>();
+        public Dictionary<string, Vector3[]> ShapeNormalDeltas = new Dictionary<string, Vector3[]>();
+        /// <summary>(glTF mesh, morph target index) → blend shape name (VRM expressions bind by mesh and index).</summary>
+        public readonly Dictionary<(int mesh, int target), string> ShapeOf = new Dictionary<(int, int), string>();
+        /// <summary>Every glTF node's rest transform in Unity space (follows Normalize / FaceForward).</summary>
+        public Matrix4x4[] NodeWorld;
+        public int[] NodeParent;
+        /// <summary>VRM data (humanoid map, expressions, spring bones, MToon), or null for plain glTF.</summary>
+        public VrmInfo Vrm;
 
         public int VertexCount => Positions.Length;
         public bool Skinned => Joints != null;
@@ -76,8 +89,19 @@ namespace WarOfNyx.EditorTools.Characters.Import
         public static SourceModel Load(string path)
         {
             var glb = GlbReader.Load(path);
-            var model = new SourceModel { File = glb, Credit = glb.Credit() };
+            var model = new SourceModel { File = glb, Credit = glb.Credit(), Vrm = VrmInfo.Read(glb) };
             var world = glb.WorldMatrices(out var parents);
+            model.NodeParent = parents;
+            model.NodeWorld = Array.ConvertAll(world, GlbReader.ToUnity);
+            if (model.Vrm != null)
+            {
+                model.Credit = new ModelCredit
+                {
+                    Title = model.Vrm.Title ?? model.Credit.Title, Author = model.Vrm.Author ?? model.Credit.Author,
+                    License = (model.Vrm.Licence ?? "VRM licence") + (model.Vrm.CommercialUse != null ? $" (commercial use: {model.Vrm.CommercialUse})" : string.Empty),
+                    Source = model.Credit.Source, Generator = model.Credit.Generator,
+                };
+            }
 
             // Materials.
             var materials = new List<SourceMaterial>();
@@ -90,12 +114,16 @@ namespace WarOfNyx.EditorTools.Characters.Import
                     BaseColorImage = ImageOf(glb, GlbReader.Obj(pbr, "baseColorTexture")),
                     MetallicRoughnessImage = ImageOf(glb, GlbReader.Obj(pbr, "metallicRoughnessTexture")),
                     NormalImage = ImageOf(glb, GlbReader.Obj(m, "normalTexture")),
+                    EmissiveImage = ImageOf(glb, GlbReader.Obj(m, "emissiveTexture")),
                     Metallic = GlbReader.Float(pbr, "metallicFactor", 1f),
                     Roughness = GlbReader.Float(pbr, "roughnessFactor", 1f),
                     DoubleSided = m.TryGetValue("doubleSided", out var ds) && ds is bool b && b,
                     AlphaMode = GlbReader.Str(m, "alphaMode") ?? "OPAQUE",
                     AlphaCutoff = GlbReader.Float(m, "alphaCutoff", 0.5f),
                 };
+                var emissive = GlbReader.Floats(m, "emissiveFactor");
+                if (emissive != null)
+                    sm.EmissiveFactor = new Color(emissive[0], emissive[1], emissive[2], 1f);
                 var factor = GlbReader.Floats(pbr, "baseColorFactor");
                 if (factor != null)
                     sm.BaseColor = new Color(factor[0], factor[1], factor[2], factor[3]);
@@ -144,6 +172,9 @@ namespace WarOfNyx.EditorTools.Characters.Import
             var colors = new List<Color>();
             var joints = new List<int>();
             var weights = new List<float>();
+            var shapeLists = new Dictionary<string, List<Vector3>>();
+            var shapeNormalLists = new Dictionary<string, List<Vector3>>();
+            var shapeOwner = new Dictionary<string, int>(); // shape name → mesh that defined it
             bool anyUv = false, anyColor = false, anySkin = false;
             var triangles = new List<int>[model.Materials.Length];
             for (int i = 0; i < triangles.Length; i++)
@@ -158,6 +189,7 @@ namespace WarOfNyx.EditorTools.Characters.Import
                     continue;
                 bool skinned = GlbReader.Int(node, "skin") >= 0 && skinMatrices != null;
                 var mesh = glb.Item("meshes", meshIndex);
+                var meshTargetNames = GlbReader.List(GlbReader.Obj(mesh, "extras"), "targetNames");
                 foreach (Dictionary<string, object> prim in GlbReader.List(mesh, "primitives"))
                 {
                     int mode = GlbReader.Int(prim, "mode", 4);
@@ -179,6 +211,32 @@ namespace WarOfNyx.EditorTools.Characters.Import
                         wgt = glb.ReadFloats(GlbReader.Int(attributes, "WEIGHTS_0"), out _);
                     }
                     var nodeMatrix = world[ni];
+                    // Morph targets (blend shapes): names from the mesh (or primitive) extras, shared by its primitives.
+                    var targets = GlbReader.List(prim, "targets");
+                    var targetNames = meshTargetNames.Count > 0 ? meshTargetNames : GlbReader.List(GlbReader.Obj(prim, "extras"), "targetNames");
+                    var targetPositions = new float[targets.Count][];
+                    var targetNormals = new float[targets.Count][];
+                    var targetShape = new string[targets.Count];
+                    string meshName = GlbReader.Str(mesh, "name") ?? "mesh" + meshIndex;
+                    for (int t = 0; t < targets.Count; t++)
+                    {
+                        var target = (Dictionary<string, object>)targets[t];
+                        targetPositions[t] = GlbReader.Int(target, "POSITION") >= 0 ? glb.ReadFloats(GlbReader.Int(target, "POSITION"), out _) : null;
+                        targetNormals[t] = GlbReader.Int(target, "NORMAL") >= 0 ? glb.ReadFloats(GlbReader.Int(target, "NORMAL"), out _) : null;
+                        string name = t < targetNames.Count && targetNames[t] is string tn ? tn : meshName + "_" + t;
+                        if (shapeOwner.TryGetValue(name, out int owner) && owner != meshIndex)
+                            name = meshName + "/" + name;
+                        shapeOwner[name] = meshIndex;
+                        targetShape[t] = name;
+                        model.ShapeOf[(meshIndex, t)] = name;
+                        if (!shapeLists.ContainsKey(name))
+                        {
+                            shapeLists[name] = new List<Vector3>();
+                            shapeNormalLists[name] = new List<Vector3>();
+                            model.ShapeNames.Add(name);
+                        }
+                    }
+                    PadShapes(shapeLists, shapeNormalLists, baseVertex);
                     for (int v = 0; v < count; v++)
                     {
                         var p = new Vector3(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
@@ -191,6 +249,13 @@ namespace WarOfNyx.EditorTools.Characters.Import
                         else
                         {
                             m = nodeMatrix;
+                        }
+                        for (int t = 0; t < targets.Count; t++)
+                        {
+                            var d = targetPositions[t] != null ? new Vector3(targetPositions[t][v * 3], targetPositions[t][v * 3 + 1], targetPositions[t][v * 3 + 2]) : Vector3.zero;
+                            var dn = targetNormals[t] != null ? new Vector3(targetNormals[t][v * 3], targetNormals[t][v * 3 + 1], targetNormals[t][v * 3 + 2]) : Vector3.zero;
+                            shapeLists[targetShape[t]].Add(GlbReader.ToUnity(m.MultiplyVector(d)));
+                            shapeNormalLists[targetShape[t]].Add(GlbReader.ToUnity(m.MultiplyVector(dn)));
                         }
                         p = m.MultiplyPoint3x4(p);
                         n = m.MultiplyVector(n).normalized;
@@ -224,6 +289,7 @@ namespace WarOfNyx.EditorTools.Characters.Import
                         if (jnt != null)
                             anySkin = true;
                     }
+                    PadShapes(shapeLists, shapeNormalLists, positions.Count); // shapes this primitive lacks stay zero
                     int material = Mathf.Clamp(GlbReader.Int(prim, "material", 0), 0, model.Materials.Length - 1);
                     var list = triangles[material];
                     if (GlbReader.Int(prim, "indices") >= 0)
@@ -261,7 +327,24 @@ namespace WarOfNyx.EditorTools.Characters.Import
             }
             model.Triangles = triangles;
             model.SourceTriangles = model.TriangleCount;
+            PadShapes(shapeLists, shapeNormalLists, positions.Count);
+            foreach (var name in model.ShapeNames)
+            {
+                model.ShapeDeltas[name] = shapeLists[name].ToArray();
+                model.ShapeNormalDeltas[name] = shapeNormalLists[name].ToArray();
+            }
+            model.FaceForward();
             return model;
+        }
+
+        private static void PadShapes(Dictionary<string, List<Vector3>> deltas, Dictionary<string, List<Vector3>> normals, int count)
+        {
+            foreach (var list in deltas.Values)
+                while (list.Count < count)
+                    list.Add(Vector3.zero);
+            foreach (var list in normals.Values)
+                while (list.Count < count)
+                    list.Add(Vector3.zero);
         }
 
         private static int ImageOf(GlbReader glb, Dictionary<string, object> textureInfo)
@@ -316,7 +399,48 @@ namespace WarOfNyx.EditorTools.Characters.Import
             var m = Matrix4x4.Scale(Vector3.one * scale) * Matrix4x4.Translate(offset);
             foreach (var j in SkinJoints)
                 j.World = m * j.World;
+            if (NodeWorld != null)
+                for (int i = 0; i < NodeWorld.Length; i++)
+                    NodeWorld[i] = m * NodeWorld[i];
+            foreach (var name in ShapeNames)
+            {
+                var d = ShapeDeltas[name];
+                for (int i = 0; i < d.Length; i++)
+                    d[i] *= scale;
+            }
             return scale;
+        }
+
+        /// <summary>
+        /// Turns the model to face +Z when its feet point the other way (VRM 0.x files face -Z): a half turn about Y
+        /// for vertices, normals, blend shapes, joints and nodes. Returns whether it turned.
+        /// </summary>
+        public bool FaceForward()
+        {
+            if (Vrm == null)
+                return false;
+            bool backwards;
+            if (Vrm.HumanNodes.TryGetValue("leftFoot", out int f) && Vrm.HumanNodes.TryGetValue("leftToes", out int t) && f >= 0 && t >= 0)
+                backwards = NodeWorld[t].GetColumn(3).z < NodeWorld[f].GetColumn(3).z;
+            else
+                backwards = Vrm.Version == 0; // VRM 0.x faces -Z
+            if (!backwards)
+                return false;
+            var turn = Matrix4x4.Rotate(Quaternion.Euler(0f, 180f, 0f));
+            for (int i = 0; i < Positions.Length; i++)
+            {
+                Positions[i] = new Vector3(-Positions[i].x, Positions[i].y, -Positions[i].z);
+                Normals[i] = new Vector3(-Normals[i].x, Normals[i].y, -Normals[i].z);
+            }
+            foreach (var name in ShapeNames)
+                foreach (var d in new[] { ShapeDeltas[name], ShapeNormalDeltas[name] })
+                    for (int i = 0; i < d.Length; i++)
+                        d[i] = new Vector3(-d[i].x, d[i].y, -d[i].z);
+            foreach (var j in SkinJoints)
+                j.World = turn * j.World;
+            for (int i = 0; i < NodeWorld.Length; i++)
+                NodeWorld[i] = turn * NodeWorld[i];
+            return true;
         }
 
         /// <summary>
@@ -346,6 +470,11 @@ namespace WarOfNyx.EditorTools.Characters.Import
             Normals = Pick(Normals, order);
             if (Uv != null)
                 Uv = Pick(Uv, order);
+            foreach (var name in ShapeNames)
+            {
+                ShapeDeltas[name] = Pick(ShapeDeltas[name], order);
+                ShapeNormalDeltas[name] = Pick(ShapeNormalDeltas[name], order);
+            }
             if (Colors != null)
             {
                 if (positionOnly)
@@ -427,7 +556,7 @@ namespace WarOfNyx.EditorTools.Characters.Import
 
         private readonly struct VertexKey : IEquatable<VertexKey>
         {
-            private readonly long _p, _n, _uv, _j;
+            private readonly long _p, _n, _uv, _j, _s;
 
             public VertexKey(SourceModel m, int i, bool positionOnly)
             {
@@ -439,6 +568,11 @@ namespace WarOfNyx.EditorTools.Characters.Import
                 _j = 0;
                 if (!positionOnly && m.Joints != null)
                     _j = ((long)m.Joints[i * 4] << 32) | (uint)Mathf.RoundToInt(m.Weights[i * 4] * 1e4f);
+                // Vertices that move differently in a blend shape (upper and lower eyelid) must stay apart.
+                long shapes = 0;
+                foreach (var name in m.ShapeNames)
+                    shapes = shapes * 1000003L + Pack(m.ShapeDeltas[name][i], 1e5f);
+                _s = shapes;
             }
 
             private static long Pack(Vector3 v, float q)
@@ -447,9 +581,9 @@ namespace WarOfNyx.EditorTools.Characters.Import
                 return (x & 0x1FFFFF) | ((y & 0x1FFFFF) << 21) | ((z & 0x1FFFFF) << 42);
             }
 
-            public bool Equals(VertexKey o) => _p == o._p && _n == o._n && _uv == o._uv && _j == o._j;
+            public bool Equals(VertexKey o) => _p == o._p && _n == o._n && _uv == o._uv && _j == o._j && _s == o._s;
             public override bool Equals(object obj) => obj is VertexKey k && Equals(k);
-            public override int GetHashCode() => (_p * 486187739L + _n * 31L + _uv * 17L + _j).GetHashCode();
+            public override int GetHashCode() => (_p * 486187739L + _n * 31L + _uv * 17L + _j + _s * 7L).GetHashCode();
         }
     }
 }
