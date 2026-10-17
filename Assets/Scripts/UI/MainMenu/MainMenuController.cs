@@ -497,7 +497,7 @@ namespace WarOfNyx.UI.MainMenu
 
         private CharacterPreviewStage _preview;
         private int _browsedCharacter;
-        private Text _characterName, _characterTitle, _characterRole, _characterStory, _characterGear;
+        private Text _characterName, _characterTitle, _characterRole, _characterStory, _characterGear, _characterCredit;
         private MenuButton _selectCharacterButton;
 
         /// <summary>
@@ -533,6 +533,8 @@ namespace WarOfNyx.UI.MainMenu
             _characterGear = UiFactory.CreateText(info, string.Empty, 24, NyxPalette.TextPrimary, TextAnchor.UpperLeft, FontStyle.Normal, 190f);
             UiFactory.CreateText(info, "Cosmetic only: every character has the same hitboxes, speed and health. Drag the preview to turn.",
                 22, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Italic, 40f);
+            // Attribution of imported character art (CC-BY and similar licences require it).
+            _characterCredit = UiFactory.CreateText(info, string.Empty, 20, NyxPalette.TextMuted, TextAnchor.UpperLeft, FontStyle.Normal, 30f);
             var actions = UiFactory.CreateRow("Actions", info, 90f, 20f);
             _selectCharacterButton = UiFactory.CreateButton(actions, "SELECT", SelectBrowsedCharacter, 90f, 32);
             UiFactory.CreateButton(actions, "BACK", () => Show(MenuScreen.Home), 90f, 32);
@@ -567,7 +569,12 @@ namespace WarOfNyx.UI.MainMenu
             _characterTitle.text = look.Title.ToUpperInvariant();
             _characterRole.text = look.Role.ToUpperInvariant();
             _characterStory.text = look.Story;
-            _characterGear.text = look.Gear != null ? "•  " + string.Join("\n•  ", look.Gear) : string.Empty;
+            // An imported model describes its own outfit and carries its credit.
+            var profile = Gameplay.Characters.SkinnedCharacterLoader.ProfileFor(look);
+            var gear = profile != null && profile.gearOverride != null && profile.gearOverride.Length > 0 ? profile.gearOverride : look.Gear;
+            _characterGear.text = gear != null ? "•  " + string.Join("\n•  ", gear) : string.Empty;
+            if (_characterCredit != null)
+                _characterCredit.text = profile != null ? profile.credit : string.Empty;
             bool selected = AppServices.UserSettings.Data.characterId == look.Id;
             _selectCharacterButton.SetLabel(selected ? "SELECTED" : "SELECT");
             _selectCharacterButton.SetSelected(selected);

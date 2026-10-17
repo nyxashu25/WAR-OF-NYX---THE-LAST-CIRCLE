@@ -1,5 +1,6 @@
 using System.IO;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
 using WarOfNyx.Gameplay.Characters;
 
@@ -149,6 +150,39 @@ namespace WarOfNyx.EditorTools.Characters
             }
         }
 
+        /// <summary>
+        /// Authors a motion style on KAI's rig (the authoring skeleton every clip was designed on) and saves the humanoid
+        /// clips plus their controller under <paramref name="dir"/>, named {name}_{clip}. Humanoid clips are stored in
+        /// muscle space, so they retarget to any character with a humanoid Avatar (imported models included).
+        /// </summary>
+        public static AnimatorController BakeStyle(MotionStyle style, string dir, string name, out int clipCount)
+        {
+            var skeleton = NyxSkeleton.Build(RigProportions.Lean);
+            var go = new GameObject("AuthoringRig");
+            try
+            {
+                var armature = new GameObject("Armature").transform;
+                armature.SetParent(go.transform, false);
+                skeleton.Instantiate(armature);
+                var avatar = BuildAvatar(go, skeleton, "AuthoringRig");
+                var clips = CharacterMotionAuthoring.BakeAll(go, avatar, style);
+                var saved = new System.Collections.Generic.Dictionary<string, AnimationClip>();
+                foreach (var pair in clips)
+                {
+                    string path = $"{dir}/Anim/{name}_{pair.Key}.anim";
+                    Save(pair.Value, path);
+                    saved[pair.Key] = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+                }
+                Object.DestroyImmediate(avatar);
+                clipCount = saved.Count;
+                return CharacterControllerBuilder.Build(saved, $"{dir}/{name}.controller", $"{dir}/{name}_UpperBody.mask");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
         /// <summary>A Unity Humanoid Avatar for the shared skeleton (bind T-pose): every humanoid bone mapped, default limits.</summary>
         public static Avatar BuildAvatar(GameObject root, NyxSkeleton skeleton, string name)
         {
@@ -179,14 +213,14 @@ namespace WarOfNyx.EditorTools.Characters
             return avatar;
         }
 
-        private static void Save(Object asset, string path)
+        internal static void Save(Object asset, string path)
         {
             EnsureFolder(Path.GetDirectoryName(path).Replace('\\', '/'));
             AssetDatabase.DeleteAsset(path);
             AssetDatabase.CreateAsset(asset, path);
         }
 
-        private static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path))
                 return;

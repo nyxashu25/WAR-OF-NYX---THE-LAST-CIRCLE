@@ -101,6 +101,9 @@ namespace WarOfNyx.EditorTools.Characters
             blade.gameObject.SetActive(false);
             var lodGroup = model.GetComponent<LODGroup>();
             lodGroup.ForceLOD(0);
+            // Many poses are rendered inside one editor frame: re-skin on every render, not once per frame.
+            foreach (var smr in model.GetComponentsInChildren<SkinnedMeshRenderer>())
+                smr.forceMatrixRecalculationPerRender = true;
 
             void Shot(string label, Vector3 from, Vector3 at)
             {
@@ -164,6 +167,23 @@ namespace WarOfNyx.EditorTools.Characters
                 Vector3 P(HumanBodyBones b) => model.transform.InverseTransformPoint(animator.GetBoneTransform(b).position);
                 Debug.Log($"[WarOfNyx][Characters] {probe.Item1}@{probe.Item2}: hips {P(HumanBodyBones.Hips)} ankle {P(HumanBodyBones.LeftFoot)} " +
                           $"lHand {P(HumanBodyBones.LeftHand)} rElbow {P(HumanBodyBones.RightLowerArm)} rHand {P(HumanBodyBones.RightHand)}");
+            }
+            // Ground contact (QA log): lowest ankle per clip against the bind-pose ankle height (negative = sinks).
+            var skin = model.GetComponentInChildren<SkinnedMeshRenderer>();
+            int footIndex = System.Array.IndexOf(skin.bones, animator.GetBoneTransform(HumanBodyBones.LeftFoot));
+            float ankleRest = skin.sharedMesh.bindposes[footIndex].inverse.GetColumn(3).y;
+            foreach (var clipName in new[] { "Idle", "WalkF", "RunF", "Sprint", "CrouchIdle", "CrouchWalk", "Slide" })
+            {
+                if (!clips.TryGetValue(clipName, out var c))
+                    continue;
+                float lowest = float.MaxValue;
+                for (int k = 0; k < 16; k++)
+                {
+                    Pose(clipName, c.length * k / 16f);
+                    foreach (var foot in new[] { HumanBodyBones.LeftFoot, HumanBodyBones.RightFoot })
+                        lowest = Mathf.Min(lowest, model.transform.InverseTransformPoint(animator.GetBoneTransform(foot).position).y);
+                }
+                Debug.Log($"[WarOfNyx][Characters] {name} ground contact {clipName}: lowest ankle {lowest:0.000} m vs rest {ankleRest:0.000} m ({(lowest - ankleRest) * 100f:+0.0;-0.0} cm)");
             }
             Pose("Idle", 1f);
             var body = new Vector3(0f, 1f, 0f);

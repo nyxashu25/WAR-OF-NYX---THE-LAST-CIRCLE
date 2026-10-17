@@ -57,6 +57,9 @@ namespace WarOfNyx.Gameplay.Characters
 
         public Animator Animator => _animator;
         public CharacterAnimationProfile Profile => _profile;
+
+        /// <summary>Body size relative to KAI (weapon carry and guard positions scale with it).</summary>
+        private float BodyScale => _profile != null && _profile.bodyScale > 0.1f ? _profile.bodyScale : 1f;
         public bool Moving => _localVelocity.magnitude > 0.4f;
 
         public void Init(CharacterAnimationProfile profile)
@@ -253,6 +256,7 @@ namespace WarOfNyx.Gameplay.Characters
                 pos = Vector3.Lerp(pos, new Vector3(0.22f, 1.0f, 0.18f), 0.8f);
                 rotation = Quaternion.Euler(55f, 0f, 0f);
             }
+            pos *= BodyScale; // carry positions are authored for KAI's height
             _rig.Hand.SetPositionAndRotation(_character.TransformPoint(pos), _character.rotation * rotation);
         }
 
@@ -338,7 +342,7 @@ namespace WarOfNyx.Gameplay.Characters
             else if (HoldsBlade)
             {
                 // Guard stance: blade forward and up, two-handed for long blades.
-                var guard = _character.TransformPoint(new Vector3(0.12f, 1.08f, 0.3f));
+                var guard = _character.TransformPoint(new Vector3(0.12f, 1.08f, 0.3f) * BodyScale);
                 var bladeDir = _character.TransformDirection(new Vector3(0.05f, 0.62f, 0.78f).normalized);
                 var edge = _character.TransformDirection(Vector3.down);
                 var handRot = Quaternion.LookRotation(edge, bladeDir) * Quaternion.Inverse(MeleeGripRotation);

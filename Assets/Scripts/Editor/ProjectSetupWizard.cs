@@ -100,6 +100,7 @@ namespace WarOfNyx.EditorTools
             Step(report, "NYX ISLAND map (Phase 10, takes a minute: NavMesh bake)", () => NyxIslandBuilder.Build(overwrite: false));
             Step(report, "Anime visual style: toon materials, post-processing, sky (Phase 10)", VisualStyleBuilder.Apply);
             Step(report, "Skinned characters: KAI mesh, face, avatar, clips, controller (section 40)", () => Characters.CharacterAssetBuilder.BuildKai());
+            Step(report, "Supplied character models (ArtSource/Characters): import, rig, detail levels, URP materials, clips", () => Characters.Import.ImportedCharacterBuilder.BuildAll());
             Step(report, "App icon and splash logo (Phase 14, placeholder art)", ReleaseTools.GenerateBranding);
             Step(report, "Register WarOfNyx.Networking with the Fusion weaver", () => FusionIntegration.RegisterAssemblyWithWeaver(quiet: true));
             Step(report, "Input System backend", () => restart = EnableInputSystemBackend());

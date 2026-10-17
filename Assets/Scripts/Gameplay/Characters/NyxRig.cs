@@ -155,6 +155,56 @@ namespace WarOfNyx.Gameplay.Characters
             return s;
         }
 
+        /// <summary>
+        /// The same skeleton (bone names, hierarchy, humanoid mapping) with joint positions measured on another model:
+        /// used for imported characters, so the authored clips, the animation controller and the runtime layers work on
+        /// them unchanged. <paramref name="heads"/> must give every humanoid bone; <paramref name="tails"/> the end of
+        /// leaf bones (head top, finger tips, toe tips). Helper bones (hair, coat) are left out unless given.
+        /// </summary>
+        public static NyxSkeleton Fitted(IReadOnlyDictionary<string, Vector3> heads, IReadOnlyDictionary<string, Vector3> tails)
+        {
+            var template = Build(RigProportions.Lean);
+            var s = new NyxSkeleton();
+            foreach (var bone in template.Bones)
+            {
+                if (!heads.TryGetValue(bone.Name, out var head))
+                {
+                    if (bone.Human != null)
+                        throw new System.ArgumentException("Fitted skeleton: no position for " + bone.Name);
+                    continue;
+                }
+                s.Add(bone.Name, bone.Parent, head, bone.Human);
+            }
+            foreach (var bone in s.Bones)
+                if (bone.Parent != null && s[bone.Parent].Tail == s[bone.Parent].Head)
+                    s[bone.Parent].Tail = bone.Head;
+            // Main chains point at their main child (not a finger or a clavicle).
+            void Link(string a, string b)
+            {
+                if (s.Has(a) && s.Has(b))
+                    s[a].Tail = s[b].Head;
+            }
+            Link("Hips", "Spine");
+            Link("Spine", "Chest");
+            Link("Chest", "UpperChest");
+            Link("UpperChest", "Neck");
+            Link("Neck", "Head");
+            foreach (var L in new[] { "Left", "Right" })
+            {
+                Link(L + "Shoulder", L + "UpperArm");
+                Link(L + "UpperArm", L + "LowerArm");
+                Link(L + "LowerArm", L + "Hand");
+                Link(L + "Hand", L + "Middle1");
+                Link(L + "UpperLeg", L + "LowerLeg");
+                Link(L + "LowerLeg", L + "Foot");
+                Link(L + "Foot", L + "Toes");
+            }
+            foreach (var pair in tails)
+                if (s.Has(pair.Key))
+                    s[pair.Key].Tail = pair.Value;
+            return s;
+        }
+
         /// <summary>Creates the bone transforms (identity rotations, T-pose) under <paramref name="parent"/>, in bone order.</summary>
         public Transform[] Instantiate(Transform parent)
         {

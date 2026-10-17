@@ -128,7 +128,7 @@ namespace WarOfNyx.Gameplay.Characters
             _shownGlow = _glow;
             foreach (var r in _renderers)
             {
-                if (r == null || r.sharedMaterials.Length <= _submesh)
+                if (r == null || _submesh < 0 || r.sharedMaterials.Length <= _submesh)
                     continue;
                 r.GetPropertyBlock(_block, _submesh);
                 _block.SetFloat(EyeTileId, eye);

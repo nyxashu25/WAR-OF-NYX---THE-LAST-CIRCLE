@@ -14,6 +14,9 @@
 /Assets/Generated/
 /Assets/Generated.meta
 
+# Third-party character source files (.glb / .fbx / .vrm): local only, never committed (licences, size)
+/ArtSource/
+
 # Crash reports / profiler captures
 sysinfo.txt
 crashlytics-build.properties

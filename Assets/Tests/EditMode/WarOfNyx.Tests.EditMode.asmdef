@@ -4,6 +4,7 @@
     "references": [
         "WarOfNyx.Core",
         "WarOfNyx.Game",
+        "WarOfNyx.Editor",
         "Unity.InputSystem",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

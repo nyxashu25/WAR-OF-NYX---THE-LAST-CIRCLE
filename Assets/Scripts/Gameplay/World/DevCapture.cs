@@ -36,8 +36,12 @@ namespace WarOfNyx.Gameplay.World
             var capture = go.AddComponent<DevCapture>();
             capture._folder = folder;
             for (int i = 0; i < args.Length - 1; i++)
+            {
                 if (args[i] == "-devCaptureOnly")
-                    capture._only = args[i + 1]; // world | characters | all
+                    capture._only = args[i + 1]; // world | characters | imported | all
+                if (args[i] == "-devCharacter" && int.TryParse(args[i + 1], out int id) && AppServices.UserSettings != null)
+                    AppServices.UserSettings.Data.characterId = id; // this run only (not saved)
+            }
             return true;
         }
 
@@ -120,6 +124,14 @@ namespace WarOfNyx.Gameplay.World
             {
                 weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
                 yield return FreeLookShowcase();
+                Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
+                Application.Quit(0);
+                yield break;
+            }
+            if (_only == "imported")
+            {
+                weather?.Begin(new AtmospherePlan { Time = TimeOfDay.Day, Start = WeatherKind.Clear, Later = WeatherKind.Clear, ChangeAt = float.PositiveInfinity });
+                yield return ImportedShowcase();
                 Debug.Log($"[WarOfNyx][DevCapture] Done: {_index} screenshots.");
                 Application.Quit(0);
                 yield break;
@@ -473,6 +485,89 @@ namespace WarOfNyx.Gameplay.World
             var rig = Effects.WeaponVisualRig.Attach(root, visual);
             rig?.ShowWeapon(Core.Combat.WeaponCatalog.Get(weaponId));
             return (root, rig);
+        }
+
+        /// <summary>
+        /// Characters whose look comes from a supplied model (ArtSource import), in the running game: the player as
+        /// that character with the HUD, then each one close up (front, three-quarter, back, face) and in motion with a
+        /// rifle (walk, run, sprint, aiming), a pistol, and a katana combo.
+        /// </summary>
+        private IEnumerator ImportedShowcase()
+        {
+            var cam = Camera.main;
+            if (cam == null)
+                yield break;
+            yield return new WaitForSeconds(1.5f);
+            yield return Capture("imported_player_ingame");
+            var follow = cam.GetComponent<ThirdPersonCamera>();
+            if (follow != null)
+                follow.enabled = false;
+            foreach (var c in FindObjectsByTypeSafe<Offline.OfflineCombatant>())
+                c.gameObject.SetActive(false);
+            var start = new Vector3(-30f, Ground(-30f, -60f), -60f);
+            float fov = cam.fieldOfView;
+            for (int id = 0; id < WarOfNyx.Characters.CharacterRoster.Count; id++)
+            {
+                var look = WarOfNyx.Characters.CharacterRoster.Get(id);
+                var profile = Characters.SkinnedCharacterLoader.ProfileFor(look);
+                if (profile == null || profile.artSource == null || !profile.artSource.StartsWith("Imported"))
+                    continue;
+                Debug.Log($"[WarOfNyx][DevCapture] imported look {look.Name}: {profile.artSource}; {profile.credit}");
+                var (root, rig) = Puppet(id, Core.Combat.WeaponCatalog.Nx7AssaultRifle, start);
+                cam.fieldOfView = 32f;
+                yield return new WaitForSeconds(0.8f);
+                foreach (var (label, offset, height) in new[]
+                         {
+                             ("front", new Vector3(0f, 0f, 3.4f), 1.0f), ("three_quarter", new Vector3(2.4f, 0f, 2.4f), 1.0f),
+                             ("side", new Vector3(3.4f, 0f, 0.2f), 1.0f), ("back", new Vector3(0.6f, 0f, -3.4f), 1.0f),
+                             ("face", new Vector3(0.2f, 0f, 1.0f), profile.headHeight),
+                         })
+                {
+                    cam.transform.position = root.position + offset + Vector3.up * (height + (label == "face" ? 0.03f : 0.15f));
+                    cam.transform.LookAt(root.position + Vector3.up * height);
+                    yield return new WaitForSeconds(0.3f);
+                    yield return Capture($"imported_{look.Name}_{label}");
+                }
+                Destroy(root.gameObject);
+                foreach (var (label, speed, weapon, aim) in new[]
+                         {
+                             ("walk_rifle", 1.8f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                             ("run_rifle", 4.2f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                             ("sprint_rifle", 6.6f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, false),
+                             ("aim_walk_rifle", 1.6f, Core.Combat.WeaponCatalog.Nx7AssaultRifle, true),
+                             ("run_pistol", 4.2f, Core.Combat.WeaponCatalog.NeonPistol, false),
+                             ("run_katana", 4.2f, Core.Combat.WeaponCatalog.Katana, false),
+                         })
+                {
+                    var (mover, moverRig) = Puppet(id, weapon, start);
+                    moverRig?.SetAiming(aim);
+                    float t = 0f;
+                    while (t < 1.3f)
+                    {
+                        t += Time.deltaTime;
+                        mover.position += Vector3.forward * speed * Time.deltaTime;
+                        mover.position = new Vector3(mover.position.x, Ground(mover.position.x, mover.position.z), mover.position.z);
+                        cam.transform.position = mover.position + new Vector3(3.2f, 1.15f, 1.1f);
+                        cam.transform.LookAt(mover.position + Vector3.up * 0.95f);
+                        yield return null;
+                    }
+                    yield return Capture($"imported_{look.Name}_{label}");
+                    Destroy(mover.gameObject);
+                }
+                var katana = Core.Combat.WeaponCatalog.Get(Core.Combat.WeaponCatalog.Katana);
+                var combo = Core.Combat.MeleeRules.Combo(katana);
+                {
+                    var (fighter, fighterRig) = Puppet(id, Core.Combat.WeaponCatalog.Katana, start);
+                    Frame(cam, fighter, 3.4f, frontish: true);
+                    yield return new WaitForSeconds(0.5f);
+                    yield return Capture($"imported_{look.Name}_katana_guard");
+                    fighterRig?.PlaySwing(combo[0], katana);
+                    yield return new WaitForSeconds(katana.meleeWindup * combo[0].WindupMultiplier + 0.07f);
+                    yield return Capture($"imported_{look.Name}_katana_strike");
+                    Destroy(fighter.gameObject);
+                }
+            }
+            cam.fieldOfView = fov;
         }
 
         /// <summary>

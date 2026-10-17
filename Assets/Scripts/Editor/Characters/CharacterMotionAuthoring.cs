@@ -34,6 +34,38 @@ namespace WarOfNyx.EditorTools.Characters
 
         /// <summary>KAI, the Abyss Walker: calm, upright, deliberate; compact, precise motion; minimal arm swing.</summary>
         public static MotionStyle Kai => new MotionStyle();
+
+        /// <summary>
+        /// Agile: light and quick on the feet. Shorter, faster cycles, a narrow line of steps with more hip sway and roll,
+        /// freer arm swing, lighter idle with the weight on one leg.
+        /// </summary>
+        public static MotionStyle Agile => new MotionStyle
+        {
+            Name = "Agile", WalkCycle = 1.0f, RunCycle = 0.68f, SprintCycle = 0.58f,
+            WalkLean = 1.5f, RunLean = 10f, SprintLean = 20f, WalkBob = 0.02f, RunBob = 0.05f, SprintBob = 0.058f,
+            WalkLift = 0.08f, RunLift = 0.21f, SprintLift = 0.3f, StanceHalf = 0.072f,
+            HipSway = 0.02f, HipTwist = 8f, HipRoll = 4.5f, TorsoCounter = 1.4f,
+            WalkArmSwing = 0.12f, RunArmSwing = 0.23f, SprintArmSwing = 0.3f, WalkElbow = 0.04f, ArmOut = 0.035f,
+            HeadForward = 3f, ShoulderDrop = 0.006f, HeadStability = 0.88f,
+            BreathDegrees = 1.2f, WeightShift = 0.03f, IdleLookDegrees = 11f,
+            IdleFootL = new Vector3(-0.085f, 0f, 0.045f), IdleFootR = new Vector3(0.075f, 0f, -0.03f), FingerCurl = 18f,
+        };
+
+        /// <summary>
+        /// Heavy: an armoured body. Slower, wider steps that land hard (more bob, less sway), arms held out by the suit
+        /// with little swing, a planted wide idle.
+        /// </summary>
+        public static MotionStyle Heavy => new MotionStyle
+        {
+            Name = "Heavy", WalkCycle = 1.22f, RunCycle = 0.78f, SprintCycle = 0.66f,
+            WalkLean = 3f, RunLean = 8f, SprintLean = 16f, WalkBob = 0.024f, RunBob = 0.052f, SprintBob = 0.066f,
+            WalkLift = 0.07f, RunLift = 0.17f, SprintLift = 0.25f, StanceHalf = 0.13f,
+            HipSway = 0.008f, HipTwist = 4f, HipRoll = 1.5f, TorsoCounter = 0.9f,
+            WalkArmSwing = 0.07f, RunArmSwing = 0.15f, SprintArmSwing = 0.26f, WalkElbow = 0.06f, ArmOut = 0.09f,
+            HeadForward = 4f, ShoulderDrop = 0f, HeadStability = 0.8f,
+            BreathDegrees = 1.8f, WeightShift = 0.015f, IdleLookDegrees = 7f,
+            IdleFootL = new Vector3(-0.14f, 0f, 0.03f), IdleFootR = new Vector3(0.15f, 0f, -0.05f), FingerCurl = 30f,
+        };
     }
 
     /// <summary>Live access to a character's bones for posing (bind = T-pose, identity rotations).</summary>
@@ -347,6 +379,17 @@ namespace WarOfNyx.EditorTools.Characters
             float travel = speed * cycle * stance; // how far a planted foot slides back
             float crouchDrop = crouch ? 0.3f : 0f;
 
+            // Pelvis first (bob, lowest at weight acceptance; sway toward the stance leg; twist with the stride), then the
+            // feet are planted from where the hips are: solving the legs before moving the hips would sink the feet.
+            float bobPhase = gait == 0 || gait == 3 ? phase * 2f : phase * 2f - stance;
+            float height = -crouchDrop - 0.012f - bob * 0.5f * (1f + Mathf.Cos(bobPhase * Mathf.PI * 2f));
+            if (gait >= 1 && gait <= 2)
+                height -= 0.03f + (gait == 2 ? 0.02f : 0f);
+            float sway = Mathf.Sin(phase * Mathf.PI * 2f);
+            float twist = (sideways || backward ? 0.4f : 1f) * s.HipTwist * Mathf.Sin(phase * Mathf.PI * 2f) * (gait == 2 ? 1.4f : 1f);
+            Torso(r, s, new Vector3(sway * s.HipSway * (gait == 0 ? 1f : 0.5f), height, 0f), lean, -twist * s.TorsoCounter, 0f,
+                hipTwist: twist, hipRoll: -sway * s.HipRoll, sideLean: -dir.x * (gait == 0 ? 3f : 6f));
+
             // Feet.
             float lowest = 0f;
             for (int leg = 0; leg < 2; leg++)
@@ -378,16 +421,6 @@ namespace WarOfNyx.EditorTools.Characters
                 r.Leg(side, foot, backward ? -pitch * 0.5f : pitch, toe, dir.x * 10f * x);
                 lowest = Mathf.Min(lowest, foot.y);
             }
-
-            // Pelvis bob (lowest at weight acceptance), sway toward the stance leg, twist with the stride.
-            float bobPhase = gait == 0 || gait == 3 ? phase * 2f : phase * 2f - stance;
-            float height = -crouchDrop - 0.012f - bob * 0.5f * (1f + Mathf.Cos(bobPhase * Mathf.PI * 2f));
-            if (gait >= 1 && gait <= 2)
-                height -= 0.03f + (gait == 2 ? 0.02f : 0f);
-            float sway = Mathf.Sin(phase * Mathf.PI * 2f);
-            float twist = (sideways || backward ? 0.4f : 1f) * s.HipTwist * Mathf.Sin(phase * Mathf.PI * 2f) * (gait == 2 ? 1.4f : 1f);
-            Torso(r, s, new Vector3(sway * s.HipSway * (gait == 0 ? 1f : 0.5f), height, 0f), lean, -twist * s.TorsoCounter, 0f,
-                hipTwist: twist, hipRoll: -sway * s.HipRoll, sideLean: -dir.x * (gait == 0 ? 3f : 6f));
 
             // Arms: opposite to the legs; pumping when running.
             float swing = Mathf.Sin(phase * Mathf.PI * 2f);

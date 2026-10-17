@@ -39,7 +39,8 @@ namespace WarOfNyx.Gameplay.Characters
             model.transform.localRotation = Quaternion.identity;
             Ensure<CharacterAnimationController>(model).Init(profile.animation);
             Ensure<CharacterFootIK>(model).Init(profile.animation);
-            Ensure<CharacterFacialAnimator>(model).Init(profile);
+            if (profile.faceSubmesh >= 0) // imported models keep their own sculpted / textured face
+                Ensure<CharacterFacialAnimator>(model).Init(profile);
             Ensure<CharacterSecondaryMotion>(model);
             Ensure<CharacterVisualEffects>(model).Init(profile);
             return model;

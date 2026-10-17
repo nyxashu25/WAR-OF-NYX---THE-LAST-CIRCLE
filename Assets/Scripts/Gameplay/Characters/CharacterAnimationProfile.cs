@@ -23,5 +23,7 @@ namespace WarOfNyx.Gameplay.Characters
         public float idleVariationSeconds = 9f;
         [Tooltip("Foot IK: how far a foot may be raised or lowered to meet the ground (m).")]
         public float footIkRange = 0.35f;
+        [Tooltip("Body size relative to KAI (shoulder height ratio): scales where weapons are carried so the hands reach them.")]
+        public float bodyScale = 1f;
     }
 }
